@@ -42,7 +42,7 @@ From Finder, use the executable shortcuts at the repository root:
 - Double-click [`Realmをテスト起動.command`](../Realmをテスト起動.command) to start the Tauri application in development mode. It does not open a `.realmmap` automatically.
 - Double-click [`Realmをビルド.command`](../Realmをビルド.command) to build and inspect the Apple Silicon `.app` and DMG without launching the packaged application.
 
-Both shortcuts use the pinned local environment and the already-installed dependencies under `app/`; they never install tools or packages automatically. The Terminal window waits for Return after completion so that errors remain visible. Their reusable shell entrypoints are `script/build_and_run.sh` and `script/build_macos.sh`; the Codex Run action uses the former.
+Both shortcuts use the pinned local environment and the already-installed dependencies under `app/`; they never install tools or packages automatically. When the Homebrew setup above is present, the shortcuts resolve its pinned Node.js and Rust paths even if Finder did not inherit the interactive shell's `PATH`. The Terminal window waits for Return after completion so that errors remain visible. Their reusable shell entrypoints are `script/build_and_run.sh` and `script/build_macos.sh`; the Codex Run action uses the former.
 
 `cargo-deny` rejects vulnerable, unsound, yanked, and unmaintained Rust dependencies by default. Its configuration contains only narrowly documented unmaintained-advisory exceptions for dependencies currently inherited through Tauri; every exception must retain a reason, and an unused exception fails the gate so that it is removed when the dependency graph changes.
 
