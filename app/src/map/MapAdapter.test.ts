@@ -6,6 +6,7 @@ import MouseWheelZoom from "ol/interaction/MouseWheelZoom";
 import Graticule from "ol/layer/Graticule";
 import VectorLayer from "ol/layer/Vector";
 import Draw from "ol/interaction/Draw";
+import Style from "ol/style/Style";
 
 describe("RealmMapAdapter", () => {
   it("creates a bounded world view and disposes its OpenLayers target", () => {
@@ -27,10 +28,30 @@ describe("RealmMapAdapter", () => {
     adapter.setFeatures([
       { id: "city-1", featureType: "city", name: "City", validFromYear: 0, geometry: { type: "Point", coordinates: [12, 34] } },
       { id: "river-1", featureType: "river", name: "River", validFromYear: 0, geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
+      { id: "terrain-1", featureType: "terrain", name: "Land", validFromYear: 0, geometry: { type: "Polygon", coordinates: [[[-2, -2], [2, -2], [2, 2], [-2, -2]]] } },
       { id: "country-1", featureType: "country", name: "Country", validFromYear: 0, geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } },
+      { id: "region-1", featureType: "region", name: "Region", validFromYear: 0, geometry: { type: "Polygon", coordinates: [[[0, 0], [0.5, 0], [0.5, 0.5], [0, 0]]] } },
     ]);
     const featureLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
-    expect(featureLayer.getSource()?.getFeatures()).toHaveLength(3);
+    const featureSource = featureLayer.getSource();
+    const styleFunction = featureLayer.getStyleFunction();
+    const styleFor = (id: string): Style => {
+      const feature = featureSource?.getFeatureById(id);
+      const renderedStyle = feature && styleFunction?.(feature, 1);
+      const style = Array.isArray(renderedStyle) ? renderedStyle[0] : renderedStyle;
+      expect(style).toBeInstanceOf(Style);
+      return style as Style;
+    };
+    expect(featureSource?.getFeatures()).toHaveLength(5);
+    const terrainStyle = styleFor("terrain-1");
+    const countryStyle = styleFor("country-1");
+    const regionStyle = styleFor("region-1");
+    expect(terrainStyle.getZIndex()).toBeLessThan(countryStyle.getZIndex() ?? 0);
+    expect(countryStyle.getZIndex()).toBeLessThan(regionStyle.getZIndex() ?? 0);
+    expect(countryStyle.getFill()?.getColor()).not.toBe(regionStyle.getFill()?.getColor());
+    expect(countryStyle.getText()?.getText()).toBe("Country");
+    expect(regionStyle.getText()?.getText()).toBe("Region");
+    expect(regionStyle.getStroke()?.getLineDash()).toEqual([5, 4]);
     adapter.setSelected("city-1");
     adapter.setMode("river");
     const riverDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);

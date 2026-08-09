@@ -57,16 +57,30 @@ const geometryToGeoJson = (geometry: Geometry): GeoJsonGeometry => {
 
 const featureStyle = (feature: FeatureLike): Style => {
   const type = feature.get("featureType") as FeatureType | undefined;
-  const color = type === "river" || type === "coastline" ? "#2e78a6"
-    : type === "boundary" ? "#915f3d"
-      : type === "forest" ? "#3f7c55"
-        : type === "terrain" ? "#8b7754"
-          : type === "country" || type === "region" ? "#446f7c"
-            : "#8a3f58";
+  const presentation = type === "terrain" ? { color: "#8b7754", fillAlpha: "28", zIndex: 10 }
+    : type === "forest" ? { color: "#3f7c55", fillAlpha: "28", zIndex: 20 }
+      : type === "country" ? { color: "#315f7d", fillAlpha: "24", zIndex: 30 }
+        : type === "region" ? { color: "#76568c", fillAlpha: "1c", zIndex: 40 }
+          : type === "river" || type === "coastline" ? { color: "#2e78a6", fillAlpha: "28", zIndex: 50 }
+            : type === "boundary" ? { color: "#915f3d", fillAlpha: "28", zIndex: 60 }
+              : { color: "#8a3f58", fillAlpha: "28", zIndex: 70 };
+  const areaName = type === "country" || type === "region" ? feature.get("name") : null;
   return new Style({
-    fill: new Fill({ color: `${color}28` }),
-    stroke: new Stroke({ color, width: type === "boundary" ? 2 : 2.5 }),
-    image: new CircleStyle({ radius: type === "city" ? 6 : 4.5, fill: new Fill({ color }), stroke: new Stroke({ color: "#fff", width: 1.5 }) }),
+    fill: new Fill({ color: `${presentation.color}${presentation.fillAlpha}` }),
+    stroke: new Stroke({
+      color: presentation.color,
+      width: type === "region" ? 1.75 : type === "boundary" ? 2 : 2.5,
+      lineDash: type === "region" ? [5, 4] : undefined,
+    }),
+    image: new CircleStyle({ radius: type === "city" ? 6 : 4.5, fill: new Fill({ color: presentation.color }), stroke: new Stroke({ color: "#fff", width: 1.5 }) }),
+    text: typeof areaName === "string" ? new Text({
+      text: areaName,
+      font: type === "country" ? `600 ${MAP_LABEL_FONT}` : MAP_LABEL_FONT,
+      overflow: true,
+      fill: new Fill({ color: "#26323b" }),
+      stroke: new Stroke({ color: "rgba(255, 255, 255, 0.92)", width: 3 }),
+    }) : undefined,
+    zIndex: presentation.zIndex,
   });
 };
 

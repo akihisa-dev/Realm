@@ -19,6 +19,8 @@ Schema version 1 records the same value in `PRAGMA user_version` and `schema_mig
 
 The initial classes are `terrain`, `forest`, `river`, `coastline`, `country`, `region`, `boundary`, `city`, and `town`. Cities and towns require GeoJSON `Point`; rivers, coastlines, and boundaries require `LineString`; terrain, forests, countries, and regions require `Polygon`. Coordinates are EPSG:4326 longitude/latitude pairs within the bounded world, lines contain at least two positions, and polygon rings contain at least four positions with equal first and last positions. The Rust command boundary validates these requirements. No class is populated by a generator in the 0.1 series.
 
+Country and region polygons are independent political overlays on the same world plane as terrain polygons. They do not store a parent terrain identifier and are not clipped to one terrain feature, so one area can cross multiple terrain features and one terrain feature can contain multiple areas. Their own year-scoped revisions determine how political divisions change without rewriting physical geography.
+
 Timeline-event storage is part of schema version 1 because chronology is confirmed product scope. The project save command transactionally replaces the complete editable era and timeline-event lists while preserving their stable identifiers. Events with the same start year receive deterministic order from their submitted list order.
 
 ## Edit behavior

@@ -455,6 +455,8 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
             {activeTool !== "pan" ? (
               <p>{activeTool === "city" || activeTool === "town"
                 ? `地図上をクリックして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を配置してください。`
+                : activeTool === "country" || activeTool === "region"
+                  ? `地形の上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}の領域を描いてください。`
                 : `地図上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を描いてください。`}</p>
             ) : null}
             {selectedFeature ? <div className="feature-editor-actions"><button type="button" onClick={() => reviseFeature(selectedFeature)} disabled={locked || dirty}>名前を保存</button><button type="button" className="danger-action" onClick={() => { if (parsedCurrentYear !== null && window.confirm("この年以降から地物を削除しますか？")) void runMutation(() => backend.deleteFeature({ id: selectedFeature.id, validFromYear: parsedCurrentYear }), "地物を削除できませんでした。"); }} disabled={locked || dirty}>削除</button></div> : null}

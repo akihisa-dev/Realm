@@ -78,6 +78,10 @@ describe("EditorShell feature workflow", () => {
     expect(screen.getByText("地図上で押したままドラッグして河川を描いてください。")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "地形" }));
     expect(screen.getByText("地図上で押したままドラッグして地形を描いてください。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "国" }));
+    expect(screen.getByText("地形の上で押したままドラッグして国の領域を描いてください。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "地域" }));
+    expect(screen.getByText("地形の上で押したままドラッグして地域の領域を描いてください。")).toBeInTheDocument();
   });
 
   it("validates, saves, and removes chronology forms", async () => {

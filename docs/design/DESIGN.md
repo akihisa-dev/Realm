@@ -32,6 +32,8 @@ The startup state uses `Realm`, `創作世界の地図と歴史を、ひとつ�
 
 React owns transient interface state. OpenLayers objects live behind the map adapter and render a snapshot only; they never become storage. Later viewing styles must be implemented behind this boundary rather than changing the `.realmmap` source data.
 
+Physical terrain and forest polygons render below political overlays. Countries and regions use distinct translucent fills, borders, and map labels; regions use the lighter boundary treatment. Rivers, coastlines, explicit boundaries, cities, and towns remain legible above area fills. This presentation order is derived from feature class and never changes stored geometry.
+
 ## App icon assets
 
 `app/src-tauri/icons/icon.png` is the transparent master for the bundled app icon. The white rounded tile and contour mark remain opaque, while every outer corner must be transparent. The other PNG sizes and `icon.icns` are generated from that master with the Tauri icon command. `pnpm icon:check` verifies transparent corners and opaque subject pixels in both the PNG files and the PNG representations embedded in the ICNS container.
