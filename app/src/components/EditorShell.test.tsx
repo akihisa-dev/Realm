@@ -46,6 +46,7 @@ describe("EditorShell feature workflow", () => {
     render(<Harness backend={backend} initial={initial} />);
 
     fireEvent.click(screen.getByRole("button", { name: "都市" }));
+    expect(screen.getByText("地図上をクリックして都市を配置してください。")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "テスト描画" }));
     await waitFor(() => expect(screen.getByText("地物 1件")).toBeInTheDocument());
     expect((await backend.getOpenProject())?.features[0]?.featureType).toBe("city");
@@ -66,6 +67,17 @@ describe("EditorShell feature workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "やり直す" }));
     await waitFor(() => expect(screen.getByText("地物はまだありません")).toBeInTheDocument());
     confirm.mockRestore();
+  });
+
+  it("explains drag drawing for line and area tools", async () => {
+    const backend = new MemoryRealmBackend();
+    const initial = await backend.createProject({ path: "browser://drag-help.realmmap", name: "Drag help" });
+    render(<Harness backend={backend} initial={initial} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "河川" }));
+    expect(screen.getByText("地図上で押したままドラッグして河川を描いてください。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "地形" }));
+    expect(screen.getByText("地図上で押したままドラッグして地形を描いてください。")).toBeInTheDocument();
   });
 
   it("validates, saves, and removes chronology forms", async () => {

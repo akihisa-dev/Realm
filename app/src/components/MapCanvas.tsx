@@ -39,6 +39,11 @@ export function MapCanvas({
   const onDrawRef = useRef(onDraw);
   const onSelectRef = useRef(onSelect);
   const onModifyRef = useRef(onModify);
+  const mapHelp = mode === "pan"
+    ? "ドラッグまたは矢印キーで移動し、ホイールまたはプラス・マイナスキーで拡大縮小できます。"
+    : mode === "city" || mode === "town"
+      ? "地図上をクリックして点を配置します。"
+      : "地図上でマウスまたはトラックパッドを押したままドラッグし、線または領域を描きます。";
 
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;
@@ -88,8 +93,8 @@ export function MapCanvas({
 
   return (
     <>
-      <p id="map-help" className="sr-only">ドラッグまたは矢印キーで移動し、ホイールまたはプラス・マイナスキーで拡大縮小できます。</p>
-      <div ref={hostRef} className="map-canvas" role="region" tabIndex={0} aria-label="世界地図" aria-describedby="map-help" />
+      <p id="map-help" className="sr-only">{mapHelp}</p>
+      <div ref={hostRef} className={mode === "pan" ? "map-canvas" : "map-canvas map-canvas-draw"} role="region" tabIndex={0} aria-label="世界地図" aria-describedby="map-help" />
       <div className="map-tools" role="group" aria-label="現在の地図操作">
         <button
           className={mode === "pan" ? "map-tool map-tool-active" : "map-tool"}

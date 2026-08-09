@@ -215,6 +215,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
       : mode === "river" || mode === "coastline" || mode === "boundary" ? "LineString"
         : "Polygon";
     this.draw = new Draw({ type: drawType });
+    // Lines and areas follow the pointer continuously from press to release.
+    // Point features remain a single click because they have no path to trace.
+    this.draw.setFreehand(drawType !== "Point");
     this.draw.on("drawend", (event) => {
       const geometry = event.feature.getGeometry();
       if (!geometry) return;

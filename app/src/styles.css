@@ -101,6 +101,7 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .map-canvas { width: 100%; height: 100%; }
 .map-canvas:focus-visible { outline: 2px solid #078c98; outline-offset: -3px; }
 .map-canvas .ol-viewport { background: #fff; }
+.map-canvas-draw .ol-viewport { cursor: crosshair; }
 .map-canvas .ol-layer canvas { outline: none; }
 .map-canvas .ol-layers { font-size: 13px; }
 .map-canvas .ol-graticule-label { color: #6b7278; font-size: 13px; }

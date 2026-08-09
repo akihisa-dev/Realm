@@ -58,6 +58,15 @@ describe("MapZoomControls", () => {
 
     rerender(<MapCanvas zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setZoom).toHaveBeenLastCalledWith(5);
+
+    rerender(<MapCanvas mode="river" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(screen.getByText("地図上でマウスまたはトラックパッドを押したままドラッグし、線または領域を描きます。")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
+    expect(renderer.setMode).toHaveBeenLastCalledWith("river");
+
+    rerender(<MapCanvas mode="city" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(screen.getByText("地図上をクリックして点を配置します。")).toBeInTheDocument();
+    expect(renderer.setMode).toHaveBeenLastCalledWith("city");
     unmount();
     expect(renderer.dispose).toHaveBeenCalledOnce();
   });

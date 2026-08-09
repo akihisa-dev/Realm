@@ -33,7 +33,17 @@ describe("RealmMapAdapter", () => {
     expect(featureLayer.getSource()?.getFeatures()).toHaveLength(3);
     adapter.setSelected("city-1");
     adapter.setMode("river");
-    expect(adapter.getMap().getInteractions().getArray().some((interaction) => interaction instanceof Draw)).toBe(true);
+    const riverDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
+    expect(riverDraw).toBeInstanceOf(Draw);
+    expect((riverDraw as Draw).getFreehand()).toBe(true);
+    adapter.setMode("terrain");
+    const terrainDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
+    expect(terrainDraw).toBeInstanceOf(Draw);
+    expect((terrainDraw as Draw).getFreehand()).toBe(true);
+    adapter.setMode("city");
+    const cityDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
+    expect(cityDraw).toBeInstanceOf(Draw);
+    expect((cityDraw as Draw).getFreehand()).toBe(false);
     adapter.setMode("pan");
     expect(adapter.getMap().getInteractions().getArray().some((interaction) => interaction instanceof Draw)).toBe(false);
     const interactions = adapter.getMap().getInteractions().getArray();

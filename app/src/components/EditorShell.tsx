@@ -452,7 +452,11 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
           </div>
           <section className="feature-editor" aria-label="地物編集">
             <label>地物名<input value={featureName} onChange={(event) => setFeatureName(event.target.value)} disabled={locked} maxLength={200} /></label>
-            {activeTool !== "pan" ? <p>地図上を操作して{FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を描いてください。</p> : null}
+            {activeTool !== "pan" ? (
+              <p>{activeTool === "city" || activeTool === "town"
+                ? `地図上をクリックして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を配置してください。`
+                : `地図上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を描いてください。`}</p>
+            ) : null}
             {selectedFeature ? <div className="feature-editor-actions"><button type="button" onClick={() => reviseFeature(selectedFeature)} disabled={locked || dirty}>名前を保存</button><button type="button" className="danger-action" onClick={() => { if (parsedCurrentYear !== null && window.confirm("この年以降から地物を削除しますか？")) void runMutation(() => backend.deleteFeature({ id: selectedFeature.id, validFromYear: parsedCurrentYear }), "地物を削除できませんでした。"); }} disabled={locked || dirty}>削除</button></div> : null}
           </section>
           <section className="era-list" aria-labelledby="era-list-title">

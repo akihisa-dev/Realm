@@ -29,7 +29,7 @@ The map is an authoring tool, not a GIS data exchange service. External network 
 
 ## Functional acceptance
 
-- Each initial feature class can be drawn manually with its required point, line, or polygon geometry, then selected, renamed, reshaped, and deleted at the view year.
+- Each initial feature class can be drawn manually with its required geometry: a click places a point, while a press-and-drag gesture traces a line or polygon. The resulting feature can then be selected, renamed, reshaped, and deleted at the view year.
 - Saving and reopening the single project file preserves world metadata, eras, timeline events, and all feature revisions.
 - Moving before and after a revision or deletion deterministically reconstructs the corresponding visible state, including negative years and the full signed 32-bit year range.
 - A failed validation or transaction leaves the prior project state intact. Undo and redo never update or delete an existing feature revision row.
