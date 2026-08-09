@@ -4,7 +4,7 @@
 
 Realm is a local editor for a world map whose geography and political boundaries can change over time. The user edits features manually and can inspect a map at a calendar year or within a named era.
 
-## 0.1.0 scope
+## 0.1 series scope
 
 The first release targets macOS on Apple Silicon and one local `.realmmap` SQLite file per map. Its storage contract covers terrain, forests, rivers, coastlines, countries, regions, boundaries, cities, and towns. Every feature can have year-scoped revisions; eras are names attached to a year range and do not replace the underlying revisions.
 

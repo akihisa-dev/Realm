@@ -1,5 +1,5 @@
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-compile_error!("Realm 0.1.0 supports only Apple Silicon macOS targets.");
+compile_error!("Realm 0.1 series supports only Apple Silicon macOS targets.");
 
 use std::{
     collections::HashSet,

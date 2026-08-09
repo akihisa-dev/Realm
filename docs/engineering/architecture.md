@@ -35,7 +35,7 @@ OpenLayers imports are isolated in `app/src/map/MapAdapter.ts`. `RealmMapRendere
 - Resolve and validate a project path before opening it; never concatenate user input into SQL or filesystem paths.
 - Use parameterized queries and transactions for revision writes.
 - Never write half a `.realmmap`: create schema and initial world data in one SQLite transaction, synchronize a hidden sibling staging file, and publish it with macOS's atomic no-replace rename. Later writes remain transactional and preserve the journal/WAL semantics selected by the storage implementation.
-- Do not send database contents or telemetry over the network in 0.1.0; image import is not a product capability.
+- Do not send database contents or telemetry over the network in the 0.1 series; image import is not a product capability.
 - Existing files are inspected through a read-only connection before any read/write connection is opened. Future versions, mismatched version markers, incomplete schema, and failed integrity checks leave the original file and its journal mode untouched.
 
 ## Decision records

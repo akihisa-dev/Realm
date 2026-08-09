@@ -17,7 +17,7 @@ Schema version 1 records the same value in `PRAGMA user_version` and `schema_mig
 
 ## Feature classes
 
-The initial classes are `terrain`, `forest`, `river`, `coastline`, `country`, `region`, `boundary`, `city`, and `town`. Geometry representation and coordinate reference system must be documented in the schema migration and validated at the command boundary. No class is populated by a generator in 0.1.0.
+The initial classes are `terrain`, `forest`, `river`, `coastline`, `country`, `region`, `boundary`, `city`, and `town`. Geometry representation and coordinate reference system must be documented in the schema migration and validated at the command boundary. No class is populated by a generator in the 0.1 series.
 
 Timeline-event storage is part of schema version 1 because chronology is confirmed product scope. The initial repository baseline does not expose event editing yet; later commands must extend the same coarse Rust boundary rather than storing chronology in React.
 

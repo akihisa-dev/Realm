@@ -44,6 +44,20 @@ pnpm sbom:generate
 pnpm sbom:check
 ```
 
+## Version updates
+
+`app/package.json` is the application-version source of truth. The package version, Rust package version, Tauri bundle version, CycloneDX application version, and Git tag use `MAJOR.MINOR.PATCH`.
+
+Every committed change advances the version. Without an explicit MAJOR direction from the owner, `feat` increments MINOR and every other approved commit type increments PATCH. A MAJOR update additionally requires `Version-Impact: major` in the commit message. A commit marked with `!` or `BREAKING CHANGE:` must not be created without that explicit MAJOR direction.
+
+Independent objectives are separate commits, and each commit advances the version in sequence. The version update belongs in the same commit as its change; do not create a version-only commit. Calculate the next value from `app/` with:
+
+```sh
+pnpm version:next -- <current-version> <type>
+```
+
+After updating all version artifacts, regenerate the SBOM. The pre-commit hook checks the staged artifacts, while the pre-push hook verifies the subject, type, sequential version, and synchronized artifacts of every outgoing commit.
+
 Repository checks also include:
 
 ```sh

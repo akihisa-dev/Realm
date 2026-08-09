@@ -1,6 +1,6 @@
 {
   "name": "realm",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A local macOS application for authoring fictional world maps across historical time.",
   "license": "AGPL-3.0-or-later",
   "private": true,
@@ -27,7 +27,9 @@
     "docs:index:check": "node scripts/docs-index.mjs --check",
     "architecture:check": "node scripts/architecture-check.mjs",
     "ci:workflows:check": "node scripts/check-github-workflows.mjs",
-    "version:check": "node scripts/version-policy.mjs check",
+    "version:next": "node scripts/version-policy.mjs next",
+    "version:check": "node scripts/version-policy.mjs check-range",
+    "version:check-staged": "node scripts/version-policy.mjs check-staged",
     "licenses:check": "node scripts/license-check.mjs",
     "sbom:generate": "node scripts/generate-sbom.mjs",
     "sbom:check": "node scripts/generate-sbom.mjs --check",

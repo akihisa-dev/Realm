@@ -2,7 +2,7 @@
 
 Realm is a local, editable world-map application for macOS on Apple Silicon. It is designed for people who want to maintain a geographic world as a durable file, with deliberate historical revisions rather than a cloud account or a generated dataset.
 
-> Status: initial 0.1.0 development
+> Status: initial 0.1 series development
 
 ## What Realm stores
 
@@ -23,7 +23,7 @@ The database is local and portable. Realm does not generate map content, import 
 - OpenLayers for map rendering;
 - SQLite through `rusqlite`, with one `.realmmap` database per map project.
 
-The 0.1.0 scope is intentionally local-first. Network access, cloud storage, generated content, and multi-platform packaging are out of scope until a separate decision is recorded in the engineering documents.
+The 0.1 series scope is intentionally local-first. Network access, cloud storage, generated content, and multi-platform packaging are out of scope until a separate decision is recorded in the engineering documents.
 
 ## Repository map
 

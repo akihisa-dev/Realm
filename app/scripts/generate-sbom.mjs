@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = path.resolve(appRoot, "..");
 const outputPath = path.join(repositoryRoot, "sbom", "realm-dependencies.cdx.json");
+const packageJson = JSON.parse(await readFile(path.join(appRoot, "package.json"), "utf8"));
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "realm-sbom-"));
 const jsOutput = path.join(temporaryRoot, "javascript.cdx.json");
 
@@ -115,7 +116,7 @@ try {
     return { ref: rustRefs.get(id), dependsOn: [...new Set(dependsOn)] };
   });
 
-  const applicationRef = "pkg:generic/realm@0.1.0";
+  const applicationRef = `pkg:generic/realm@${packageJson.version}`;
   const jsRoot = withJavascriptLicense(javascript.metadata.component);
   const javascriptComponents = (javascript.components ?? []).map(withJavascriptLicense);
   const components = [jsRoot, ...javascriptComponents, ...rustComponents]
@@ -139,7 +140,7 @@ try {
       component: {
         type: "application",
         name: "Realm",
-        version: "0.1.0",
+        version: packageJson.version,
         purl: applicationRef,
         "bom-ref": applicationRef,
         licenses: [{ license: { id: "AGPL-3.0-or-later" } }],
