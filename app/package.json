@@ -1,6 +1,6 @@
 {
   "name": "realm",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "A local macOS application for authoring fictional world maps across historical time.",
   "license": "AGPL-3.0-or-later",
   "private": true,
