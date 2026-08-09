@@ -17,7 +17,7 @@ is_text_path() {
 
 is_guard_path() {
   case "$1" in
-    .githooks/pre-commit|.githooks/pre-push|.githooks/secret-guard.sh|.github/workflows/secret-guard.yml)
+    .githooks/pre-commit|.githooks/pre-push|.githooks/secret-guard.sh)
       return 0 ;;
   esac
   return 1

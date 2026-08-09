@@ -30,7 +30,7 @@ The 0.1 series scope is intentionally local-first. Network access, cloud storage
 - `app/`: Tauri/Rust/React application code and its reproducible verification scripts.
 - `docs/`: product, architecture, data, testing, and release source of truth. Start at [docs/INDEX.md](docs/INDEX.md).
 - `.githooks/`: local secret and publication guards.
-- `.github/`: least-privilege CI, issue templates, ownership, package verification, and Draft Release automation.
+- `.github/`: issue templates, ownership rules, pull-request guidance, and the manual Release checklist. Realm does not use GitHub Actions.
 - `sbom/`: deterministic CycloneDX inventory generated from both lockfiles.
 - `AGENTS.md`: rules for AI agents and other automated contributors.
 

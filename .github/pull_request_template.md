@@ -13,7 +13,7 @@
 - [ ] App formatter, Rust checks, strict TypeScript checks, and tests declared by the current app package.
 - [ ] `git diff --check`
 - [ ] `.githooks/secret-guard.sh --self-test`
-- [ ] GitHub checks passed.
+- [ ] The required local verification commands passed.
 
 ## Publication
 

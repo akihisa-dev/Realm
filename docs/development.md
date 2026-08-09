@@ -21,7 +21,7 @@ cd app
 pnpm install --frozen-lockfile
 ```
 
-Do not commit global configuration or machine-specific paths. CI installs the pinned Node.js, pnpm, Rust, and cargo-deny versions afresh.
+Do not commit global configuration or machine-specific paths. Each developer is responsible for using the pinned environment locally; this repository does not use GitHub Actions.
 
 ## Development and verification
 
@@ -33,7 +33,16 @@ pnpm verify
 pnpm verify:full
 ```
 
-`verify` covers strict TypeScript, frontend tests with enforced coverage thresholds, Rust formatting, Clippy with warnings denied, and Rust tests. `verify:full` adds source-boundary, documentation, workflow/YAML, version, transitive-license, committed-SBOM, and web-build checks. `verify:ci` additionally runs production dependency advisories.
+`verify` covers strict TypeScript, frontend tests with enforced coverage thresholds, Rust formatting, Clippy with warnings denied, and Rust tests. `verify:full` adds source-boundary, documentation, transitive-license, committed-SBOM, and web-build checks. Commit-to-commit version sequencing is checked by the pre-push hook because it requires the outgoing Git range. `verify:ci` is a reusable strict local command that additionally runs production dependency advisories; it is not connected to GitHub Actions.
+
+### Finder shortcuts
+
+From Finder, use the executable shortcuts at the repository root:
+
+- Double-click [`Realmをテスト起動.command`](../Realmをテスト起動.command) to start the Tauri application in development mode. It does not open a `.realmmap` automatically.
+- Double-click [`Realmをビルド.command`](../Realmをビルド.command) to build and inspect the Apple Silicon `.app` and DMG without launching the packaged application.
+
+Both shortcuts use the pinned local environment and the already-installed dependencies under `app/`; they never install tools or packages automatically. The Terminal window waits for Return after completion so that errors remain visible. Their reusable shell entrypoints are `script/build_and_run.sh` and `script/build_macos.sh`; the Codex Run action uses the former.
 
 `cargo-deny` rejects vulnerable, unsound, yanked, and unmaintained Rust dependencies by default. Its configuration contains only narrowly documented unmaintained-advisory exceptions for dependencies currently inherited through Tauri; every exception must retain a reason, and an unused exception fails the gate so that it is removed when the dependency graph changes.
 
@@ -82,4 +91,4 @@ git config core.hooksPath .githooks
 
 The pre-commit hook checks staged secrets, staged whitespace, and staged version agreement. The pre-push hook scans outgoing commits and runs `verify:local:push` for branch pushes or `verify:local:release` for tag pushes. The release gate additionally builds, inspects, starts, and stages the unsigned arm64 package.
 
-Branch push and tag creation remain distinct owner operations. An explicitly authorized release-tag push also authorizes the automated Draft Release described in [release operations](operations/release.md). Signing, notarization, and public publication remain separate operations.
+Branch push, tag creation, tag push, Draft Release creation, and public publication remain distinct owner operations. No GitHub Action performs them. Signing and notarization are also separate operations. Follow [release operations](operations/release.md).

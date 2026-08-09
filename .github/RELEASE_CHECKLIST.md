@@ -1,17 +1,17 @@
 # Release checklist
 
-Release operations are explicit approvals. A commit does not authorize a branch push or tag. An authorized release-tag push also authorizes automated Draft Release creation, but never signing, notarization, or publication.
+Release operations are explicit approvals. This repository does not use GitHub Actions. A commit does not authorize a branch push, tag creation, tag push, Draft Release creation, or publication.
 
 ## Before a tag
 
-- [ ] Version sources agree on the intended semver.
+- [ ] Version sources and the committed SBOM agree on the intended semver.
 - [ ] Schema migrations and `.realmmap` compatibility notes are current.
 - [ ] `verify:local:push` passed on Apple Silicon.
 - [ ] `verify:local:release` passed, including arm64 build, bundle inspection, and launch smoke.
 - [ ] The DMG checksum, notices, and committed CycloneDX SBOM exist under `release-assets/`.
 - [ ] Any earlier `release-assets/` evidence was inspected and moved explicitly; the staging command did not overwrite it.
 - [ ] The complete diff, secret guard, and untracked files were reviewed.
-- [ ] The unsigned/unnotarized status is acceptable for this Draft Release.
+- [ ] The unsigned and unnotarized status is acceptable for this release candidate.
 
 ## Before pushing
 
@@ -20,11 +20,12 @@ Release operations are explicit approvals. A commit does not authorize a branch 
 - [ ] The ref points at the locally verified commit.
 - [ ] The corresponding local gate was rerun immediately before push.
 
-## Draft Release workflow
+## Before creating a Draft Release
 
-- [ ] The tag is exact `MAJOR.MINOR.PATCH` and equals `app/package.json`.
-- [ ] The pinned macOS arm64 workflow and release gate passed.
-- [ ] The Draft contains only the verified DMG, SHA-256 file, notices, and SBOM.
+- [ ] Owner explicitly authorized Draft Release creation after the tag push.
+- [ ] The tag is exact `MAJOR.MINOR.PATCH`, equals `app/package.json`, and points at the verified commit.
+- [ ] The Draft contains only the staged DMG, SHA-256 file, notices, and SBOM.
+- [ ] No artifact was rebuilt, changed, or overwritten during upload.
 - [ ] No existing or published asset was overwritten.
 - [ ] The Release remains a draft.
 
