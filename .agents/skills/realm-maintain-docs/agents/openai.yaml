@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Documentation"
+  short_description: "Maintain Realm source-of-truth documents"
+  default_prompt: "Use $realm-maintain-docs to update Realm source-of-truth documentation."

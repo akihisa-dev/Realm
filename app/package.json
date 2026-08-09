@@ -1,6 +1,6 @@
 {
   "name": "realm",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A local macOS application for authoring fictional world maps across historical time.",
   "license": "AGPL-3.0-or-later",
   "private": true,
@@ -24,6 +24,7 @@
     "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml --all-features",
     "runtime:check": "node scripts/runtime-policy.mjs",
+    "skills:check": "node scripts/check-project-skills.mjs",
     "docs:index:check": "node scripts/docs-index.mjs --check",
     "architecture:check": "node scripts/architecture-check.mjs",
     "version:next": "node scripts/version-policy.mjs next",
@@ -38,7 +39,7 @@
     "release:assets": "node scripts/prepare-release-assets.mjs",
     "smoke:package": "node scripts/package-smoke.mjs",
     "verify": "pnpm runtime:check && pnpm typecheck && pnpm test:coverage && pnpm rust:fmt:check && pnpm rust:clippy && pnpm rust:test",
-    "verify:full": "pnpm verify && pnpm docs:index:check && pnpm architecture:check && pnpm licenses:check && pnpm sbom:check && pnpm build:web",
+    "verify:full": "pnpm verify && pnpm skills:check && pnpm docs:index:check && pnpm architecture:check && pnpm licenses:check && pnpm sbom:check && pnpm build:web",
     "verify:ci": "pnpm verify:full && pnpm security:audit",
     "verify:local:push": "pnpm install --frozen-lockfile && pnpm verify:full && pnpm security:audit:strict && git -C .. diff --check && ../.githooks/secret-guard.sh --self-test",
     "verify:local:release": "pnpm verify:local:push && pnpm build:mac && pnpm package:check && pnpm smoke:package && pnpm release:assets"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Packaging Debug"
+  short_description: "Diagnose Realm macOS package failures"
+  default_prompt: "Use $realm-debug-packaging to diagnose Realm macOS packaging."

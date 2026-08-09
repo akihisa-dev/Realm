@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Version Management"
+  short_description: "Manage Realm versions and artifacts"
+  default_prompt: "Use $realm-manage-version to calculate and synchronize the next Realm version."

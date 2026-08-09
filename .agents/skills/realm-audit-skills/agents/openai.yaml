@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Skill Audit"
+  short_description: "Audit Realm repository-owned skills"
+  default_prompt: "Use $realm-audit-skills to audit the Realm repository-owned skills."

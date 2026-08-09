@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Map Change"
+  short_description: "Change Realm map features and rendering"
+  default_prompt: "Use $realm-change-map to implement a safe Realm map-editing change."

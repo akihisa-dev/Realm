@@ -6,7 +6,7 @@ The project is AGPL-3.0-or-later. This governance policy does not limit the lice
 
 ## Before proposing a change
 
-Read [docs/INDEX.md](docs/INDEX.md), [AGENTS.md](AGENTS.md), and the relevant document under `docs/`. Keep a proposal local and reproducible. Do not attach a `.realmmap` containing private places, personal data, or credentials.
+Read [docs/INDEX.md](docs/INDEX.md), [AGENTS.md](AGENTS.md), the relevant document under `docs/`, and the repository-owned Realm Skill under `.agents/skills/` when one matches the task. Keep a proposal local and reproducible. Do not attach a `.realmmap` containing private places, personal data, or credentials.
 
 ## Local change rules
 

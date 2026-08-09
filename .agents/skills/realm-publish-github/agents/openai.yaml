@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm GitHub Publication"
+  short_description: "Publish validated Realm Git changes"
+  default_prompt: "Use $realm-publish-github to push validated Realm commits or create a draft pull request."

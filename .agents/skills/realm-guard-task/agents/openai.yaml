@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Task Guard"
+  short_description: "Verify Realm task scope and permissions"
+  default_prompt: "Use $realm-guard-task to verify the Realm task scope before making changes."

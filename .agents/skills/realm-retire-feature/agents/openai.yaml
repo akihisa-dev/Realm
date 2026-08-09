@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Feature Retirement"
+  short_description: "Retire a Realm feature comprehensively"
+  default_prompt: "Use $realm-retire-feature to remove a Realm feature comprehensively."

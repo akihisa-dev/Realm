@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Verification Change"
+  short_description: "Change Realm local verification gates"
+  default_prompt: "Use $realm-change-local-verification to update Realm local verification without GitHub Actions."

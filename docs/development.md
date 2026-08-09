@@ -30,10 +30,11 @@ From `app/`:
 ```sh
 pnpm start
 pnpm verify
+pnpm skills:check
 pnpm verify:full
 ```
 
-`verify` covers strict TypeScript, frontend tests with enforced coverage thresholds, Rust formatting, Clippy with warnings denied, and Rust tests. `verify:full` adds source-boundary, documentation, transitive-license, committed-SBOM, and web-build checks. Commit-to-commit version sequencing is checked by the pre-push hook because it requires the outgoing Git range. `verify:ci` is a reusable strict local command that additionally runs production dependency advisories; it is not connected to GitHub Actions.
+`verify` covers strict TypeScript, frontend tests with enforced coverage thresholds, Rust formatting, Clippy with warnings denied, and Rust tests. `skills:check` validates the repository-owned Realm Skills, their routing metadata, and stale cross-project assumptions. `verify:full` adds that Skill gate plus source-boundary, documentation, transitive-license, committed-SBOM, and web-build checks. Commit-to-commit version sequencing is checked by the pre-push hook because it requires the outgoing Git range. `verify:ci` is a reusable strict local command that additionally runs production dependency advisories; it is not connected to GitHub Actions.
 
 ### Finder shortcuts
 

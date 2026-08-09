@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Release"
+  short_description: "Perform explicit manual Realm releases"
+  default_prompt: "Use $realm-release to prepare or perform an explicitly requested Realm release operation."

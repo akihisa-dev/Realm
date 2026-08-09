@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Dependency Update"
+  short_description: "Update Realm dependencies and evidence"
+  default_prompt: "Use $realm-update-dependencies to update Realm dependencies and evidence."

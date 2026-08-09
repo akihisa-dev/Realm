@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm UI Change"
+  short_description: "Change Realm interface and interaction"
+  default_prompt: "Use $realm-change-ui to implement a Realm interface change."

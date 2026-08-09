@@ -1,0 +1,4 @@
+interface:
+  display_name: "Realm Commit"
+  short_description: "Create validated final Realm commits"
+  default_prompt: "Use $realm-commit to create validated Realm commits immediately before the final report."
