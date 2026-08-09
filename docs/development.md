@@ -65,6 +65,12 @@ Independent objectives are separate commits, and each commit advances the versio
 pnpm version:next -- <current-version> <type>
 ```
 
+### Commit timing
+
+Finish the complete requested task, synchronize its source-of-truth documents, and run the required verification before creating any commit. Create the planned commit or sequence of independent commits immediately before the final result report to the owner. Intermediate progress reports do not authorize or trigger a commit.
+
+Immediately before staging, re-read the current working tree because other work may have arrived concurrently. Stage only the files for the corresponding objective, verify the staged version artifacts, create each planned commit in order, and then report the resulting commits. If a commit cannot be created, leave the work uncommitted and report the reason instead of claiming completion.
+
 After updating all version artifacts, regenerate the SBOM. The pre-commit hook checks the staged artifacts, while the pre-push hook verifies the subject, type, sequential version, and synchronized artifacts of every outgoing commit.
 
 Repository checks also include:
