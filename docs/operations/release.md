@@ -7,12 +7,14 @@ Realm releases are owner-led and explicit. The repository does not use GitHub Ac
 - Confirm the exact semver in `app/package.json`, `Cargo.toml`, `tauri.conf.json`, and the committed SBOM.
 - Confirm schema compatibility notes and migration tests are current.
 - Run `pnpm verify:local:push` from `app/` and inspect the complete diff.
-- Run `pnpm verify:local:release` on Apple Silicon. It builds the Tauri `.app`, creates the DMG directly with the system disk-image tool without mounting a Finder volume, verifies the arm64 executable and bundle metadata, launches the package for a bounded smoke, generates a checksum, and stages notices and the committed SBOM under `release-assets/`.
+- Run `pnpm verify:local:release` on Apple Silicon. It builds the Tauri `.app`, creates the DMG directly with the system disk-image tool without mounting a Finder volume, statically verifies the arm64 executable and bundle metadata, generates a checksum, and stages notices and the committed SBOM under `release-assets/`. It never launches the built package.
 - Confirm there are no user map files, credentials, or unrelated changes.
 
 `release-assets/` must not already exist when staging a release. The staging command refuses to delete or overwrite an earlier evidence set; inspect and move that directory explicitly before another run.
 
 The initial artifact is intentionally unsigned and unnotarized. A Developer ID identity, hardened-runtime signing design, notarization credentials, and Gatekeeper validation are separate high-impact work and must not be inferred from a build request.
+
+Functional and GUI testing that requires Realm to run is completed separately through `Realmをテスト起動.command` or `script/build_and_run.sh`. A built, packaged, or installed `.app` is never used as the test application.
 
 ## Git and GitHub boundaries
 

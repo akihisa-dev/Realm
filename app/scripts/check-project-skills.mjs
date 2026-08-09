@@ -76,7 +76,16 @@ for (const skillName of directories) {
   }
 
   const combined = `${skillSource}\n${interfaceSource}`;
-  for (const forbidden of [/\brelic-/i, /\belectron\b/i, /\.github\/workflows/i, /\bci:workflows\b/i]) {
+  for (const forbidden of [
+    /\brelic-/i,
+    /\belectron\b/i,
+    /\.github\/workflows/i,
+    /\bci:workflows\b/i,
+    /\bpackage-smoke\b/i,
+    /\bsmoke:package\b/i,
+    /\blaunch smoke\b/i,
+    /起動smoke/i,
+  ]) {
     if (forbidden.test(combined)) failures.push(`${skillName} contains stale cross-project guidance: ${forbidden}.`);
   }
   if (/\bTODO\b/.test(combined)) failures.push(`${skillName} contains an unresolved TODO.`);

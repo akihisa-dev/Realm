@@ -11,5 +11,5 @@ description: Realmのpackage scripts、Git hooks、secret guard、runtime policy
 4. Node、pnpm、Rust、cargo-denyの現行固定値を照合する。
 5. secret、version、license、SBOM、architecture、package checkを弱めない。
 6. scriptは失敗を終了codeで伝え、未導入・stale成果物をfail-closedにする。
-7. 実アプリ起動は通常gateへ混ぜず、明示GUI確認またはrelease smokeだけにする。
+7. 起動が必要なtestは通常gateやrelease gateへ混ぜず、明示時だけ`Realmをテスト起動.command`経由の開発版で行う。build・package・install済みappは起動しない。
 8. shell syntax、script test、self-test、拒否case、diff checkを確認する。

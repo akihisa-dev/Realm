@@ -33,14 +33,15 @@
 
 - 仕様・設計の判断は`docs/`の正本を先に確認し、READMEへ詳細を重複させない。
 - 変更後はリンク切れ、Markdown形式、Shell構文、`git diff --check`、秘密情報guardのself-testを必要な範囲で実行する。
-- アプリの実行・GUI操作・配布物起動は、ユーザーがその作業で明示した場合だけ行う。
+- 起動を伴う機能・UIテストは、ユーザーがその作業で明示した場合だけ、リポジトリの`Realmをテスト起動.command`またはその実体である`script/build_and_run.sh`から開発版をテスト起動して行う。
+- ビルド済み・配布用・インストール済みの`.app`はテストに使わず、配布物の確認は起動を伴わない構造・metadata・署名・checksum検査に限定する。
 - 検証できない場合は理由、代替確認、残るリスクを報告する。
 
 ## プロジェクトSkill
 
 - Realm固有のSkillは`.agents/skills/`を正本とする。グローバルSkillへRealm固有手順を作成・複製しない。
 - ローカル変更の書き込み前に`realm-guard-task`を使い、対象領域に応じて`realm-change-map`、`realm-change-history`、`realm-change-storage`、`realm-change-ui`を使う。
-- ローカル検証経路は`realm-change-local-verification`、文書は`realm-maintain-docs`、自動テストは`realm-test-code`を使う。実アプリ確認はユーザーが明示した場合だけ`realm-test-development-app`を使う。
+- ローカル検証経路は`realm-change-local-verification`、文書は`realm-maintain-docs`、自動テストは`realm-test-code`を使う。起動が必要な確認はユーザーが明示した場合だけ`realm-test-development-app`を使い、必ずテスト起動した開発版で行う。
 - コード健全性の局所監査は`realm-audit-code-health`、包括的な構造整理は`realm-refactor-codebase`、機能廃止は`realm-retire-feature`を使う。
 - 依存更新は`realm-update-dependencies`、macOS配布物の診断は`realm-debug-packaging`を使う。GitHub Actions用Skillは作成しない。
 - 全作業と検証の完了後、最終報告直前に`realm-manage-version`と`realm-commit`を使う。通常push・Draft PRは`realm-publish-github`、タグ・手動Releaseは`realm-release`を明示された場合だけ使う。

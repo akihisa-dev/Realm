@@ -12,4 +12,4 @@ description: Realmの開始画面、編集shell、toolbar、rail、sidebar、地
 5. keyboard、pointercancel、lost capture、zoom境界、accessible labelを維持する。
 6. UI都合でSQLite、IPC、履歴契約を変えず、必要なら専門Skillを併用する。
 7. 状態遷移はReact test、座標計算はunit testで確認する。
-8. 実アプリ起動やscreenshotは明示時だけrealm-test-development-appへ渡す。
+8. 実アプリ起動やscreenshotは明示時だけrealm-test-development-appへ渡し、テスト起動した開発版だけを使う。

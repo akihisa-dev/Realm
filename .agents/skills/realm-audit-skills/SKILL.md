@@ -10,6 +10,6 @@ description: Realmリポジトリ所有の.agents/skills集合を、責務、発
 3. name、description、目的、入力、出力、path、command、Skill関係を収集する。
 4. descriptionだけで適切に発火できるか、重複、不足、循環routingを確認する。
 5. map、history、storage、UI、verification、test、docs、package、version、commit、publicationを代表caseでroutingする。
-6. pathとcommandをHEADへ照合し、別プロジェクト固有語、別runtime、Markdown workspace、GitHub Actions前提を拒否する。
+6. pathとcommandをHEADへ照合し、別プロジェクト固有語、別runtime、Markdown workspace、GitHub Actions前提、build・package済みappを使うtest手順を拒否する。
 7. skill creator validatorで全Skillを検証し、未完了マーカー、frontmatter、linkを確認する。
 8. 修正は明示時だけ行い、失われる知識とrouting影響を説明する。

@@ -45,6 +45,8 @@ From Finder, use the executable shortcuts at the repository root:
 
 Both shortcuts use the pinned local environment and the already-installed dependencies under `app/`; they never install tools or packages automatically. When the Homebrew setup above is present, the shortcuts resolve its pinned Node.js and Rust paths even if Finder did not inherit the interactive shell's `PATH`. The Terminal window waits for Return after completion so that errors remain visible. Their reusable shell entrypoints are `script/build_and_run.sh` and `script/build_macos.sh`; the Codex Run action uses the former.
 
+Any test that requires Realm to be running must use `Realmをテスト起動.command` or its `script/build_and_run.sh` entrypoint. Do not test with a built, packaged, or installed `.app`. Package verification is static and may inspect the bundle, executable architecture, metadata, signatures, DMG, and checksums without launching it.
+
 `cargo-deny` rejects vulnerable, unsound, yanked, and unmaintained Rust dependencies by default. Its configuration contains only narrowly documented unmaintained-advisory exceptions for dependencies currently inherited through Tauri; every exception must retain a reason, and an unused exception fails the gate so that it is removed when the dependency graph changes.
 
 The SBOM is deterministic after normalization and must be refreshed whenever either lockfile changes:

@@ -7,7 +7,7 @@ Release operations are explicit approvals. This repository does not use GitHub A
 - [ ] Version sources and the committed SBOM agree on the intended semver.
 - [ ] Schema migrations and `.realmmap` compatibility notes are current.
 - [ ] `verify:local:push` passed on Apple Silicon.
-- [ ] `verify:local:release` passed, including arm64 build, bundle inspection, and launch smoke.
+- [ ] `verify:local:release` passed, including the arm64 build and static bundle inspection without launching the built package.
 - [ ] The DMG checksum, notices, and committed CycloneDX SBOM exist under `release-assets/`.
 - [ ] Any earlier `release-assets/` evidence was inspected and moved explicitly; the staging command did not overwrite it.
 - [ ] The complete diff, secret guard, and untracked files were reviewed.
