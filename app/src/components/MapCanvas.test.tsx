@@ -6,6 +6,7 @@ describe("MapZoomControls", () => {
   it("reports the scale and clamps zoom actions at both boundaries", () => {
     const onChange = vi.fn();
     const { rerender } = render(<MapZoomControls zoom={1} onChange={onChange} />);
+    expect(screen.getByRole("group", { name: "地図のズーム" })).toBeInTheDocument();
     expect(screen.getByText("100%")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "縮小" }));
     fireEvent.click(screen.getByRole("button", { name: "拡大" }));
@@ -24,6 +25,13 @@ describe("MapZoomControls", () => {
     const renderer: RealmMapRenderer = {
       getZoom: vi.fn(() => zoom),
       setZoom: vi.fn((nextZoom) => { zoom = nextZoom; }),
+      resetView: vi.fn(),
+      setFeatures: vi.fn(),
+      setMode: vi.fn(),
+      setSelected: vi.fn(),
+      onDraw: vi.fn(() => vi.fn()),
+      onSelect: vi.fn(() => vi.fn()),
+      onModify: vi.fn(() => vi.fn()),
       onZoomChange: vi.fn((listener) => {
         zoomListener = listener;
         return vi.fn();
@@ -40,6 +48,11 @@ describe("MapZoomControls", () => {
     expect(createRenderer).toHaveBeenCalledOnce();
     expect(renderer.setZoom).toHaveBeenCalledWith(3);
     expect(onZoomChange).toHaveBeenLastCalledWith(3);
+    expect(screen.getByRole("group", { name: "現在の地図操作" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "地図を移動" }));
+    expect(screen.getByRole("region", { name: "世界地図" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "表示を中央に戻す" }));
+    expect(renderer.resetView).toHaveBeenCalledOnce();
     act(() => { zoomListener?.(4); });
     expect(onZoomChange).toHaveBeenLastCalledWith(4);
 

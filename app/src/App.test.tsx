@@ -7,7 +7,11 @@ const emptySnapshot: RealmSnapshot = {
   path: "browser://test.realmmap",
   world: { id: "world-test", name: "テスト世界", currentYear: 0 },
   eras: [],
+  features: [],
+  timelineEvents: [],
   featureCount: 0,
+  canUndo: false,
+  canRedo: false,
 };
 
 const clickReadyButton = async (name: string): Promise<void> => {
@@ -51,6 +55,12 @@ describe("Realm start and editor workflow", () => {
       createProject: async () => { throw { code: "invalid_path", message: "テスト用エラー" }; },
       openProject: async () => emptySnapshot,
       saveProject: async () => { throw { code: "storage_error", message: "保存テスト用エラー" }; },
+      viewProjectYear: async () => emptySnapshot,
+      createFeature: async () => emptySnapshot,
+      reviseFeature: async () => emptySnapshot,
+      deleteFeature: async () => emptySnapshot,
+      undoProject: async () => emptySnapshot,
+      redoProject: async () => emptySnapshot,
       closeProject: async () => undefined,
       getOpenProject: async () => null,
     };
@@ -86,7 +96,7 @@ describe("Realm start and editor workflow", () => {
     render(<App backend={new MemoryRealmBackend([emptySnapshot])} choosePath={async () => emptySnapshot.path} />);
     await clickReadyButton("既存の世界を開く");
     await waitFor(() => expect(screen.getByRole("heading", { name: "世界" })).toBeInTheDocument());
-    expect(screen.getAllByText("テスト世界")).not.toHaveLength(0);
+    expect(screen.getByRole("textbox", { name: "世界の名前" })).toHaveValue("テスト世界");
   });
 
   it("disables project actions until open-project restoration finishes", async () => {
@@ -95,6 +105,12 @@ describe("Realm start and editor workflow", () => {
       createProject: async () => emptySnapshot,
       openProject: async () => emptySnapshot,
       saveProject: async () => emptySnapshot,
+      viewProjectYear: async () => emptySnapshot,
+      createFeature: async () => emptySnapshot,
+      reviseFeature: async () => emptySnapshot,
+      deleteFeature: async () => emptySnapshot,
+      undoProject: async () => emptySnapshot,
+      redoProject: async () => emptySnapshot,
       closeProject: async () => undefined,
       getOpenProject: async () => new Promise((resolve) => { resolveOpenProject = resolve; }),
     };
@@ -103,7 +119,7 @@ describe("Realm start and editor workflow", () => {
     expect(screen.getByRole("button", { name: "新しい世界を作成" })).toBeDisabled();
     await act(async () => { resolveOpenProject?.(emptySnapshot); });
     expect(await screen.findByRole("region", { name: "世界地図" })).toBeInTheDocument();
-    expect(screen.getAllByText("テスト世界")).not.toHaveLength(0);
+    expect(screen.getByRole("textbox", { name: "世界の名前" })).toHaveValue("テスト世界");
   });
 
   it("rejects empty and inverted era input before persistence", async () => {
@@ -148,6 +164,8 @@ describe("Realm start and editor workflow", () => {
     expect(Number(yearSlider.getAttribute("min"))).toBeLessThanOrEqual(-12_000);
     expect(Number(yearSlider.getAttribute("max"))).toBeGreaterThanOrEqual(-12_000);
 
+    fireEvent.change(yearInput, { target: { value: "-2147483648" } });
+    expect(yearInput).toHaveStyle({ width: "11ch" });
     fireEvent.change(yearInput, { target: { value: "2147483647" } });
     expect(yearInput).toHaveValue(2_147_483_647);
     expect(yearSlider).toHaveAttribute("max", "2147483647");
@@ -155,5 +173,22 @@ describe("Realm start and editor workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(screen.getByText("保存済み")).toBeInTheDocument());
     expect((await backend.getOpenProject())?.world.currentYear).toBe(2_147_483_647);
+  });
+
+  it("exposes all manual feature tools and persists timeline events", async () => {
+    const backend = new MemoryRealmBackend();
+    render(<App backend={backend} />);
+    await clickReadyButton("新しい世界を作成");
+    await screen.findByRole("region", { name: "世界地図" });
+
+    for (const label of ["地形", "森林", "河川", "海岸線", "国", "地域", "境界", "都市", "町"]) {
+      expect(screen.getByRole("button", { name: label })).toBeEnabled();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "出来事を追加" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "タイトル" }), { target: { value: "建国" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "説明" }), { target: { value: "合成テスト用の出来事" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(screen.getByText("保存済み")).toBeInTheDocument());
+    expect((await backend.getOpenProject())?.timelineEvents[0]).toMatchObject({ title: "建国", description: "合成テスト用の出来事" });
   });
 });

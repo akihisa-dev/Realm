@@ -4,11 +4,11 @@ Tests must prove behavior without requiring a real user map or a network. Use te
 
 | Layer | Main evidence |
 | --- | --- |
-| Pure Rust/model | world/era validation, stable identifiers, year selection, same-year ordering |
-| SQLite integration | schema invariants, atomic no-replace creation, transactions, rollback, append-only history, JSON validity, one-file reopen |
+| Pure Rust/model | world/era/event validation, geometry-class validation, stable identifiers, year selection, same-year ordering |
+| SQLite integration | all nine feature classes, schema invariants, atomic no-replace creation, transactions, rollback, append-only deletion and undo history, one-file reopen |
 | Tauri command boundary | project input validation, path restrictions, typed errors, coarse command permissions |
-| React/UI | tool state, edit forms, view-year changes, stale request rejection |
-| OpenLayers adapter | bounded EPSG:4326 canvas, pan/zoom behavior, and disposal without persistence side effects |
+| React/UI | nine tool entries, feature and chronology edit forms, view-year changes, stale request rejection, undo/redo state |
+| OpenLayers adapter | bounded EPSG:4326 canvas, snapshot replacement, point/line/polygon rendering, draw/select/modify modes, pan/zoom, and disposal |
 | Repository | Markdown links, `git diff --check`, secret guard self-test, commit-by-commit version policy |
 | macOS package | release-only static arm64 bundle, metadata, DMG, and checksum inspection; never launch the packaged app for testing |
 

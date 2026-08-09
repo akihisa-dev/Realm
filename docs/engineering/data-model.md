@@ -17,13 +17,15 @@ Schema version 1 records the same value in `PRAGMA user_version` and `schema_mig
 
 ## Feature classes
 
-The initial classes are `terrain`, `forest`, `river`, `coastline`, `country`, `region`, `boundary`, `city`, and `town`. Geometry representation and coordinate reference system must be documented in the schema migration and validated at the command boundary. No class is populated by a generator in the 0.1 series.
+The initial classes are `terrain`, `forest`, `river`, `coastline`, `country`, `region`, `boundary`, `city`, and `town`. Cities and towns require GeoJSON `Point`; rivers, coastlines, and boundaries require `LineString`; terrain, forests, countries, and regions require `Polygon`. Coordinates are EPSG:4326 longitude/latitude pairs within the bounded world, lines contain at least two positions, and polygon rings contain at least four positions with equal first and last positions. The Rust command boundary validates these requirements. No class is populated by a generator in the 0.1 series.
 
-Timeline-event storage is part of schema version 1 because chronology is confirmed product scope. The initial repository baseline does not expose event editing yet; later commands must extend the same coarse Rust boundary rather than storing chronology in React.
+Timeline-event storage is part of schema version 1 because chronology is confirmed product scope. The project save command transactionally replaces the complete editable era and timeline-event lists while preserving their stable identifiers. Events with the same start year receive deterministic order from their submitted list order.
 
 ## Edit behavior
 
 Manual edits append or supersede revisions inside a transaction. Database triggers prevent updates and deletes of revision rows; deletion is a new revision with a deleted state, not an immediate loss of historical rows. A user can inspect earlier years after later edits. Geometry is JSON validated by SQLite and is documented as GeoJSON in EPSG:4326. Image import is outside the product boundary.
+
+Feature undo and redo append compensating revisions through the same transaction boundary. Metadata undo and redo restore the prior world, era, and event state transactionally. Undo stacks belong to the open Rust project session and are cleared when a project is opened again; they are not a second persisted history format.
 
 ## Compatibility
 

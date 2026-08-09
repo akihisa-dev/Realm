@@ -7,6 +7,32 @@ export type Era = {
 
 export type EraInput = Omit<Era, "id"> & { id: string | null };
 
+export type FeatureType = "terrain" | "forest" | "river" | "coastline" | "country" | "region" | "boundary" | "city" | "town";
+
+export type Position = [number, number];
+export type GeoJsonGeometry =
+  | { type: "Point"; coordinates: Position }
+  | { type: "LineString"; coordinates: Position[] }
+  | { type: "Polygon"; coordinates: Position[][] };
+
+export type RealmFeature = {
+  id: string;
+  featureType: FeatureType;
+  name: string;
+  geometry: GeoJsonGeometry;
+  validFromYear: number;
+};
+
+export type TimelineEvent = {
+  id: string;
+  title: string;
+  description: string;
+  startYear: number;
+  endYear: number | null;
+};
+
+export type TimelineEventInput = Omit<TimelineEvent, "id"> & { id: string | null };
+
 export type World = {
   id: string;
   name: string;
@@ -18,19 +44,39 @@ export type RealmSnapshot = {
   path: string;
   world: World;
   eras: Era[];
+  features: RealmFeature[];
+  timelineEvents: TimelineEvent[];
   featureCount: number;
+  canUndo: boolean;
+  canRedo: boolean;
 };
 
 export type SaveProjectInput = {
   name: string;
   currentYear: number;
   eras: EraInput[];
+  timelineEvents: TimelineEventInput[];
 };
+
+export type CreateFeatureInput = {
+  featureType: FeatureType;
+  name: string;
+  validFromYear: number;
+  geometry: GeoJsonGeometry;
+};
+
+export type ReviseFeatureInput = Omit<CreateFeatureInput, "featureType"> & { id: string };
 
 export interface RealmBackend {
   createProject(input: { path: string; name: string }): Promise<RealmSnapshot>;
   openProject(input: { path: string }): Promise<RealmSnapshot>;
   saveProject(input: SaveProjectInput): Promise<RealmSnapshot>;
+  viewProjectYear(year: number): Promise<RealmSnapshot>;
+  createFeature(input: CreateFeatureInput): Promise<RealmSnapshot>;
+  reviseFeature(input: ReviseFeatureInput): Promise<RealmSnapshot>;
+  deleteFeature(input: { id: string; validFromYear: number }): Promise<RealmSnapshot>;
+  undoProject(): Promise<RealmSnapshot>;
+  redoProject(): Promise<RealmSnapshot>;
   closeProject(): Promise<void>;
   getOpenProject(): Promise<RealmSnapshot | null>;
 }

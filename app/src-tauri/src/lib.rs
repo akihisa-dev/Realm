@@ -14,6 +14,7 @@ use std::{
 
 use rusqlite::{Connection, Error as SqlError, ErrorCode, OpenFlags, Transaction, params};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -146,14 +147,91 @@ pub struct EraSnapshot {
     pub end_year: Option<i32>,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum FeatureType {
+    Terrain,
+    Forest,
+    River,
+    Coastline,
+    Country,
+    Region,
+    Boundary,
+    City,
+    Town,
+}
+
+impl FeatureType {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Terrain => "terrain",
+            Self::Forest => "forest",
+            Self::River => "river",
+            Self::Coastline => "coastline",
+            Self::Country => "country",
+            Self::Region => "region",
+            Self::Boundary => "boundary",
+            Self::City => "city",
+            Self::Town => "town",
+        }
+    }
+
+    fn from_storage(value: &str) -> Result<Self, AppError> {
+        match value {
+            "terrain" => Ok(Self::Terrain),
+            "forest" => Ok(Self::Forest),
+            "river" => Ok(Self::River),
+            "coastline" => Ok(Self::Coastline),
+            "country" => Ok(Self::Country),
+            "region" => Ok(Self::Region),
+            "boundary" => Ok(Self::Boundary),
+            "city" => Ok(Self::City),
+            "town" => Ok(Self::Town),
+            _ => Err(corrupt_schema()),
+        }
+    }
+
+    fn geometry_type(self) -> &'static str {
+        match self {
+            Self::City | Self::Town => "Point",
+            Self::River | Self::Coastline | Self::Boundary => "LineString",
+            Self::Terrain | Self::Forest | Self::Country | Self::Region => "Polygon",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FeatureSnapshot {
+    pub id: String,
+    pub feature_type: FeatureType,
+    pub name: String,
+    pub geometry: Value,
+    pub valid_from_year: i32,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimelineEventSnapshot {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub start_year: i32,
+    pub end_year: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectSnapshot {
     pub format_version: i32,
     pub path: String,
     pub world: WorldSnapshot,
     pub eras: Vec<EraSnapshot>,
+    pub features: Vec<FeatureSnapshot>,
+    pub timeline_events: Vec<TimelineEventSnapshot>,
     pub feature_count: i64,
+    pub can_undo: bool,
+    pub can_redo: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -171,11 +249,78 @@ pub struct SaveProjectInput {
     pub name: String,
     pub current_year: i32,
     pub eras: Vec<SaveEraInput>,
+    pub timeline_events: Vec<SaveTimelineEventInput>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveTimelineEventInput {
+    pub id: Option<String>,
+    pub title: String,
+    pub description: String,
+    pub start_year: i32,
+    pub end_year: Option<i32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateFeatureInput {
+    pub feature_type: FeatureType,
+    pub name: String,
+    pub valid_from_year: i32,
+    pub geometry: Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviseFeatureInput {
+    pub id: String,
+    pub name: String,
+    pub valid_from_year: i32,
+    pub geometry: Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteFeatureInput {
+    pub id: String,
+    pub valid_from_year: i32,
+}
+
+#[derive(Debug, Clone)]
+struct FeatureRevisionState {
+    name: String,
+    geometry_json: Option<String>,
+    deleted: bool,
+}
+
+#[derive(Debug, Clone)]
+struct MetadataState {
+    name: String,
+    current_year: i32,
+    eras: Vec<EraSnapshot>,
+    timeline_events: Vec<TimelineEventSnapshot>,
+}
+
+#[derive(Debug, Clone)]
+enum EditOperation {
+    Feature {
+        feature_id: String,
+        year: i32,
+        before: Option<FeatureRevisionState>,
+        after: FeatureRevisionState,
+    },
+    Metadata {
+        before: MetadataState,
+        after: MetadataState,
+    },
 }
 
 struct OpenProject {
     path: PathBuf,
     connection: Connection,
+    undo_stack: Vec<EditOperation>,
+    redo_stack: Vec<EditOperation>,
 }
 
 pub struct AppState {
@@ -246,6 +391,120 @@ fn normalize_eras(eras: Vec<SaveEraInput>) -> Result<Vec<EraSnapshot>, AppError>
             })
         })
         .collect()
+}
+
+fn normalize_timeline_events(
+    events: Vec<SaveTimelineEventInput>,
+) -> Result<Vec<TimelineEventSnapshot>, AppError> {
+    if events.len() > 100_000 {
+        return Err(AppError::invalid(
+            "The project contains too many timeline events.",
+        ));
+    }
+    let mut ids = HashSet::with_capacity(events.len());
+    events
+        .into_iter()
+        .map(|event| {
+            validate_name(&event.title)?;
+            if event.description.chars().count() > 10_000 {
+                return Err(AppError::invalid(
+                    "The timeline event description is too long.",
+                ));
+            }
+            if let Some(end_year) = event.end_year
+                && end_year < event.start_year
+            {
+                return Err(AppError::invalid(
+                    "A timeline event end year cannot be earlier than its start year.",
+                ));
+            }
+            let id = match event.id {
+                Some(id) => Uuid::parse_str(id.trim())
+                    .map_err(|_| AppError::invalid("A timeline event identifier is invalid."))?
+                    .to_string(),
+                None => Uuid::new_v4().to_string(),
+            };
+            if !ids.insert(id.clone()) {
+                return Err(AppError::invalid(
+                    "Timeline event identifiers must be unique.",
+                ));
+            }
+            Ok(TimelineEventSnapshot {
+                id,
+                title: event.title.trim().to_owned(),
+                description: event.description.trim().to_owned(),
+                start_year: event.start_year,
+                end_year: event.end_year,
+            })
+        })
+        .collect()
+}
+
+fn coordinate(value: &Value) -> Result<[f64; 2], AppError> {
+    let values = value
+        .as_array()
+        .filter(|values| values.len() == 2)
+        .ok_or_else(|| {
+            AppError::invalid("Geometry coordinates must contain longitude and latitude.")
+        })?;
+    let longitude = values[0]
+        .as_f64()
+        .filter(|value| value.is_finite() && (-180.0..=180.0).contains(value))
+        .ok_or_else(|| AppError::invalid("Geometry longitude must be between -180 and 180."))?;
+    let latitude = values[1]
+        .as_f64()
+        .filter(|value| value.is_finite() && (-90.0..=90.0).contains(value))
+        .ok_or_else(|| AppError::invalid("Geometry latitude must be between -90 and 90."))?;
+    Ok([longitude, latitude])
+}
+
+fn line_coordinates(value: &Value, minimum: usize) -> Result<Vec<[f64; 2]>, AppError> {
+    let values = value
+        .as_array()
+        .filter(|values| values.len() >= minimum)
+        .ok_or_else(|| AppError::invalid("Geometry does not contain enough coordinates."))?;
+    values.iter().map(coordinate).collect()
+}
+
+fn validate_geometry(feature_type: FeatureType, geometry: &Value) -> Result<String, AppError> {
+    let object = geometry
+        .as_object()
+        .ok_or_else(|| AppError::invalid("Geometry must be a GeoJSON geometry object."))?;
+    let geometry_type = object
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| AppError::invalid("Geometry type is required."))?;
+    if geometry_type != feature_type.geometry_type() {
+        return Err(AppError::invalid(
+            "Geometry type does not match the selected feature class.",
+        ));
+    }
+    let coordinates = object
+        .get("coordinates")
+        .ok_or_else(|| AppError::invalid("Geometry coordinates are required."))?;
+    match geometry_type {
+        "Point" => {
+            coordinate(coordinates)?;
+        }
+        "LineString" => {
+            line_coordinates(coordinates, 2)?;
+        }
+        "Polygon" => {
+            let rings = coordinates
+                .as_array()
+                .filter(|rings| !rings.is_empty())
+                .ok_or_else(|| AppError::invalid("A polygon must contain at least one ring."))?;
+            for ring in rings {
+                let points = line_coordinates(ring, 4)?;
+                if points.first() != points.last() {
+                    return Err(AppError::invalid("Polygon rings must be closed."));
+                }
+            }
+        }
+        _ => return Err(AppError::invalid("Unsupported GeoJSON geometry type.")),
+    }
+    serde_json::to_string(geometry)
+        .map_err(|_| AppError::invalid("Geometry could not be encoded as GeoJSON."))
 }
 
 fn path_with_canonical_parent(path: &Path) -> Result<PathBuf, AppError> {
@@ -685,7 +944,10 @@ fn verify_schema(connection: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
-fn project_snapshot(project: &OpenProject) -> Result<ProjectSnapshot, AppError> {
+fn project_snapshot_at(
+    project: &OpenProject,
+    requested_year: Option<i32>,
+) -> Result<ProjectSnapshot, AppError> {
     let world_count: i64 = project
         .connection
         .query_row("SELECT COUNT(*) FROM world", [], |row| row.get(0))
@@ -726,27 +988,85 @@ fn project_snapshot(project: &OpenProject) -> Result<ProjectSnapshot, AppError> 
         .map_err(AppError::from)?
         .collect::<Result<Vec<_>, _>>()
         .map_err(AppError::from)?;
-    let feature_count: i64 = project
+    let view_year = requested_year.unwrap_or(current_year);
+    let mut feature_query = project
         .connection
-        .query_row(
+        .prepare(
             "
-            SELECT COUNT(*) FROM features AS f
-            WHERE EXISTS (
-                SELECT 1 FROM feature_revisions AS r
-                WHERE r.feature_id = f.id AND r.valid_from_year <= ?1
-                ORDER BY r.valid_from_year DESC, r.sequence DESC
+            SELECT f.id, f.feature_type, r.name, r.geometry_json, r.valid_from_year
+            FROM features AS f
+            JOIN feature_revisions AS r ON r.id = (
+                SELECT latest.id FROM feature_revisions AS latest
+                WHERE latest.feature_id = f.id AND latest.valid_from_year <= ?1
+                ORDER BY latest.valid_from_year DESC, latest.sequence DESC
                 LIMIT 1
-            ) AND COALESCE((
-                SELECT r.deleted FROM feature_revisions AS r
-                WHERE r.feature_id = f.id AND r.valid_from_year <= ?1
-                ORDER BY r.valid_from_year DESC, r.sequence DESC
-                LIMIT 1
-            ), 0) = 0
+            )
+            WHERE r.deleted = 0
+            ORDER BY f.feature_type, r.name, f.id
             ",
-            [current_year],
-            |row| row.get(0),
         )
         .map_err(AppError::from)?;
+    let feature_rows = feature_query
+        .query_map([view_year], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, i32>(4)?,
+            ))
+        })
+        .map_err(AppError::from)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::from)?;
+    let features = feature_rows
+        .into_iter()
+        .map(|(id, feature_type, name, geometry_json, valid_from_year)| {
+            let geometry_json = geometry_json.ok_or_else(|| {
+                AppError::new("corrupt_project", "A visible feature has no geometry.")
+            })?;
+            let geometry = serde_json::from_str(&geometry_json).map_err(|_| {
+                AppError::new("corrupt_project", "A feature contains invalid geometry.")
+            })?;
+            let feature_type = FeatureType::from_storage(&feature_type)?;
+            validate_geometry(feature_type, &geometry).map_err(|_| {
+                AppError::new(
+                    "corrupt_project",
+                    "A feature contains geometry that does not match its class.",
+                )
+            })?;
+            Ok(FeatureSnapshot {
+                id,
+                feature_type,
+                name,
+                geometry,
+                valid_from_year,
+            })
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
+
+    let mut event_query = project
+        .connection
+        .prepare(
+            "SELECT id, title, description, start_year, end_year
+             FROM timeline_events ORDER BY start_year, sequence, id",
+        )
+        .map_err(AppError::from)?;
+    let timeline_events = event_query
+        .query_map([], |row| {
+            Ok(TimelineEventSnapshot {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                start_year: row.get(3)?,
+                end_year: row.get(4)?,
+            })
+        })
+        .map_err(AppError::from)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::from)?;
+    let feature_count = i64::try_from(features.len())
+        .map_err(|_| AppError::new("storage_error", "The feature count is unavailable."))?;
 
     Ok(ProjectSnapshot {
         format_version: CURRENT_SCHEMA_VERSION,
@@ -754,11 +1074,19 @@ fn project_snapshot(project: &OpenProject) -> Result<ProjectSnapshot, AppError> 
         world: WorldSnapshot {
             id: world_id,
             name: world_name,
-            current_year,
+            current_year: view_year,
         },
         eras,
+        features,
+        timeline_events,
         feature_count,
+        can_undo: !project.undo_stack.is_empty(),
+        can_redo: !project.redo_stack.is_empty(),
     })
+}
+
+fn project_snapshot(project: &OpenProject) -> Result<ProjectSnapshot, AppError> {
+    project_snapshot_at(project, None)
 }
 
 fn validate_existing_schema(connection: &Connection) -> Result<(), AppError> {
@@ -950,7 +1278,12 @@ fn create_project_inner(path: PathBuf, name: &str) -> Result<OpenProject, AppErr
         publish_new_project(&staged_path, &path)?;
 
         let connection = open_connection(&path)?;
-        Ok(OpenProject { path, connection })
+        Ok(OpenProject {
+            path,
+            connection,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+        })
     })();
     if created.is_err() {
         remove_unpublished_project(&staged_path);
@@ -980,11 +1313,154 @@ fn open_project(
 ) -> Result<ProjectSnapshot, AppError> {
     let path = validated_path(&path, true)?;
     let connection = open_connection(&path)?;
-    let project = OpenProject { path, connection };
+    let project = OpenProject {
+        path,
+        connection,
+        undo_stack: Vec::new(),
+        redo_stack: Vec::new(),
+    };
     let snapshot = project_snapshot(&project)?;
     let mut open = lock_project(state.inner())?;
     *open = Some(project);
     Ok(snapshot)
+}
+
+fn metadata_state(project: &OpenProject) -> Result<MetadataState, AppError> {
+    let snapshot = project_snapshot(project)?;
+    Ok(MetadataState {
+        name: snapshot.world.name,
+        current_year: snapshot.world.current_year,
+        eras: snapshot.eras,
+        timeline_events: snapshot.timeline_events,
+    })
+}
+
+fn apply_metadata(project: &mut OpenProject, state: &MetadataState) -> Result<(), AppError> {
+    let transaction = project.connection.transaction().map_err(AppError::from)?;
+    let world_count = transaction
+        .execute(
+            "UPDATE world SET name = ?1, current_year = ?2",
+            params![state.name, state.current_year],
+        )
+        .map_err(AppError::from)?;
+    if world_count != 1 {
+        return Err(AppError::new(
+            "corrupt_project",
+            "The project must contain exactly one world record.",
+        ));
+    }
+    transaction
+        .execute("DELETE FROM eras", [])
+        .map_err(AppError::from)?;
+    for era in &state.eras {
+        transaction
+            .execute(
+                "INSERT INTO eras(id, name, start_year, end_year) VALUES (?1, ?2, ?3, ?4)",
+                params![era.id, era.name, era.start_year, era.end_year],
+            )
+            .map_err(AppError::from)?;
+    }
+    transaction
+        .execute("DELETE FROM timeline_events", [])
+        .map_err(AppError::from)?;
+    let mut last_start_year = None;
+    let mut sequence = 0_i64;
+    for event in &state.timeline_events {
+        if last_start_year == Some(event.start_year) {
+            sequence += 1;
+        } else {
+            last_start_year = Some(event.start_year);
+            sequence = 0;
+        }
+        transaction
+            .execute(
+                "INSERT INTO timeline_events(id, title, description, start_year, end_year, sequence)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    event.id,
+                    event.title,
+                    event.description,
+                    event.start_year,
+                    event.end_year,
+                    sequence
+                ],
+            )
+            .map_err(AppError::from)?;
+    }
+    transaction.commit().map_err(AppError::from)
+}
+
+fn latest_feature_state(
+    connection: &Connection,
+    feature_id: &str,
+    year: i32,
+) -> Result<Option<FeatureRevisionState>, AppError> {
+    let result = connection.query_row(
+        "SELECT name, geometry_json, deleted FROM feature_revisions
+         WHERE feature_id = ?1 AND valid_from_year <= ?2
+         ORDER BY valid_from_year DESC, sequence DESC LIMIT 1",
+        params![feature_id, year],
+        |row| {
+            Ok(FeatureRevisionState {
+                name: row.get(0)?,
+                geometry_json: row.get(1)?,
+                deleted: row.get::<_, i64>(2)? != 0,
+            })
+        },
+    );
+    match result {
+        Ok(state) => Ok(Some(state)),
+        Err(SqlError::QueryReturnedNoRows) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn append_feature_revision(
+    connection: &Connection,
+    feature_id: &str,
+    year: i32,
+    state: &FeatureRevisionState,
+) -> Result<(), AppError> {
+    let sequence: i64 = connection
+        .query_row(
+            "SELECT COALESCE(MAX(sequence), -1) + 1 FROM feature_revisions
+             WHERE feature_id = ?1 AND valid_from_year = ?2",
+            params![feature_id, year],
+            |row| row.get(0),
+        )
+        .map_err(AppError::from)?;
+    connection
+        .execute(
+            "INSERT INTO feature_revisions(
+                feature_id, valid_from_year, sequence, name, geometry_json, deleted
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                feature_id,
+                year,
+                sequence,
+                state.name,
+                state.geometry_json,
+                i64::from(state.deleted)
+            ],
+        )
+        .map_err(AppError::from)?;
+    Ok(())
+}
+
+fn feature_type_for_id(connection: &Connection, feature_id: &str) -> Result<FeatureType, AppError> {
+    let stored = connection
+        .query_row(
+            "SELECT feature_type FROM features WHERE id = ?1",
+            [feature_id],
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(|error| match error {
+            SqlError::QueryReturnedNoRows => {
+                AppError::new("not_found", "The feature was not found.")
+            }
+            other => other.into(),
+        })?;
+    FeatureType::from_storage(&stored)
 }
 
 fn save_project_in_state(
@@ -994,46 +1470,25 @@ fn save_project_in_state(
     validate_name(&input.name)?;
     validate_year(input.current_year)?;
     let eras = normalize_eras(input.eras)?;
+    let mut timeline_events = normalize_timeline_events(input.timeline_events)?;
+    timeline_events.sort_by_key(|event| event.start_year);
     let mut open = lock_project(state)?;
     let project = open
         .as_mut()
         .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
-    let transaction = project.connection.transaction().map_err(AppError::from)?;
-    let (world_id, world_count): (String, i64) = transaction
-        .query_row("SELECT MIN(id), COUNT(*) FROM world", [], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })
-        .map_err(AppError::from)?;
-    if world_count != 1 {
-        return Err(AppError::new(
-            "corrupt_project",
-            "The project must contain exactly one world record.",
-        ));
-    }
-    let updated = transaction
-        .execute(
-            "UPDATE world SET name = ?1, current_year = ?2 WHERE id = ?3",
-            params![input.name.trim(), input.current_year, world_id],
-        )
-        .map_err(AppError::from)?;
-    if updated != 1 {
-        return Err(AppError::new(
-            "storage_error",
-            "The project world could not be updated.",
-        ));
-    }
-    transaction
-        .execute("DELETE FROM eras", [])
-        .map_err(AppError::from)?;
-    for era in eras {
-        transaction
-            .execute(
-                "INSERT INTO eras(id, name, start_year, end_year) VALUES (?1, ?2, ?3, ?4)",
-                params![era.id, era.name, era.start_year, era.end_year],
-            )
-            .map_err(AppError::from)?;
-    }
-    transaction.commit().map_err(AppError::from)?;
+    let before = metadata_state(project)?;
+    let after = MetadataState {
+        name: input.name.trim().to_owned(),
+        current_year: input.current_year,
+        eras,
+        timeline_events,
+    };
+    apply_metadata(project, &after)?;
+    project.undo_stack.push(EditOperation::Metadata {
+        before,
+        after: after.clone(),
+    });
+    project.redo_stack.clear();
     project_snapshot(project)
 }
 
@@ -1043,6 +1498,254 @@ fn save_project(
     input: SaveProjectInput,
 ) -> Result<ProjectSnapshot, AppError> {
     save_project_in_state(state.inner(), input)
+}
+
+fn view_project_year_in_state(state: &AppState, year: i32) -> Result<ProjectSnapshot, AppError> {
+    let open = lock_project(state)?;
+    let project = open
+        .as_ref()
+        .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
+    project_snapshot_at(project, Some(year))
+}
+
+#[tauri::command]
+fn view_project_year(
+    state: tauri::State<'_, AppState>,
+    year: i32,
+) -> Result<ProjectSnapshot, AppError> {
+    view_project_year_in_state(state.inner(), year)
+}
+
+fn create_feature_in_state(
+    state: &AppState,
+    input: CreateFeatureInput,
+) -> Result<ProjectSnapshot, AppError> {
+    validate_name(&input.name)?;
+    let geometry_json = validate_geometry(input.feature_type, &input.geometry)?;
+    let mut open = lock_project(state)?;
+    let project = open
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
+    let feature_id = Uuid::new_v4().to_string();
+    let after = FeatureRevisionState {
+        name: input.name.trim().to_owned(),
+        geometry_json: Some(geometry_json),
+        deleted: false,
+    };
+    let transaction = project.connection.transaction().map_err(AppError::from)?;
+    transaction
+        .execute(
+            "INSERT INTO features(id, feature_type) VALUES (?1, ?2)",
+            params![feature_id, input.feature_type.as_str()],
+        )
+        .map_err(AppError::from)?;
+    append_feature_revision(&transaction, &feature_id, input.valid_from_year, &after)?;
+    transaction
+        .execute(
+            "UPDATE world SET current_year = ?1",
+            [input.valid_from_year],
+        )
+        .map_err(AppError::from)?;
+    transaction.commit().map_err(AppError::from)?;
+    project.undo_stack.push(EditOperation::Feature {
+        feature_id,
+        year: input.valid_from_year,
+        before: None,
+        after,
+    });
+    project.redo_stack.clear();
+    project_snapshot_at(project, Some(input.valid_from_year))
+}
+
+#[tauri::command]
+fn create_feature(
+    state: tauri::State<'_, AppState>,
+    input: CreateFeatureInput,
+) -> Result<ProjectSnapshot, AppError> {
+    create_feature_in_state(state.inner(), input)
+}
+
+fn revise_feature_in_state(
+    state: &AppState,
+    input: ReviseFeatureInput,
+) -> Result<ProjectSnapshot, AppError> {
+    validate_name(&input.name)?;
+    let feature_id = Uuid::parse_str(input.id.trim())
+        .map_err(|_| AppError::invalid("A feature identifier is invalid."))?
+        .to_string();
+    let mut open = lock_project(state)?;
+    let project = open
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
+    let feature_type = feature_type_for_id(&project.connection, &feature_id)?;
+    let geometry_json = validate_geometry(feature_type, &input.geometry)?;
+    let before = latest_feature_state(&project.connection, &feature_id, input.valid_from_year)?
+        .filter(|revision| !revision.deleted)
+        .ok_or_else(|| AppError::new("not_found", "The feature is not visible at this year."))?;
+    let after = FeatureRevisionState {
+        name: input.name.trim().to_owned(),
+        geometry_json: Some(geometry_json),
+        deleted: false,
+    };
+    let transaction = project.connection.transaction().map_err(AppError::from)?;
+    append_feature_revision(&transaction, &feature_id, input.valid_from_year, &after)?;
+    transaction
+        .execute(
+            "UPDATE world SET current_year = ?1",
+            [input.valid_from_year],
+        )
+        .map_err(AppError::from)?;
+    transaction.commit().map_err(AppError::from)?;
+    project.undo_stack.push(EditOperation::Feature {
+        feature_id,
+        year: input.valid_from_year,
+        before: Some(before),
+        after,
+    });
+    project.redo_stack.clear();
+    project_snapshot_at(project, Some(input.valid_from_year))
+}
+
+#[tauri::command]
+fn revise_feature(
+    state: tauri::State<'_, AppState>,
+    input: ReviseFeatureInput,
+) -> Result<ProjectSnapshot, AppError> {
+    revise_feature_in_state(state.inner(), input)
+}
+
+fn delete_feature_in_state(
+    state: &AppState,
+    input: DeleteFeatureInput,
+) -> Result<ProjectSnapshot, AppError> {
+    let feature_id = Uuid::parse_str(input.id.trim())
+        .map_err(|_| AppError::invalid("A feature identifier is invalid."))?
+        .to_string();
+    let mut open = lock_project(state)?;
+    let project = open
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
+    feature_type_for_id(&project.connection, &feature_id)?;
+    let before = latest_feature_state(&project.connection, &feature_id, input.valid_from_year)?
+        .filter(|revision| !revision.deleted)
+        .ok_or_else(|| AppError::new("not_found", "The feature is not visible at this year."))?;
+    let after = FeatureRevisionState {
+        name: before.name.clone(),
+        geometry_json: None,
+        deleted: true,
+    };
+    let transaction = project.connection.transaction().map_err(AppError::from)?;
+    append_feature_revision(&transaction, &feature_id, input.valid_from_year, &after)?;
+    transaction
+        .execute(
+            "UPDATE world SET current_year = ?1",
+            [input.valid_from_year],
+        )
+        .map_err(AppError::from)?;
+    transaction.commit().map_err(AppError::from)?;
+    project.undo_stack.push(EditOperation::Feature {
+        feature_id,
+        year: input.valid_from_year,
+        before: Some(before),
+        after,
+    });
+    project.redo_stack.clear();
+    project_snapshot_at(project, Some(input.valid_from_year))
+}
+
+#[tauri::command]
+fn delete_feature(
+    state: tauri::State<'_, AppState>,
+    input: DeleteFeatureInput,
+) -> Result<ProjectSnapshot, AppError> {
+    delete_feature_in_state(state.inner(), input)
+}
+
+fn apply_edit_operation(
+    project: &mut OpenProject,
+    operation: &EditOperation,
+    forward: bool,
+) -> Result<i32, AppError> {
+    match operation {
+        EditOperation::Feature {
+            feature_id,
+            year,
+            before,
+            after,
+        } => {
+            let state = if forward {
+                after.clone()
+            } else {
+                before.clone().unwrap_or_else(|| FeatureRevisionState {
+                    name: after.name.clone(),
+                    geometry_json: None,
+                    deleted: true,
+                })
+            };
+            let transaction = project.connection.transaction().map_err(AppError::from)?;
+            append_feature_revision(&transaction, feature_id, *year, &state)?;
+            transaction
+                .execute("UPDATE world SET current_year = ?1", [year])
+                .map_err(AppError::from)?;
+            transaction.commit().map_err(AppError::from)?;
+            Ok(*year)
+        }
+        EditOperation::Metadata { before, after } => {
+            let state = if forward { after } else { before };
+            apply_metadata(project, state)?;
+            Ok(state.current_year)
+        }
+    }
+}
+
+fn undo_project_in_state(state: &AppState) -> Result<ProjectSnapshot, AppError> {
+    let mut open = lock_project(state)?;
+    let project = open
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
+    let operation = project
+        .undo_stack
+        .pop()
+        .ok_or_else(|| AppError::new("nothing_to_undo", "There is nothing to undo."))?;
+    let year = match apply_edit_operation(project, &operation, false) {
+        Ok(year) => year,
+        Err(error) => {
+            project.undo_stack.push(operation);
+            return Err(error);
+        }
+    };
+    project.redo_stack.push(operation);
+    project_snapshot_at(project, Some(year))
+}
+
+#[tauri::command]
+fn undo_project(state: tauri::State<'_, AppState>) -> Result<ProjectSnapshot, AppError> {
+    undo_project_in_state(state.inner())
+}
+
+fn redo_project_in_state(state: &AppState) -> Result<ProjectSnapshot, AppError> {
+    let mut open = lock_project(state)?;
+    let project = open
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
+    let operation = project
+        .redo_stack
+        .pop()
+        .ok_or_else(|| AppError::new("nothing_to_redo", "There is nothing to redo."))?;
+    let year = match apply_edit_operation(project, &operation, true) {
+        Ok(year) => year,
+        Err(error) => {
+            project.redo_stack.push(operation);
+            return Err(error);
+        }
+    };
+    project.undo_stack.push(operation);
+    project_snapshot_at(project, Some(year))
+}
+
+#[tauri::command]
+fn redo_project(state: tauri::State<'_, AppState>) -> Result<ProjectSnapshot, AppError> {
+    redo_project_in_state(state.inner())
 }
 
 fn close_project_in_state(state: &AppState) -> Result<(), AppError> {
@@ -1077,6 +1780,12 @@ pub fn run() {
             create_project,
             open_project,
             save_project,
+            view_project_year,
+            create_feature,
+            revise_feature,
+            delete_feature,
+            undo_project,
+            redo_project,
             close_project,
             get_open_project
         ])
@@ -1108,6 +1817,8 @@ mod tests {
         let opened = project_snapshot(&OpenProject {
             path: path.clone(),
             connection: second,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
         })
         .unwrap();
         assert_eq!(first.world.id, opened.world.id);
@@ -1336,12 +2047,29 @@ mod tests {
                     start_year: 1000,
                     end_year: Some(1500),
                 }],
+                timeline_events: vec![
+                    SaveTimelineEventInput {
+                        id: None,
+                        title: "Founding".into(),
+                        description: "A synthetic event".into(),
+                        start_year: 1200,
+                        end_year: None,
+                    },
+                    SaveTimelineEventInput {
+                        id: None,
+                        title: "Treaty".into(),
+                        description: String::new(),
+                        start_year: 1200,
+                        end_year: Some(1201),
+                    },
+                ],
             },
         )
         .unwrap();
         assert_eq!(snapshot.world.name, "After");
         assert_eq!(snapshot.world.current_year, 1234);
         assert_eq!(snapshot.eras.len(), 1);
+        assert_eq!(snapshot.timeline_events.len(), 2);
         assert!(Uuid::parse_str(&snapshot.eras[0].id).is_ok());
         let era_id = snapshot.eras[0].id.clone();
         let failed = save_project_in_state(
@@ -1350,6 +2078,7 @@ mod tests {
                 name: "".into(),
                 current_year: 0,
                 eras: vec![],
+                timeline_events: vec![],
             },
         )
         .unwrap_err();
@@ -1363,10 +2092,13 @@ mod tests {
         let reopened = OpenProject {
             path: path.clone(),
             connection: open_connection(&path).unwrap(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
         };
         let reopened = project_snapshot(&reopened).unwrap();
         assert_eq!(reopened.world.current_year, 1234);
         assert_eq!(reopened.eras[0].id, era_id);
+        assert_eq!(reopened.timeline_events.len(), 2);
     }
 
     #[test]
@@ -1427,6 +2159,280 @@ mod tests {
             [&feature_id],
         );
         assert!(delete.is_err());
+    }
+
+    fn geometry_for(feature_type: FeatureType) -> Value {
+        match feature_type.geometry_type() {
+            "Point" => serde_json::json!({ "type": "Point", "coordinates": [12.0, 34.0] }),
+            "LineString" => serde_json::json!({
+                "type": "LineString",
+                "coordinates": [[0.0, 0.0], [10.0, 10.0]]
+            }),
+            "Polygon" => serde_json::json!({
+                "type": "Polygon",
+                "coordinates": [[[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 0.0]]]
+            }),
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn all_feature_classes_round_trip_revisions_deletions_and_reopen() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("features.realmmap");
+        let state = direct_state();
+        *state.project.lock().unwrap() =
+            Some(create_project_inner(path.clone(), "Features").unwrap());
+        let feature_types = [
+            FeatureType::Terrain,
+            FeatureType::Forest,
+            FeatureType::River,
+            FeatureType::Coastline,
+            FeatureType::Country,
+            FeatureType::Region,
+            FeatureType::Boundary,
+            FeatureType::City,
+            FeatureType::Town,
+        ];
+        let mut feature_ids = Vec::new();
+
+        for feature_type in feature_types {
+            let created = create_feature_in_state(
+                &state,
+                CreateFeatureInput {
+                    feature_type,
+                    name: format!("{} original", feature_type.as_str()),
+                    valid_from_year: -10,
+                    geometry: geometry_for(feature_type),
+                },
+            )
+            .unwrap();
+            let id = created
+                .features
+                .iter()
+                .find(|feature| feature.feature_type == feature_type)
+                .unwrap()
+                .id
+                .clone();
+            revise_feature_in_state(
+                &state,
+                ReviseFeatureInput {
+                    id: id.clone(),
+                    name: format!("{} revised", feature_type.as_str()),
+                    valid_from_year: 5,
+                    geometry: geometry_for(feature_type),
+                },
+            )
+            .unwrap();
+            delete_feature_in_state(
+                &state,
+                DeleteFeatureInput {
+                    id: id.clone(),
+                    valid_from_year: 10,
+                },
+            )
+            .unwrap();
+            feature_ids.push(id);
+        }
+
+        let old = view_project_year_in_state(&state, -10).unwrap();
+        assert_eq!(old.features.len(), 9);
+        assert!(
+            old.features
+                .iter()
+                .all(|feature| feature.name.ends_with("original"))
+        );
+        let revised = view_project_year_in_state(&state, 5).unwrap();
+        assert_eq!(revised.features.len(), 9);
+        assert!(
+            revised
+                .features
+                .iter()
+                .all(|feature| feature.name.ends_with("revised"))
+        );
+        assert!(
+            view_project_year_in_state(&state, 10)
+                .unwrap()
+                .features
+                .is_empty()
+        );
+
+        let first_id = feature_ids.first().unwrap().clone();
+        revise_feature_in_state(
+            &state,
+            ReviseFeatureInput {
+                id: first_id.clone(),
+                name: "same-year winner".into(),
+                valid_from_year: 5,
+                geometry: geometry_for(FeatureType::Terrain),
+            },
+        )
+        .unwrap();
+        let same_year = view_project_year_in_state(&state, 5).unwrap();
+        assert_eq!(
+            same_year
+                .features
+                .iter()
+                .find(|feature| feature.id == first_id)
+                .unwrap()
+                .name,
+            "same-year winner"
+        );
+
+        close_project_in_state(&state).unwrap();
+        *state.project.lock().unwrap() = Some(OpenProject {
+            path,
+            connection: open_connection(&directory.path().join("features.realmmap")).unwrap(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+        });
+        assert_eq!(
+            view_project_year_in_state(&state, -10)
+                .unwrap()
+                .features
+                .len(),
+            9
+        );
+        assert!(
+            view_project_year_in_state(&state, 10)
+                .unwrap()
+                .features
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn feature_undo_and_redo_append_history_without_erasing_revisions() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("undo.realmmap");
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(create_project_inner(path, "Undo").unwrap());
+        let created = create_feature_in_state(
+            &state,
+            CreateFeatureInput {
+                feature_type: FeatureType::City,
+                name: "City".into(),
+                valid_from_year: i32::MIN,
+                geometry: geometry_for(FeatureType::City),
+            },
+        )
+        .unwrap();
+        let id = created.features[0].id.clone();
+        let undone = undo_project_in_state(&state).unwrap();
+        assert!(undone.features.is_empty());
+        assert!(undone.can_redo);
+        let redone = redo_project_in_state(&state).unwrap();
+        assert_eq!(redone.features[0].id, id);
+        let revision_count: i64 = state
+            .project
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM feature_revisions WHERE feature_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(revision_count, 3);
+    }
+
+    #[test]
+    fn invalid_geometry_leaves_feature_tables_unchanged() {
+        let directory = tempdir().unwrap();
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(
+            create_project_inner(directory.path().join("invalid.realmmap"), "Invalid").unwrap(),
+        );
+        let error = create_feature_in_state(
+            &state,
+            CreateFeatureInput {
+                feature_type: FeatureType::City,
+                name: "Invalid".into(),
+                valid_from_year: i32::MAX,
+                geometry: serde_json::json!({ "type": "Point", "coordinates": [181, 0] }),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "invalid_input");
+        let feature_count: i64 = state
+            .project
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .connection
+            .query_row("SELECT COUNT(*) FROM features", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(feature_count, 0);
+    }
+
+    #[test]
+    fn snapshot_rejects_geometry_that_does_not_match_feature_class() {
+        let directory = tempdir().unwrap();
+        let mut project =
+            create_project_inner(directory.path().join("mismatch.realmmap"), "Mismatch").unwrap();
+        let transaction = project.connection.transaction().unwrap();
+        let id = Uuid::new_v4().to_string();
+        transaction
+            .execute(
+                "INSERT INTO features(id, feature_type) VALUES (?1, 'city')",
+                [&id],
+            )
+            .unwrap();
+        transaction
+            .execute(
+                "INSERT INTO feature_revisions(feature_id, valid_from_year, sequence, name, geometry_json, deleted)
+                 VALUES (?1, 0, 0, 'Mismatch', '{\"type\":\"LineString\",\"coordinates\":[[0,0],[1,1]]}', 0)",
+                [&id],
+            )
+            .unwrap();
+        transaction.commit().unwrap();
+        assert_eq!(
+            project_snapshot(&project).unwrap_err().code,
+            "corrupt_project"
+        );
+    }
+
+    #[test]
+    fn feature_transaction_rolls_back_when_revision_insert_fails() {
+        let directory = tempdir().unwrap();
+        let state = direct_state();
+        let project = create_project_inner(
+            directory.path().join("rollback-feature.realmmap"),
+            "Rollback",
+        )
+        .unwrap();
+        project
+            .connection
+            .execute_batch(
+                "CREATE TEMP TRIGGER reject_test_revision
+                 BEFORE INSERT ON feature_revisions
+                 BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END;",
+            )
+            .unwrap();
+        *state.project.lock().unwrap() = Some(project);
+        let error = create_feature_in_state(
+            &state,
+            CreateFeatureInput {
+                feature_type: FeatureType::Town,
+                name: "Town".into(),
+                valid_from_year: 0,
+                geometry: geometry_for(FeatureType::Town),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "storage_constraint");
+        let project = state.project.lock().unwrap();
+        let feature_count: i64 = project
+            .as_ref()
+            .unwrap()
+            .connection
+            .query_row("SELECT COUNT(*) FROM features", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(feature_count, 0);
     }
 
     #[test]

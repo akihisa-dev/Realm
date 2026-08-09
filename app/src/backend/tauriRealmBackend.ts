@@ -6,6 +6,12 @@ export const tauriRealmBackend: RealmBackend = {
   createProject: (input) => invoke<RealmSnapshot>("create_project", { path: input.path, name: input.name }),
   openProject: (input) => invoke<RealmSnapshot>("open_project", { path: input.path }),
   saveProject: (input) => invoke<RealmSnapshot>("save_project", { input }),
+  viewProjectYear: (year) => invoke<RealmSnapshot>("view_project_year", { year }),
+  createFeature: (input) => invoke<RealmSnapshot>("create_feature", { input }),
+  reviseFeature: (input) => invoke<RealmSnapshot>("revise_feature", { input }),
+  deleteFeature: (input) => invoke<RealmSnapshot>("delete_feature", { input }),
+  undoProject: () => invoke<RealmSnapshot>("undo_project"),
+  redoProject: () => invoke<RealmSnapshot>("redo_project"),
   closeProject: () => invoke<void>("close_project"),
   getOpenProject: () => invoke<RealmSnapshot | null>("get_open_project"),
 };

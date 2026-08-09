@@ -8,7 +8,7 @@ Realm is a local editor for a world map whose geography and political boundaries
 
 The first release targets macOS on Apple Silicon and one local `.realmmap` SQLite file per map. Its storage contract covers terrain, forests, rivers, coastlines, countries, regions, boundaries, cities, and towns. Every feature can have year-scoped revisions; eras are names attached to a year range and do not replace the underlying revisions.
 
-The initial repository baseline opens an empty bounded world canvas, moves and zooms it, and round-trips the world name, current year, and named eras through Rust and SQLite. Feature tables, append-only revision invariants, and timeline-event storage are present so manual geometry and chronology tools can be added without moving authority into React or OpenLayers; those editing tools are not presented as available in the baseline UI.
+The editor creates, opens, saves, and closes map projects; moves and zooms the bounded world canvas; and edits the world name, current year, named eras, and timeline events. Its map tools manually draw, select, rename, reshape, and delete every initial feature class. A year change reconstructs the visible map from the latest revision at or before that year. Undo and redo are available while a project remains open and create compensating feature revisions instead of erasing history.
 
 There is no required account, hosted backend, cloud synchronization, procedural generation, or image import. Geography is entered and edited manually.
 
@@ -26,3 +26,10 @@ There is no required account, hosted backend, cloud synchronization, procedural 
 ## Product boundaries
 
 The map is an authoring tool, not a GIS data exchange service. External network requests, remote storage, generated geography, and multi-platform support require a separate product decision and an updated architecture record.
+
+## Functional acceptance
+
+- Each initial feature class can be drawn manually with its required point, line, or polygon geometry, then selected, renamed, reshaped, and deleted at the view year.
+- Saving and reopening the single project file preserves world metadata, eras, timeline events, and all feature revisions.
+- Moving before and after a revision or deletion deterministically reconstructs the corresponding visible state, including negative years and the full signed 32-bit year range.
+- A failed validation or transaction leaves the prior project state intact. Undo and redo never update or delete an existing feature revision row.
