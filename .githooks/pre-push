@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+root=$(git rev-parse --show-toplevel)
+updates=$(mktemp "${TMPDIR:-/tmp}/realm-pre-push.XXXXXX")
+trap 'rm -f "$updates"' EXIT HUP INT TERM
+cat > "$updates"
+"$root/.githooks/secret-guard.sh" --pre-push < "$updates"
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    for commit in $(git rev-list "$local_sha" --not --remotes); do git diff-tree --check --root --no-commit-id -r "$commit" --; done
+  else
+    git diff --check "$remote_sha" "$local_sha" --
+  fi
+done < "$updates"
+
+if [ -f "$root/app/package.json" ]; then
+  gate=verify:local:push
+  while read -r local_ref local_sha remote_ref remote_sha; do
+    case "$remote_ref" in refs/tags/*) gate=verify:local:release ;; esac
+  done < "$updates"
+  if ! node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("app/package.json","utf8")); if (!p.scripts || !p.scripts[process.argv[1]]) process.exit(1)' "$gate"; then
+    echo "Missing required local publication script: app/$gate" >&2
+    exit 1
+  fi
+  (cd "$root/app" && pnpm run "$gate")
+else
+  echo "No app/package.json found; application publication gate is pending app initialization." >&2
+  exit 1
+fi
+
+echo "Realm pre-push guard and local publication gate passed." >&2

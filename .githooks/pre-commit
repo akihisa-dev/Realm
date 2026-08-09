@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+root=$(git rev-parse --show-toplevel)
+"$root/.githooks/secret-guard.sh" --staged
+git diff --cached --check
+if [ -f "$root/app/package.json" ]; then
+  (cd "$root/app" && node scripts/version-policy.mjs check-staged)
+fi

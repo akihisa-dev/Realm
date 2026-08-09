@@ -1,0 +1,8 @@
+# Owner review is required for policy, storage, CI, hooks, and release changes.
+* @akihisa-dev
+/AGENTS.md @akihisa-dev
+/.github/ @akihisa-dev
+/.githooks/ @akihisa-dev
+/docs/engineering/data-model.md @akihisa-dev
+/docs/operations/ @akihisa-dev
+/LICENSE @akihisa-dev

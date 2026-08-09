@@ -1,0 +1,6156 @@
+{
+  "$schema": "https://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "metadata": {
+    "lifecycles": [
+      {
+        "phase": "build"
+      }
+    ],
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "pnpm",
+          "version": "11.20.0"
+        },
+        {
+          "type": "application",
+          "name": "cargo",
+          "version": "1.97.1"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "name": "Realm",
+      "version": "0.1.0",
+      "purl": "pkg:generic/realm@0.1.0",
+      "bom-ref": "pkg:generic/realm@0.1.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "AGPL-3.0-or-later"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "realm:target",
+          "value": "aarch64-apple-darwin"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "adler2",
+      "version": "2.0.1",
+      "purl": "pkg:cargo/adler2@2.0.1",
+      "bom-ref": "pkg:cargo/adler2@2.0.1",
+      "licenses": [
+        {
+          "expression": "0BSD OR MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A simple clean-room implementation of the Adler-32 checksum"
+    },
+    {
+      "type": "library",
+      "name": "aho-corasick",
+      "version": "1.1.5",
+      "purl": "pkg:cargo/aho-corasick@1.1.5",
+      "bom-ref": "pkg:cargo/aho-corasick@1.1.5",
+      "licenses": [
+        {
+          "expression": "Unlicense OR MIT"
+        }
+      ],
+      "description": "Fast multiple substring searching."
+    },
+    {
+      "type": "library",
+      "name": "alloc-no-stdlib",
+      "version": "2.0.4",
+      "purl": "pkg:cargo/alloc-no-stdlib@2.0.4",
+      "bom-ref": "pkg:cargo/alloc-no-stdlib@2.0.4",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "description": "A dynamic allocator that may be used with or without the stdlib. This allows a package with nostd to allocate memory dynamically and be used either with a custom allocator, items on the stack, or by a package that wishes to simply use Box<>. It also provides options to use calloc or a mutable global variable for pre-zeroed memory"
+    },
+    {
+      "type": "library",
+      "name": "alloc-stdlib",
+      "version": "0.2.4",
+      "purl": "pkg:cargo/alloc-stdlib@0.2.4",
+      "bom-ref": "pkg:cargo/alloc-stdlib@0.2.4",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ],
+      "description": "A dynamic allocator example that may be used with the stdlib"
+    },
+    {
+      "type": "library",
+      "name": "anyhow",
+      "version": "1.0.104",
+      "purl": "pkg:cargo/anyhow@1.0.104",
+      "bom-ref": "pkg:cargo/anyhow@1.0.104",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Flexible concrete Error type built on std::error::Error"
+    },
+    {
+      "type": "library",
+      "name": "autocfg",
+      "version": "1.5.1",
+      "purl": "pkg:cargo/autocfg@1.5.1",
+      "bom-ref": "pkg:cargo/autocfg@1.5.1",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Automatic cfg for Rust compiler features"
+    },
+    {
+      "type": "library",
+      "name": "base64",
+      "version": "0.21.7",
+      "purl": "pkg:cargo/base64@0.21.7",
+      "bom-ref": "pkg:cargo/base64@0.21.7",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "encodes and decodes base64 as bytes or utf8"
+    },
+    {
+      "type": "library",
+      "name": "base64",
+      "version": "0.22.1",
+      "purl": "pkg:cargo/base64@0.22.1",
+      "bom-ref": "pkg:cargo/base64@0.22.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "encodes and decodes base64 as bytes or utf8"
+    },
+    {
+      "type": "library",
+      "name": "bit-set",
+      "version": "0.8.0",
+      "purl": "pkg:cargo/bit-set@0.8.0",
+      "bom-ref": "pkg:cargo/bit-set@0.8.0",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "A set of bits"
+    },
+    {
+      "type": "library",
+      "name": "bit-vec",
+      "version": "0.8.0",
+      "purl": "pkg:cargo/bit-vec@0.8.0",
+      "bom-ref": "pkg:cargo/bit-vec@0.8.0",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "A vector of bits"
+    },
+    {
+      "type": "library",
+      "name": "bitflags",
+      "version": "1.3.2",
+      "purl": "pkg:cargo/bitflags@1.3.2",
+      "bom-ref": "pkg:cargo/bitflags@1.3.2",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "A macro to generate structures which behave like bitflags.\n"
+    },
+    {
+      "type": "library",
+      "name": "bitflags",
+      "version": "2.13.1",
+      "purl": "pkg:cargo/bitflags@2.13.1",
+      "bom-ref": "pkg:cargo/bitflags@2.13.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A macro to generate structures which behave like bitflags.\n"
+    },
+    {
+      "type": "library",
+      "name": "block-buffer",
+      "version": "0.10.4",
+      "purl": "pkg:cargo/block-buffer@0.10.4",
+      "bom-ref": "pkg:cargo/block-buffer@0.10.4",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Buffer type for block processing of data"
+    },
+    {
+      "type": "library",
+      "name": "block2",
+      "version": "0.6.2",
+      "purl": "pkg:cargo/block2@0.6.2",
+      "bom-ref": "pkg:cargo/block2@0.6.2",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Apple's C language extension of blocks"
+    },
+    {
+      "type": "library",
+      "name": "brotli-decompressor",
+      "version": "5.0.3",
+      "purl": "pkg:cargo/brotli-decompressor@5.0.3",
+      "bom-ref": "pkg:cargo/brotli-decompressor@5.0.3",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause/MIT"
+        }
+      ],
+      "description": "A brotli decompressor that with an interface avoiding the rust stdlib. This makes it suitable for embedded devices and kernels. It is designed with a pluggable allocator so that the standard lib's allocator may be employed. The default build also includes a stdlib allocator and stream interface. Disable this with --features=no-stdlib. Alternatively, --features=unsafe turns off array bounds checks and memory initialization but provides a safe interface for the caller.  Without adding the --features=unsafe argument, all included code is safe. For compression in addition to this library, download https://github.com/dropbox/rust-brotli "
+    },
+    {
+      "type": "library",
+      "name": "brotli",
+      "version": "8.0.4",
+      "purl": "pkg:cargo/brotli@8.0.4",
+      "bom-ref": "pkg:cargo/brotli@8.0.4",
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause AND MIT"
+        }
+      ],
+      "description": "A brotli compressor and decompressor that with an interface avoiding the rust stdlib. This makes it suitable for embedded devices and kernels. It is designed with a pluggable allocator so that the standard lib's allocator may be employed. The default build also includes a stdlib allocator and stream interface. Disable this with --features=no-stdlib. All included code is safe."
+    },
+    {
+      "type": "library",
+      "name": "bs58",
+      "version": "0.5.1",
+      "purl": "pkg:cargo/bs58@0.5.1",
+      "bom-ref": "pkg:cargo/bs58@0.5.1",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "Another Base58 codec implementation."
+    },
+    {
+      "type": "library",
+      "name": "byteorder",
+      "version": "1.5.0",
+      "purl": "pkg:cargo/byteorder@1.5.0",
+      "bom-ref": "pkg:cargo/byteorder@1.5.0",
+      "licenses": [
+        {
+          "expression": "Unlicense OR MIT"
+        }
+      ],
+      "description": "Library for reading/writing numbers in big-endian and little-endian."
+    },
+    {
+      "type": "library",
+      "name": "bytes",
+      "version": "1.12.1",
+      "purl": "pkg:cargo/bytes@1.12.1",
+      "bom-ref": "pkg:cargo/bytes@1.12.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Types and traits for working with bytes"
+    },
+    {
+      "type": "library",
+      "name": "camino",
+      "version": "1.2.5",
+      "purl": "pkg:cargo/camino@1.2.5",
+      "bom-ref": "pkg:cargo/camino@1.2.5",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "UTF-8 paths"
+    },
+    {
+      "type": "library",
+      "name": "cargo_metadata",
+      "version": "0.19.2",
+      "purl": "pkg:cargo/cargo_metadata@0.19.2",
+      "bom-ref": "pkg:cargo/cargo_metadata@0.19.2",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "structured access to the output of `cargo metadata`"
+    },
+    {
+      "type": "library",
+      "name": "cargo_toml",
+      "version": "0.22.3",
+      "purl": "pkg:cargo/cargo_toml@0.22.3",
+      "bom-ref": "pkg:cargo/cargo_toml@0.22.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "`Cargo.toml` struct definitions for parsing with Serde"
+    },
+    {
+      "type": "library",
+      "name": "cargo-platform",
+      "version": "0.1.9",
+      "purl": "pkg:cargo/cargo-platform@0.1.9",
+      "bom-ref": "pkg:cargo/cargo-platform@0.1.9",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Cargo's representation of a target platform."
+    },
+    {
+      "type": "library",
+      "name": "cc",
+      "version": "1.4.2",
+      "purl": "pkg:cargo/cc@1.4.2",
+      "bom-ref": "pkg:cargo/cc@1.4.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A build-time dependency for Cargo build scripts to assist in invoking the native\nC compiler to compile native C code into a static archive to be linked into Rust\ncode.\n"
+    },
+    {
+      "type": "library",
+      "name": "cfb",
+      "version": "0.7.3",
+      "purl": "pkg:cargo/cfb@0.7.3",
+      "bom-ref": "pkg:cargo/cfb@0.7.3",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Read/write Compound File Binary (structured storage) files"
+    },
+    {
+      "type": "library",
+      "name": "cfg-if",
+      "version": "1.0.4",
+      "purl": "pkg:cargo/cfg-if@1.0.4",
+      "bom-ref": "pkg:cargo/cfg-if@1.0.4",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A macro to ergonomically define an item depending on a large number of #[cfg]\nparameters. Structured like an if-else chain, the first matching branch is the\nitem that gets emitted.\n"
+    },
+    {
+      "type": "library",
+      "name": "chrono",
+      "version": "0.4.45",
+      "purl": "pkg:cargo/chrono@0.4.45",
+      "bom-ref": "pkg:cargo/chrono@0.4.45",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Date and time library for Rust"
+    },
+    {
+      "type": "library",
+      "name": "cookie",
+      "version": "0.18.2",
+      "purl": "pkg:cargo/cookie@0.18.2",
+      "bom-ref": "pkg:cargo/cookie@0.18.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "HTTP cookie parsing and cookie jar management. Supports signed and private\n(encrypted, authenticated) jars.\n"
+    },
+    {
+      "type": "library",
+      "name": "core-foundation-sys",
+      "version": "0.8.7",
+      "purl": "pkg:cargo/core-foundation-sys@0.8.7",
+      "bom-ref": "pkg:cargo/core-foundation-sys@0.8.7",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Bindings to Core Foundation for macOS"
+    },
+    {
+      "type": "library",
+      "name": "core-foundation",
+      "version": "0.10.1",
+      "purl": "pkg:cargo/core-foundation@0.10.1",
+      "bom-ref": "pkg:cargo/core-foundation@0.10.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Bindings to Core Foundation for macOS"
+    },
+    {
+      "type": "library",
+      "name": "core-graphics-types",
+      "version": "0.2.0",
+      "purl": "pkg:cargo/core-graphics-types@0.2.0",
+      "bom-ref": "pkg:cargo/core-graphics-types@0.2.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Bindings for some fundamental Core Graphics types"
+    },
+    {
+      "type": "library",
+      "name": "core-graphics",
+      "version": "0.25.0",
+      "purl": "pkg:cargo/core-graphics@0.25.0",
+      "bom-ref": "pkg:cargo/core-graphics@0.25.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Bindings to Core Graphics for macOS"
+    },
+    {
+      "type": "library",
+      "name": "cpufeatures",
+      "version": "0.2.17",
+      "purl": "pkg:cargo/cpufeatures@0.2.17",
+      "bom-ref": "pkg:cargo/cpufeatures@0.2.17",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Lightweight runtime CPU feature detection for aarch64, loongarch64, and x86/x86_64 targets, \nwith no_std support and support for mobile targets including Android and iOS\n"
+    },
+    {
+      "type": "library",
+      "name": "crc32fast",
+      "version": "1.5.0",
+      "purl": "pkg:cargo/crc32fast@1.5.0",
+      "bom-ref": "pkg:cargo/crc32fast@1.5.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Fast, SIMD-accelerated CRC32 (IEEE) checksum computation"
+    },
+    {
+      "type": "library",
+      "name": "crossbeam-channel",
+      "version": "0.5.16",
+      "purl": "pkg:cargo/crossbeam-channel@0.5.16",
+      "bom-ref": "pkg:cargo/crossbeam-channel@0.5.16",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Multi-producer multi-consumer channels for message passing"
+    },
+    {
+      "type": "library",
+      "name": "crossbeam-utils",
+      "version": "0.8.22",
+      "purl": "pkg:cargo/crossbeam-utils@0.8.22",
+      "bom-ref": "pkg:cargo/crossbeam-utils@0.8.22",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Utilities for concurrent programming"
+    },
+    {
+      "type": "library",
+      "name": "crypto-common",
+      "version": "0.1.7",
+      "purl": "pkg:cargo/crypto-common@0.1.7",
+      "bom-ref": "pkg:cargo/crypto-common@0.1.7",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Common cryptographic traits"
+    },
+    {
+      "type": "library",
+      "name": "cssparser-macros",
+      "version": "0.6.1",
+      "purl": "pkg:cargo/cssparser-macros@0.6.1",
+      "bom-ref": "pkg:cargo/cssparser-macros@0.6.1",
+      "licenses": [
+        {
+          "expression": "MPL-2.0"
+        }
+      ],
+      "description": "Procedural macros for cssparser"
+    },
+    {
+      "type": "library",
+      "name": "cssparser",
+      "version": "0.36.0",
+      "purl": "pkg:cargo/cssparser@0.36.0",
+      "bom-ref": "pkg:cargo/cssparser@0.36.0",
+      "licenses": [
+        {
+          "expression": "MPL-2.0"
+        }
+      ],
+      "description": "Rust implementation of CSS Syntax Level 3"
+    },
+    {
+      "type": "library",
+      "name": "ctor-proc-macro",
+      "version": "0.0.7",
+      "purl": "pkg:cargo/ctor-proc-macro@0.0.7",
+      "bom-ref": "pkg:cargo/ctor-proc-macro@0.0.7",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "proc-macro support for the ctor crate"
+    },
+    {
+      "type": "library",
+      "name": "ctor",
+      "version": "0.8.0",
+      "purl": "pkg:cargo/ctor@0.8.0",
+      "bom-ref": "pkg:cargo/ctor@0.8.0",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "__attribute__((constructor)) for Rust"
+    },
+    {
+      "type": "library",
+      "name": "darling_core",
+      "version": "0.23.0",
+      "purl": "pkg:cargo/darling_core@0.23.0",
+      "bom-ref": "pkg:cargo/darling_core@0.23.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Helper crate for proc-macro library for reading attributes into structs when\nimplementing custom derives. Use https://crates.io/crates/darling in your code.\n"
+    },
+    {
+      "type": "library",
+      "name": "darling_macro",
+      "version": "0.23.0",
+      "purl": "pkg:cargo/darling_macro@0.23.0",
+      "bom-ref": "pkg:cargo/darling_macro@0.23.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Internal support for a proc-macro library for reading attributes into structs when\nimplementing custom derives. Use https://crates.io/crates/darling in your code.\n"
+    },
+    {
+      "type": "library",
+      "name": "darling",
+      "version": "0.23.0",
+      "purl": "pkg:cargo/darling@0.23.0",
+      "bom-ref": "pkg:cargo/darling@0.23.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "A proc-macro library for reading attributes into structs when\nimplementing custom derives.\n"
+    },
+    {
+      "type": "library",
+      "name": "deranged",
+      "version": "0.5.8",
+      "purl": "pkg:cargo/deranged@0.5.8",
+      "bom-ref": "pkg:cargo/deranged@0.5.8",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Ranged integers"
+    },
+    {
+      "type": "library",
+      "name": "derive_more-impl",
+      "version": "2.1.1",
+      "purl": "pkg:cargo/derive_more-impl@2.1.1",
+      "bom-ref": "pkg:cargo/derive_more-impl@2.1.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Internal implementation of `derive_more` crate"
+    },
+    {
+      "type": "library",
+      "name": "derive_more",
+      "version": "2.1.1",
+      "purl": "pkg:cargo/derive_more@2.1.1",
+      "bom-ref": "pkg:cargo/derive_more@2.1.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Adds #[derive(x)] macros for more traits"
+    },
+    {
+      "type": "library",
+      "name": "digest",
+      "version": "0.10.7",
+      "purl": "pkg:cargo/digest@0.10.7",
+      "bom-ref": "pkg:cargo/digest@0.10.7",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Traits for cryptographic hash functions and message authentication codes"
+    },
+    {
+      "type": "library",
+      "name": "dirs-sys",
+      "version": "0.5.0",
+      "purl": "pkg:cargo/dirs-sys@0.5.0",
+      "bom-ref": "pkg:cargo/dirs-sys@0.5.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "System-level helper functions for the dirs and directories crates."
+    },
+    {
+      "type": "library",
+      "name": "dirs",
+      "version": "6.0.0",
+      "purl": "pkg:cargo/dirs@6.0.0",
+      "bom-ref": "pkg:cargo/dirs@6.0.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A tiny low-level library that provides platform-specific standard locations of directories for config, cache and other data on Linux, Windows, macOS and Redox by leveraging the mechanisms defined by the XDG base/user directory specifications on Linux, the Known Folder API on Windows, and the Standard Directory guidelines on macOS."
+    },
+    {
+      "type": "library",
+      "name": "dispatch2",
+      "version": "0.3.1",
+      "purl": "pkg:cargo/dispatch2@0.3.1",
+      "bom-ref": "pkg:cargo/dispatch2@0.3.1",
+      "licenses": [
+        {
+          "expression": "Zlib OR Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Bindings and wrappers for Apple's Grand Central Dispatch (GCD)"
+    },
+    {
+      "type": "library",
+      "name": "displaydoc",
+      "version": "0.2.7",
+      "purl": "pkg:cargo/displaydoc@0.2.7",
+      "bom-ref": "pkg:cargo/displaydoc@0.2.7",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A derive macro for implementing the display Trait via a doc comment and string interpolation\n"
+    },
+    {
+      "type": "library",
+      "name": "dom_query",
+      "version": "0.27.0",
+      "purl": "pkg:cargo/dom_query@0.27.0",
+      "bom-ref": "pkg:cargo/dom_query@0.27.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "HTML querying and manipulation with CSS selectors"
+    },
+    {
+      "type": "library",
+      "name": "dpi",
+      "version": "0.1.2",
+      "purl": "pkg:cargo/dpi@0.1.2",
+      "bom-ref": "pkg:cargo/dpi@0.1.2",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 AND MIT"
+        }
+      ],
+      "description": "Types for handling UI scaling"
+    },
+    {
+      "type": "library",
+      "name": "dtoa-short",
+      "version": "0.3.5",
+      "purl": "pkg:cargo/dtoa-short@0.3.5",
+      "bom-ref": "pkg:cargo/dtoa-short@0.3.5",
+      "licenses": [
+        {
+          "expression": "MPL-2.0"
+        }
+      ],
+      "description": "Serialize float number and truncate to certain precision"
+    },
+    {
+      "type": "library",
+      "name": "dtoa",
+      "version": "1.0.11",
+      "purl": "pkg:cargo/dtoa@1.0.11",
+      "bom-ref": "pkg:cargo/dtoa@1.0.11",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Fast floating point primitive to string conversion"
+    },
+    {
+      "type": "library",
+      "name": "dtor-proc-macro",
+      "version": "0.0.6",
+      "purl": "pkg:cargo/dtor-proc-macro@0.0.6",
+      "bom-ref": "pkg:cargo/dtor-proc-macro@0.0.6",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "proc-macro support for the dtor crate"
+    },
+    {
+      "type": "library",
+      "name": "dtor",
+      "version": "0.3.0",
+      "purl": "pkg:cargo/dtor@0.3.0",
+      "bom-ref": "pkg:cargo/dtor@0.3.0",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "__attribute__((destructor)) for Rust"
+    },
+    {
+      "type": "library",
+      "name": "dunce",
+      "version": "1.0.5",
+      "purl": "pkg:cargo/dunce@1.0.5",
+      "bom-ref": "pkg:cargo/dunce@1.0.5",
+      "licenses": [
+        {
+          "expression": "CC0-1.0 OR MIT-0 OR Apache-2.0"
+        }
+      ],
+      "description": "Normalize Windows paths to the most compatible format, avoiding UNC where possible"
+    },
+    {
+      "type": "library",
+      "name": "dyn-clone",
+      "version": "1.0.20",
+      "purl": "pkg:cargo/dyn-clone@1.0.20",
+      "bom-ref": "pkg:cargo/dyn-clone@1.0.20",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Clone trait that is dyn-compatible"
+    },
+    {
+      "type": "library",
+      "name": "embed_plist",
+      "version": "1.2.2",
+      "purl": "pkg:cargo/embed_plist@1.2.2",
+      "bom-ref": "pkg:cargo/embed_plist@1.2.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Embed property list files like Info.plist directly in your executable binary."
+    },
+    {
+      "type": "library",
+      "name": "embed-resource",
+      "version": "3.0.11",
+      "purl": "pkg:cargo/embed-resource@3.0.11",
+      "bom-ref": "pkg:cargo/embed-resource@3.0.11",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "A Cargo library to handle compilation and inclusion of Windows resources in the most resilient fashion imaginable"
+    },
+    {
+      "type": "library",
+      "name": "equivalent",
+      "version": "1.0.2",
+      "purl": "pkg:cargo/equivalent@1.0.2",
+      "bom-ref": "pkg:cargo/equivalent@1.0.2",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Traits for key comparison in maps."
+    },
+    {
+      "type": "library",
+      "name": "erased-serde",
+      "version": "0.4.10",
+      "purl": "pkg:cargo/erased-serde@0.4.10",
+      "bom-ref": "pkg:cargo/erased-serde@0.4.10",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Type-erased Serialize and Serializer traits"
+    },
+    {
+      "type": "library",
+      "name": "fallible-iterator",
+      "version": "0.3.0",
+      "purl": "pkg:cargo/fallible-iterator@0.3.0",
+      "bom-ref": "pkg:cargo/fallible-iterator@0.3.0",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "Fallible iterator traits"
+    },
+    {
+      "type": "library",
+      "name": "fallible-streaming-iterator",
+      "version": "0.1.9",
+      "purl": "pkg:cargo/fallible-streaming-iterator@0.1.9",
+      "bom-ref": "pkg:cargo/fallible-streaming-iterator@0.1.9",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "Fallible streaming iteration"
+    },
+    {
+      "type": "library",
+      "name": "fastrand",
+      "version": "2.5.0",
+      "purl": "pkg:cargo/fastrand@2.5.0",
+      "bom-ref": "pkg:cargo/fastrand@2.5.0",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "A simple and fast random number generator"
+    },
+    {
+      "type": "library",
+      "name": "fdeflate",
+      "version": "0.3.7",
+      "purl": "pkg:cargo/fdeflate@0.3.7",
+      "bom-ref": "pkg:cargo/fdeflate@0.3.7",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Fast specialized deflate implementation"
+    },
+    {
+      "type": "library",
+      "name": "find-msvc-tools",
+      "version": "0.1.10",
+      "purl": "pkg:cargo/find-msvc-tools@0.1.10",
+      "bom-ref": "pkg:cargo/find-msvc-tools@0.1.10",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Find windows-specific tools, read MSVC versions from the registry and from COM interfaces"
+    },
+    {
+      "type": "library",
+      "name": "flate2",
+      "version": "1.1.9",
+      "purl": "pkg:cargo/flate2@1.1.9",
+      "bom-ref": "pkg:cargo/flate2@1.1.9",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "DEFLATE compression and decompression exposed as Read/BufRead/Write streams.\nSupports miniz_oxide and multiple zlib implementations. Supports zlib, gzip,\nand raw deflate streams.\n"
+    },
+    {
+      "type": "library",
+      "name": "fnv",
+      "version": "1.0.7",
+      "purl": "pkg:cargo/fnv@1.0.7",
+      "bom-ref": "pkg:cargo/fnv@1.0.7",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 / MIT"
+        }
+      ],
+      "description": "Fowler–Noll–Vo hash function"
+    },
+    {
+      "type": "library",
+      "name": "foldhash",
+      "version": "0.2.0",
+      "purl": "pkg:cargo/foldhash@0.2.0",
+      "bom-ref": "pkg:cargo/foldhash@0.2.0",
+      "licenses": [
+        {
+          "expression": "Zlib"
+        }
+      ],
+      "description": "A fast, non-cryptographic, minimally DoS-resistant hashing algorithm."
+    },
+    {
+      "type": "library",
+      "name": "foreign-types-macros",
+      "version": "0.2.4",
+      "purl": "pkg:cargo/foreign-types-macros@0.2.4",
+      "bom-ref": "pkg:cargo/foreign-types-macros@0.2.4",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "An internal crate used by foreign-types"
+    },
+    {
+      "type": "library",
+      "name": "foreign-types-shared",
+      "version": "0.3.1",
+      "purl": "pkg:cargo/foreign-types-shared@0.3.1",
+      "bom-ref": "pkg:cargo/foreign-types-shared@0.3.1",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "An internal crate used by foreign-types"
+    },
+    {
+      "type": "library",
+      "name": "foreign-types",
+      "version": "0.5.0",
+      "purl": "pkg:cargo/foreign-types@0.5.0",
+      "bom-ref": "pkg:cargo/foreign-types@0.5.0",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "A framework for Rust wrappers over C APIs"
+    },
+    {
+      "type": "library",
+      "name": "form_urlencoded",
+      "version": "1.2.2",
+      "purl": "pkg:cargo/form_urlencoded@1.2.2",
+      "bom-ref": "pkg:cargo/form_urlencoded@1.2.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Parser and serializer for the application/x-www-form-urlencoded syntax, as used by HTML forms."
+    },
+    {
+      "type": "library",
+      "name": "generic-array",
+      "version": "0.14.7",
+      "purl": "pkg:cargo/generic-array@0.14.7",
+      "bom-ref": "pkg:cargo/generic-array@0.14.7",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Generic types implementing functionality of arrays"
+    },
+    {
+      "type": "library",
+      "name": "getrandom",
+      "version": "0.3.4",
+      "purl": "pkg:cargo/getrandom@0.3.4",
+      "bom-ref": "pkg:cargo/getrandom@0.3.4",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A small cross-platform library for retrieving random data from system source"
+    },
+    {
+      "type": "library",
+      "name": "getrandom",
+      "version": "0.4.3",
+      "purl": "pkg:cargo/getrandom@0.4.3",
+      "bom-ref": "pkg:cargo/getrandom@0.4.3",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A small cross-platform library for retrieving random data from system source"
+    },
+    {
+      "type": "library",
+      "name": "glob",
+      "version": "0.3.4",
+      "purl": "pkg:cargo/glob@0.3.4",
+      "bom-ref": "pkg:cargo/glob@0.3.4",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Support for matching file paths against Unix shell style patterns.\n"
+    },
+    {
+      "type": "library",
+      "name": "hashbrown",
+      "version": "0.12.3",
+      "purl": "pkg:cargo/hashbrown@0.12.3",
+      "bom-ref": "pkg:cargo/hashbrown@0.12.3",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A Rust port of Google's SwissTable hash map"
+    },
+    {
+      "type": "library",
+      "name": "hashbrown",
+      "version": "0.16.1",
+      "purl": "pkg:cargo/hashbrown@0.16.1",
+      "bom-ref": "pkg:cargo/hashbrown@0.16.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A Rust port of Google's SwissTable hash map"
+    },
+    {
+      "type": "library",
+      "name": "hashbrown",
+      "version": "0.17.1",
+      "purl": "pkg:cargo/hashbrown@0.17.1",
+      "bom-ref": "pkg:cargo/hashbrown@0.17.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A Rust port of Google's SwissTable hash map"
+    },
+    {
+      "type": "library",
+      "name": "hashlink",
+      "version": "0.11.1",
+      "purl": "pkg:cargo/hashlink@0.11.1",
+      "bom-ref": "pkg:cargo/hashlink@0.11.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "HashMap-like containers that hold their key-value pairs in a user controllable order"
+    },
+    {
+      "type": "library",
+      "name": "heck",
+      "version": "0.5.0",
+      "purl": "pkg:cargo/heck@0.5.0",
+      "bom-ref": "pkg:cargo/heck@0.5.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "heck is a case conversion library."
+    },
+    {
+      "type": "library",
+      "name": "hex",
+      "version": "0.4.3",
+      "purl": "pkg:cargo/hex@0.4.3",
+      "bom-ref": "pkg:cargo/hex@0.4.3",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Encoding and decoding data into/from hexadecimal representation."
+    },
+    {
+      "type": "library",
+      "name": "html5ever",
+      "version": "0.38.0",
+      "purl": "pkg:cargo/html5ever@0.38.0",
+      "bom-ref": "pkg:cargo/html5ever@0.38.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "High-performance browser-grade HTML5 parser"
+    },
+    {
+      "type": "library",
+      "name": "http",
+      "version": "1.5.0",
+      "purl": "pkg:cargo/http@1.5.0",
+      "bom-ref": "pkg:cargo/http@1.5.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A set of types for representing HTTP requests and responses.\n"
+    },
+    {
+      "type": "library",
+      "name": "iana-time-zone",
+      "version": "0.1.65",
+      "purl": "pkg:cargo/iana-time-zone@0.1.65",
+      "bom-ref": "pkg:cargo/iana-time-zone@0.1.65",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "get the IANA time zone for the current system"
+    },
+    {
+      "type": "library",
+      "name": "ico",
+      "version": "0.5.0",
+      "purl": "pkg:cargo/ico@0.5.0",
+      "bom-ref": "pkg:cargo/ico@0.5.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "A library for encoding/decoding ICO image files"
+    },
+    {
+      "type": "library",
+      "name": "icu_collections",
+      "version": "2.2.0",
+      "purl": "pkg:cargo/icu_collections@2.2.0",
+      "bom-ref": "pkg:cargo/icu_collections@2.2.0",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Collection of API for use in ICU libraries."
+    },
+    {
+      "type": "library",
+      "name": "icu_locale_core",
+      "version": "2.2.0",
+      "purl": "pkg:cargo/icu_locale_core@2.2.0",
+      "bom-ref": "pkg:cargo/icu_locale_core@2.2.0",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "API for managing Unicode Language and Locale Identifiers"
+    },
+    {
+      "type": "library",
+      "name": "icu_normalizer_data",
+      "version": "2.2.0",
+      "purl": "pkg:cargo/icu_normalizer_data@2.2.0",
+      "bom-ref": "pkg:cargo/icu_normalizer_data@2.2.0",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Data for the icu_normalizer crate"
+    },
+    {
+      "type": "library",
+      "name": "icu_normalizer",
+      "version": "2.2.0",
+      "purl": "pkg:cargo/icu_normalizer@2.2.0",
+      "bom-ref": "pkg:cargo/icu_normalizer@2.2.0",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "API for normalizing text into Unicode Normalization Forms"
+    },
+    {
+      "type": "library",
+      "name": "icu_properties_data",
+      "version": "2.2.0",
+      "purl": "pkg:cargo/icu_properties_data@2.2.0",
+      "bom-ref": "pkg:cargo/icu_properties_data@2.2.0",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Data for the icu_properties crate"
+    },
+    {
+      "type": "library",
+      "name": "icu_properties",
+      "version": "2.2.0",
+      "purl": "pkg:cargo/icu_properties@2.2.0",
+      "bom-ref": "pkg:cargo/icu_properties@2.2.0",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Definitions for Unicode properties"
+    },
+    {
+      "type": "library",
+      "name": "icu_provider",
+      "version": "2.2.0",
+      "purl": "pkg:cargo/icu_provider@2.2.0",
+      "bom-ref": "pkg:cargo/icu_provider@2.2.0",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Trait and struct definitions for the ICU data provider"
+    },
+    {
+      "type": "library",
+      "name": "ident_case",
+      "version": "1.0.1",
+      "purl": "pkg:cargo/ident_case@1.0.1",
+      "bom-ref": "pkg:cargo/ident_case@1.0.1",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "Utility for applying case rules to Rust identifiers."
+    },
+    {
+      "type": "library",
+      "name": "idna_adapter",
+      "version": "1.2.2",
+      "purl": "pkg:cargo/idna_adapter@1.2.2",
+      "bom-ref": "pkg:cargo/idna_adapter@1.2.2",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Back end adapter for idna"
+    },
+    {
+      "type": "library",
+      "name": "idna",
+      "version": "1.1.0",
+      "purl": "pkg:cargo/idna@1.1.0",
+      "bom-ref": "pkg:cargo/idna@1.1.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "IDNA (Internationalizing Domain Names in Applications) and Punycode."
+    },
+    {
+      "type": "library",
+      "name": "indexmap",
+      "version": "1.9.3",
+      "purl": "pkg:cargo/indexmap@1.9.3",
+      "bom-ref": "pkg:cargo/indexmap@1.9.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "A hash table with consistent order and fast iteration."
+    },
+    {
+      "type": "library",
+      "name": "indexmap",
+      "version": "2.14.0",
+      "purl": "pkg:cargo/indexmap@2.14.0",
+      "bom-ref": "pkg:cargo/indexmap@2.14.0",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "A hash table with consistent order and fast iteration."
+    },
+    {
+      "type": "library",
+      "name": "infer",
+      "version": "0.19.0",
+      "purl": "pkg:cargo/infer@0.19.0",
+      "bom-ref": "pkg:cargo/infer@0.19.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Small crate to infer file type based on magic number signatures"
+    },
+    {
+      "type": "library",
+      "name": "itoa",
+      "version": "1.0.18",
+      "purl": "pkg:cargo/itoa@1.0.18",
+      "bom-ref": "pkg:cargo/itoa@1.0.18",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Fast integer primitive to string conversion"
+    },
+    {
+      "type": "library",
+      "name": "json-patch",
+      "version": "3.0.1",
+      "purl": "pkg:cargo/json-patch@3.0.1",
+      "bom-ref": "pkg:cargo/json-patch@3.0.1",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "RFC 6902, JavaScript Object Notation (JSON) Patch"
+    },
+    {
+      "type": "library",
+      "name": "jsonptr",
+      "version": "0.6.3",
+      "purl": "pkg:cargo/jsonptr@0.6.3",
+      "bom-ref": "pkg:cargo/jsonptr@0.6.3",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Data structures and logic for resolving, assigning, and deleting by JSON Pointers (RFC 6901)"
+    },
+    {
+      "type": "library",
+      "name": "keyboard-types",
+      "version": "0.7.0",
+      "purl": "pkg:cargo/keyboard-types@0.7.0",
+      "bom-ref": "pkg:cargo/keyboard-types@0.7.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Contains types to define keyboard related events."
+    },
+    {
+      "type": "library",
+      "name": "libc",
+      "version": "0.2.189",
+      "purl": "pkg:cargo/libc@0.2.189",
+      "bom-ref": "pkg:cargo/libc@0.2.189",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Raw FFI bindings to platform libraries like libc."
+    },
+    {
+      "type": "library",
+      "name": "libsqlite3-sys",
+      "version": "0.36.0",
+      "purl": "pkg:cargo/libsqlite3-sys@0.36.0",
+      "bom-ref": "pkg:cargo/libsqlite3-sys@0.36.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Native bindings to the libsqlite3 library"
+    },
+    {
+      "type": "library",
+      "name": "litemap",
+      "version": "0.8.2",
+      "purl": "pkg:cargo/litemap@0.8.2",
+      "bom-ref": "pkg:cargo/litemap@0.8.2",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "A key-value Map implementation based on a flat, sorted Vec."
+    },
+    {
+      "type": "library",
+      "name": "lock_api",
+      "version": "0.4.14",
+      "purl": "pkg:cargo/lock_api@0.4.14",
+      "bom-ref": "pkg:cargo/lock_api@0.4.14",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Wrappers to create fully-featured Mutex and RwLock types. Compatible with no_std."
+    },
+    {
+      "type": "library",
+      "name": "log",
+      "version": "0.4.33",
+      "purl": "pkg:cargo/log@0.4.33",
+      "bom-ref": "pkg:cargo/log@0.4.33",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A lightweight logging facade for Rust\n"
+    },
+    {
+      "type": "library",
+      "name": "markup5ever",
+      "version": "0.38.0",
+      "purl": "pkg:cargo/markup5ever@0.38.0",
+      "bom-ref": "pkg:cargo/markup5ever@0.38.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Common code for xml5ever and html5ever"
+    },
+    {
+      "type": "library",
+      "name": "memchr",
+      "version": "2.8.3",
+      "purl": "pkg:cargo/memchr@2.8.3",
+      "bom-ref": "pkg:cargo/memchr@2.8.3",
+      "licenses": [
+        {
+          "expression": "Unlicense OR MIT"
+        }
+      ],
+      "description": "Provides extremely fast (uses SIMD on x86_64, aarch64 and wasm32) routines for\n1, 2 or 3 byte search and single substring search.\n"
+    },
+    {
+      "type": "library",
+      "name": "mime",
+      "version": "0.3.17",
+      "purl": "pkg:cargo/mime@0.3.17",
+      "bom-ref": "pkg:cargo/mime@0.3.17",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Strongly Typed Mimes"
+    },
+    {
+      "type": "library",
+      "name": "miniz_oxide",
+      "version": "0.8.9",
+      "purl": "pkg:cargo/miniz_oxide@0.8.9",
+      "bom-ref": "pkg:cargo/miniz_oxide@0.8.9",
+      "licenses": [
+        {
+          "expression": "MIT OR Zlib OR Apache-2.0"
+        }
+      ],
+      "description": "DEFLATE compression and decompression library rewritten in Rust based on miniz"
+    },
+    {
+      "type": "library",
+      "name": "mio",
+      "version": "1.2.2",
+      "purl": "pkg:cargo/mio@1.2.2",
+      "bom-ref": "pkg:cargo/mio@1.2.2",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Lightweight non-blocking I/O."
+    },
+    {
+      "type": "library",
+      "name": "muda",
+      "version": "0.19.3",
+      "purl": "pkg:cargo/muda@0.19.3",
+      "bom-ref": "pkg:cargo/muda@0.19.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Menu Utilities for Desktop Applications"
+    },
+    {
+      "type": "library",
+      "name": "new_debug_unreachable",
+      "version": "1.0.6",
+      "purl": "pkg:cargo/new_debug_unreachable@1.0.6",
+      "bom-ref": "pkg:cargo/new_debug_unreachable@1.0.6",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "panic in debug, intrinsics::unreachable() in release (fork of debug_unreachable)"
+    },
+    {
+      "type": "library",
+      "name": "num-conv",
+      "version": "0.2.2",
+      "purl": "pkg:cargo/num-conv@0.2.2",
+      "bom-ref": "pkg:cargo/num-conv@0.2.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "`num_conv` is a crate to convert between integer types without using `as` casts. This provides\nbetter certainty when refactoring, makes the exact behavior of code more explicit, and allows using\nturbofish syntax.\n"
+    },
+    {
+      "type": "library",
+      "name": "num-traits",
+      "version": "0.2.19",
+      "purl": "pkg:cargo/num-traits@0.2.19",
+      "bom-ref": "pkg:cargo/num-traits@0.2.19",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Numeric traits for generic mathematics"
+    },
+    {
+      "type": "library",
+      "name": "objc2-app-kit",
+      "version": "0.3.2",
+      "purl": "pkg:cargo/objc2-app-kit@0.3.2",
+      "bom-ref": "pkg:cargo/objc2-app-kit@0.3.2",
+      "licenses": [
+        {
+          "expression": "Zlib OR Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Bindings to the AppKit framework"
+    },
+    {
+      "type": "library",
+      "name": "objc2-core-foundation",
+      "version": "0.3.2",
+      "purl": "pkg:cargo/objc2-core-foundation@0.3.2",
+      "bom-ref": "pkg:cargo/objc2-core-foundation@0.3.2",
+      "licenses": [
+        {
+          "expression": "Zlib OR Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Bindings to the CoreFoundation framework"
+    },
+    {
+      "type": "library",
+      "name": "objc2-core-graphics",
+      "version": "0.3.2",
+      "purl": "pkg:cargo/objc2-core-graphics@0.3.2",
+      "bom-ref": "pkg:cargo/objc2-core-graphics@0.3.2",
+      "licenses": [
+        {
+          "expression": "Zlib OR Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Bindings to the CoreGraphics framework"
+    },
+    {
+      "type": "library",
+      "name": "objc2-encode",
+      "version": "4.1.0",
+      "purl": "pkg:cargo/objc2-encode@4.1.0",
+      "bom-ref": "pkg:cargo/objc2-encode@4.1.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Objective-C type-encoding representation and parsing"
+    },
+    {
+      "type": "library",
+      "name": "objc2-exception-helper",
+      "version": "0.1.1",
+      "purl": "pkg:cargo/objc2-exception-helper@0.1.1",
+      "bom-ref": "pkg:cargo/objc2-exception-helper@0.1.1",
+      "licenses": [
+        {
+          "expression": "Zlib OR Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "External helper function for catching Objective-C exceptions"
+    },
+    {
+      "type": "library",
+      "name": "objc2-foundation",
+      "version": "0.3.2",
+      "purl": "pkg:cargo/objc2-foundation@0.3.2",
+      "bom-ref": "pkg:cargo/objc2-foundation@0.3.2",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Bindings to the Foundation framework"
+    },
+    {
+      "type": "library",
+      "name": "objc2-io-surface",
+      "version": "0.3.2",
+      "purl": "pkg:cargo/objc2-io-surface@0.3.2",
+      "bom-ref": "pkg:cargo/objc2-io-surface@0.3.2",
+      "licenses": [
+        {
+          "expression": "Zlib OR Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Bindings to the IOSurface framework"
+    },
+    {
+      "type": "library",
+      "name": "objc2-web-kit",
+      "version": "0.3.2",
+      "purl": "pkg:cargo/objc2-web-kit@0.3.2",
+      "bom-ref": "pkg:cargo/objc2-web-kit@0.3.2",
+      "licenses": [
+        {
+          "expression": "Zlib OR Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Bindings to the WebKit framework"
+    },
+    {
+      "type": "library",
+      "name": "objc2",
+      "version": "0.6.4",
+      "purl": "pkg:cargo/objc2@0.6.4",
+      "bom-ref": "pkg:cargo/objc2@0.6.4",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Objective-C interface and runtime bindings"
+    },
+    {
+      "type": "library",
+      "name": "once_cell",
+      "version": "1.21.4",
+      "purl": "pkg:cargo/once_cell@1.21.4",
+      "bom-ref": "pkg:cargo/once_cell@1.21.4",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Single assignment cells and lazy values."
+    },
+    {
+      "type": "library",
+      "name": "option-ext",
+      "version": "0.2.0",
+      "purl": "pkg:cargo/option-ext@0.2.0",
+      "bom-ref": "pkg:cargo/option-ext@0.2.0",
+      "licenses": [
+        {
+          "expression": "MPL-2.0"
+        }
+      ],
+      "description": "Extends `Option` with additional operations"
+    },
+    {
+      "type": "library",
+      "name": "parking_lot_core",
+      "version": "0.9.12",
+      "purl": "pkg:cargo/parking_lot_core@0.9.12",
+      "bom-ref": "pkg:cargo/parking_lot_core@0.9.12",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "An advanced API for creating custom synchronization primitives."
+    },
+    {
+      "type": "library",
+      "name": "parking_lot",
+      "version": "0.12.5",
+      "purl": "pkg:cargo/parking_lot@0.12.5",
+      "bom-ref": "pkg:cargo/parking_lot@0.12.5",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "More compact and efficient implementations of the standard synchronization primitives."
+    },
+    {
+      "type": "library",
+      "name": "percent-encoding",
+      "version": "2.3.2",
+      "purl": "pkg:cargo/percent-encoding@2.3.2",
+      "bom-ref": "pkg:cargo/percent-encoding@2.3.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Percent encoding and decoding"
+    },
+    {
+      "type": "library",
+      "name": "phf_codegen",
+      "version": "0.13.1",
+      "purl": "pkg:cargo/phf_codegen@0.13.1",
+      "bom-ref": "pkg:cargo/phf_codegen@0.13.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Codegen library for PHF types"
+    },
+    {
+      "type": "library",
+      "name": "phf_generator",
+      "version": "0.13.1",
+      "purl": "pkg:cargo/phf_generator@0.13.1",
+      "bom-ref": "pkg:cargo/phf_generator@0.13.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "PHF generation logic"
+    },
+    {
+      "type": "library",
+      "name": "phf_macros",
+      "version": "0.13.1",
+      "purl": "pkg:cargo/phf_macros@0.13.1",
+      "bom-ref": "pkg:cargo/phf_macros@0.13.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Macros to generate types in the phf crate"
+    },
+    {
+      "type": "library",
+      "name": "phf_shared",
+      "version": "0.13.1",
+      "purl": "pkg:cargo/phf_shared@0.13.1",
+      "bom-ref": "pkg:cargo/phf_shared@0.13.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Support code shared by PHF libraries"
+    },
+    {
+      "type": "library",
+      "name": "phf",
+      "version": "0.13.1",
+      "purl": "pkg:cargo/phf@0.13.1",
+      "bom-ref": "pkg:cargo/phf@0.13.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Runtime support for perfect hash function data structures"
+    },
+    {
+      "type": "library",
+      "name": "pin-project-lite",
+      "version": "0.2.17",
+      "purl": "pkg:cargo/pin-project-lite@0.2.17",
+      "bom-ref": "pkg:cargo/pin-project-lite@0.2.17",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "A lightweight version of pin-project written with declarative macros.\n"
+    },
+    {
+      "type": "library",
+      "name": "pkg-config",
+      "version": "0.3.33",
+      "purl": "pkg:cargo/pkg-config@0.3.33",
+      "bom-ref": "pkg:cargo/pkg-config@0.3.33",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A library to run the pkg-config system tool at build time in order to be used in\nCargo build scripts.\n"
+    },
+    {
+      "type": "library",
+      "name": "plist",
+      "version": "1.10.0",
+      "purl": "pkg:cargo/plist@1.10.0",
+      "bom-ref": "pkg:cargo/plist@1.10.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "A rusty plist parser. Supports Serde serialization."
+    },
+    {
+      "type": "library",
+      "name": "png",
+      "version": "0.17.16",
+      "purl": "pkg:cargo/png@0.17.16",
+      "bom-ref": "pkg:cargo/png@0.17.16",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "PNG decoding and encoding library in pure Rust"
+    },
+    {
+      "type": "library",
+      "name": "png",
+      "version": "0.18.1",
+      "purl": "pkg:cargo/png@0.18.1",
+      "bom-ref": "pkg:cargo/png@0.18.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "PNG decoding and encoding library in pure Rust"
+    },
+    {
+      "type": "library",
+      "name": "potential_utf",
+      "version": "0.1.5",
+      "purl": "pkg:cargo/potential_utf@0.1.5",
+      "bom-ref": "pkg:cargo/potential_utf@0.1.5",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Unvalidated string and character types"
+    },
+    {
+      "type": "library",
+      "name": "powerfmt",
+      "version": "0.2.0",
+      "purl": "pkg:cargo/powerfmt@0.2.0",
+      "bom-ref": "pkg:cargo/powerfmt@0.2.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "    `powerfmt` is a library that provides utilities for formatting values. This crate makes it\n    significantly easier to support filling to a minimum width with alignment, avoid heap\n    allocation, and avoid repetitive calculations.\n"
+    },
+    {
+      "type": "library",
+      "name": "precomputed-hash",
+      "version": "0.1.1",
+      "purl": "pkg:cargo/precomputed-hash@0.1.1",
+      "bom-ref": "pkg:cargo/precomputed-hash@0.1.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "A library intending to be a base dependency to expose a precomputed hash"
+    },
+    {
+      "type": "library",
+      "name": "proc-macro2",
+      "version": "1.0.107",
+      "purl": "pkg:cargo/proc-macro2@1.0.107",
+      "bom-ref": "pkg:cargo/proc-macro2@1.0.107",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A substitute implementation of the compiler's `proc_macro` API to decouple token-based libraries from the procedural macro use case."
+    },
+    {
+      "type": "library",
+      "name": "quick-xml",
+      "version": "0.41.0",
+      "purl": "pkg:cargo/quick-xml@0.41.0",
+      "bom-ref": "pkg:cargo/quick-xml@0.41.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "High performance xml reader and writer"
+    },
+    {
+      "type": "library",
+      "name": "quote",
+      "version": "1.0.47",
+      "purl": "pkg:cargo/quote@1.0.47",
+      "bom-ref": "pkg:cargo/quote@1.0.47",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Quasi-quoting macro quote!(...)"
+    },
+    {
+      "type": "library",
+      "name": "raw-window-handle",
+      "version": "0.6.2",
+      "purl": "pkg:cargo/raw-window-handle@0.6.2",
+      "bom-ref": "pkg:cargo/raw-window-handle@0.6.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0 OR Zlib"
+        }
+      ],
+      "description": "Interoperability library for Rust Windowing applications."
+    },
+    {
+      "type": "application",
+      "name": "realm-app",
+      "version": "0.1.0",
+      "purl": "pkg:cargo/realm-app@0.1.0",
+      "bom-ref": "pkg:cargo/realm-app@0.1.0",
+      "licenses": [
+        {
+          "expression": "AGPL-3.0-or-later"
+        }
+      ],
+      "description": "Realm fictional world map editor"
+    },
+    {
+      "type": "library",
+      "name": "ref-cast-impl",
+      "version": "1.0.26",
+      "purl": "pkg:cargo/ref-cast-impl@1.0.26",
+      "bom-ref": "pkg:cargo/ref-cast-impl@1.0.26",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Derive implementation for ref_cast::RefCast."
+    },
+    {
+      "type": "library",
+      "name": "ref-cast",
+      "version": "1.0.26",
+      "purl": "pkg:cargo/ref-cast@1.0.26",
+      "bom-ref": "pkg:cargo/ref-cast@1.0.26",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Safely cast &T to &U where the struct U contains a single field of type T."
+    },
+    {
+      "type": "library",
+      "name": "regex-automata",
+      "version": "0.4.18",
+      "purl": "pkg:cargo/regex-automata@0.4.18",
+      "bom-ref": "pkg:cargo/regex-automata@0.4.18",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Automata construction and matching using regular expressions."
+    },
+    {
+      "type": "library",
+      "name": "regex-syntax",
+      "version": "0.8.11",
+      "purl": "pkg:cargo/regex-syntax@0.8.11",
+      "bom-ref": "pkg:cargo/regex-syntax@0.8.11",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A regular expression parser."
+    },
+    {
+      "type": "library",
+      "name": "regex",
+      "version": "1.13.1",
+      "purl": "pkg:cargo/regex@1.13.1",
+      "bom-ref": "pkg:cargo/regex@1.13.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "An implementation of regular expressions for Rust. This implementation uses\nfinite automata and guarantees linear time matching on all inputs.\n"
+    },
+    {
+      "type": "library",
+      "name": "rfd",
+      "version": "0.16.0",
+      "purl": "pkg:cargo/rfd@0.16.0",
+      "bom-ref": "pkg:cargo/rfd@0.16.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Rusty File Dialog"
+    },
+    {
+      "type": "library",
+      "name": "rusqlite",
+      "version": "0.38.0",
+      "purl": "pkg:cargo/rusqlite@0.38.0",
+      "bom-ref": "pkg:cargo/rusqlite@0.38.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Ergonomic wrapper for SQLite"
+    },
+    {
+      "type": "library",
+      "name": "rustc_version",
+      "version": "0.4.1",
+      "purl": "pkg:cargo/rustc_version@0.4.1",
+      "bom-ref": "pkg:cargo/rustc_version@0.4.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A library for querying the version of a installed rustc compiler"
+    },
+    {
+      "type": "library",
+      "name": "rustc-hash",
+      "version": "2.1.3",
+      "purl": "pkg:cargo/rustc-hash@2.1.3",
+      "bom-ref": "pkg:cargo/rustc-hash@2.1.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "A speedy, non-cryptographic hashing algorithm used by rustc"
+    },
+    {
+      "type": "library",
+      "name": "same-file",
+      "version": "1.0.6",
+      "purl": "pkg:cargo/same-file@1.0.6",
+      "bom-ref": "pkg:cargo/same-file@1.0.6",
+      "licenses": [
+        {
+          "expression": "Unlicense/MIT"
+        }
+      ],
+      "description": "A simple crate for determining whether two file paths point to the same file.\n"
+    },
+    {
+      "type": "library",
+      "name": "schemars_derive",
+      "version": "0.8.22",
+      "purl": "pkg:cargo/schemars_derive@0.8.22",
+      "bom-ref": "pkg:cargo/schemars_derive@0.8.22",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Macros for #[derive(JsonSchema)], for use with schemars"
+    },
+    {
+      "type": "library",
+      "name": "schemars",
+      "version": "0.8.22",
+      "purl": "pkg:cargo/schemars@0.8.22",
+      "bom-ref": "pkg:cargo/schemars@0.8.22",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Generate JSON Schemas from Rust code"
+    },
+    {
+      "type": "library",
+      "name": "schemars",
+      "version": "0.9.0",
+      "purl": "pkg:cargo/schemars@0.9.0",
+      "bom-ref": "pkg:cargo/schemars@0.9.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Generate JSON Schemas from Rust code"
+    },
+    {
+      "type": "library",
+      "name": "schemars",
+      "version": "1.2.2",
+      "purl": "pkg:cargo/schemars@1.2.2",
+      "bom-ref": "pkg:cargo/schemars@1.2.2",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Generate JSON Schemas from Rust code"
+    },
+    {
+      "type": "library",
+      "name": "scopeguard",
+      "version": "1.2.0",
+      "purl": "pkg:cargo/scopeguard@1.2.0",
+      "bom-ref": "pkg:cargo/scopeguard@1.2.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A RAII scope guard that will run a given closure when it goes out of scope,\neven if the code between panics (assuming unwinding panic).\n\nDefines the macros `defer!`, `defer_on_unwind!`, `defer_on_success!` as\nshorthands for guards with one of the implemented strategies.\n"
+    },
+    {
+      "type": "library",
+      "name": "selectors",
+      "version": "0.36.1",
+      "purl": "pkg:cargo/selectors@0.36.1",
+      "bom-ref": "pkg:cargo/selectors@0.36.1",
+      "licenses": [
+        {
+          "expression": "MPL-2.0"
+        }
+      ],
+      "description": "CSS Selectors matching for Rust"
+    },
+    {
+      "type": "library",
+      "name": "semver",
+      "version": "1.0.28",
+      "purl": "pkg:cargo/semver@1.0.28",
+      "bom-ref": "pkg:cargo/semver@1.0.28",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Parser and evaluator for Cargo's flavor of Semantic Versioning"
+    },
+    {
+      "type": "library",
+      "name": "serde_core",
+      "version": "1.0.229",
+      "purl": "pkg:cargo/serde_core@1.0.229",
+      "bom-ref": "pkg:cargo/serde_core@1.0.229",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Serde traits only, with no support for derive -- use the `serde` crate instead"
+    },
+    {
+      "type": "library",
+      "name": "serde_derive_internals",
+      "version": "0.29.1",
+      "purl": "pkg:cargo/serde_derive_internals@0.29.1",
+      "bom-ref": "pkg:cargo/serde_derive_internals@0.29.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "AST representation used by Serde derive macros. Unstable."
+    },
+    {
+      "type": "library",
+      "name": "serde_derive",
+      "version": "1.0.229",
+      "purl": "pkg:cargo/serde_derive@1.0.229",
+      "bom-ref": "pkg:cargo/serde_derive@1.0.229",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Macros 1.1 implementation of #[derive(Serialize, Deserialize)]"
+    },
+    {
+      "type": "library",
+      "name": "serde_json",
+      "version": "1.0.151",
+      "purl": "pkg:cargo/serde_json@1.0.151",
+      "bom-ref": "pkg:cargo/serde_json@1.0.151",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A JSON serialization file format"
+    },
+    {
+      "type": "library",
+      "name": "serde_repr",
+      "version": "0.1.21",
+      "purl": "pkg:cargo/serde_repr@0.1.21",
+      "bom-ref": "pkg:cargo/serde_repr@0.1.21",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Derive Serialize and Deserialize that delegates to the underlying repr of a C-like enum."
+    },
+    {
+      "type": "library",
+      "name": "serde_spanned",
+      "version": "1.1.1",
+      "purl": "pkg:cargo/serde_spanned@1.1.1",
+      "bom-ref": "pkg:cargo/serde_spanned@1.1.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Serde-compatible spanned Value"
+    },
+    {
+      "type": "library",
+      "name": "serde_with_macros",
+      "version": "3.21.0",
+      "purl": "pkg:cargo/serde_with_macros@3.21.0",
+      "bom-ref": "pkg:cargo/serde_with_macros@3.21.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "proc-macro library for serde_with"
+    },
+    {
+      "type": "library",
+      "name": "serde_with",
+      "version": "3.21.0",
+      "purl": "pkg:cargo/serde_with@3.21.0",
+      "bom-ref": "pkg:cargo/serde_with@3.21.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Custom de/serialization functions for Rust's serde"
+    },
+    {
+      "type": "library",
+      "name": "serde-untagged",
+      "version": "0.1.9",
+      "purl": "pkg:cargo/serde-untagged@0.1.9",
+      "bom-ref": "pkg:cargo/serde-untagged@0.1.9",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Serde `Visitor` implementation for deserializing untagged enums"
+    },
+    {
+      "type": "library",
+      "name": "serde",
+      "version": "1.0.229",
+      "purl": "pkg:cargo/serde@1.0.229",
+      "bom-ref": "pkg:cargo/serde@1.0.229",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A generic serialization/deserialization framework"
+    },
+    {
+      "type": "library",
+      "name": "serialize-to-javascript-impl",
+      "version": "0.1.2",
+      "purl": "pkg:cargo/serialize-to-javascript-impl@0.1.2",
+      "bom-ref": "pkg:cargo/serialize-to-javascript-impl@0.1.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Implementation detail of `serialize-to-javascript`"
+    },
+    {
+      "type": "library",
+      "name": "serialize-to-javascript",
+      "version": "0.1.2",
+      "purl": "pkg:cargo/serialize-to-javascript@0.1.2",
+      "bom-ref": "pkg:cargo/serialize-to-javascript@0.1.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Serialize a serde::Serialize item to a JavaScript literal template using serde_json"
+    },
+    {
+      "type": "library",
+      "name": "servo_arc",
+      "version": "0.4.3",
+      "purl": "pkg:cargo/servo_arc@0.4.3",
+      "bom-ref": "pkg:cargo/servo_arc@0.4.3",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A fork of std::sync::Arc with some extra functionality and without weak references"
+    },
+    {
+      "type": "library",
+      "name": "sha2",
+      "version": "0.10.9",
+      "purl": "pkg:cargo/sha2@0.10.9",
+      "bom-ref": "pkg:cargo/sha2@0.10.9",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Pure Rust implementation of the SHA-2 hash function family\nincluding SHA-224, SHA-256, SHA-384, and SHA-512.\n"
+    },
+    {
+      "type": "library",
+      "name": "shlex",
+      "version": "2.0.1",
+      "purl": "pkg:cargo/shlex@2.0.1",
+      "bom-ref": "pkg:cargo/shlex@2.0.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Split a string into shell words, like Python's shlex."
+    },
+    {
+      "type": "library",
+      "name": "simd-adler32",
+      "version": "0.3.10",
+      "purl": "pkg:cargo/simd-adler32@0.3.10",
+      "bom-ref": "pkg:cargo/simd-adler32@0.3.10",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "A SIMD-accelerated Adler-32 hash algorithm implementation."
+    },
+    {
+      "type": "library",
+      "name": "siphasher",
+      "version": "1.0.3",
+      "purl": "pkg:cargo/siphasher@1.0.3",
+      "bom-ref": "pkg:cargo/siphasher@1.0.3",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "SipHash-2-4, SipHash-1-3 and 128-bit variants in pure Rust"
+    },
+    {
+      "type": "library",
+      "name": "smallvec",
+      "version": "1.15.2",
+      "purl": "pkg:cargo/smallvec@1.15.2",
+      "bom-ref": "pkg:cargo/smallvec@1.15.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "'Small vector' optimization: store up to a small number of items on the stack"
+    },
+    {
+      "type": "library",
+      "name": "socket2",
+      "version": "0.6.5",
+      "purl": "pkg:cargo/socket2@0.6.5",
+      "bom-ref": "pkg:cargo/socket2@0.6.5",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Utilities for handling networking sockets with a maximal amount of configuration\npossible intended.\n"
+    },
+    {
+      "type": "library",
+      "name": "stable_deref_trait",
+      "version": "1.2.1",
+      "purl": "pkg:cargo/stable_deref_trait@1.2.1",
+      "bom-ref": "pkg:cargo/stable_deref_trait@1.2.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "An unsafe marker trait for types like Box and Rc that dereference to a stable address even when moved, and hence can be used with libraries such as owning_ref and rental.\n"
+    },
+    {
+      "type": "library",
+      "name": "string_cache_codegen",
+      "version": "0.6.1",
+      "purl": "pkg:cargo/string_cache_codegen@0.6.1",
+      "bom-ref": "pkg:cargo/string_cache_codegen@0.6.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A codegen library for string-cache, developed as part of the Servo project."
+    },
+    {
+      "type": "library",
+      "name": "string_cache",
+      "version": "0.9.0",
+      "purl": "pkg:cargo/string_cache@0.9.0",
+      "bom-ref": "pkg:cargo/string_cache@0.9.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A string interning library for Rust, developed as part of the Servo project."
+    },
+    {
+      "type": "library",
+      "name": "strsim",
+      "version": "0.11.1",
+      "purl": "pkg:cargo/strsim@0.11.1",
+      "bom-ref": "pkg:cargo/strsim@0.11.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Implementations of string similarity metrics. Includes Hamming, Levenshtein,\nOSA, Damerau-Levenshtein, Jaro, Jaro-Winkler, and Sørensen-Dice.\n"
+    },
+    {
+      "type": "library",
+      "name": "swift-rs",
+      "version": "1.0.7",
+      "purl": "pkg:cargo/swift-rs@1.0.7",
+      "bom-ref": "pkg:cargo/swift-rs@1.0.7",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Call Swift from Rust with ease!"
+    },
+    {
+      "type": "library",
+      "name": "syn",
+      "version": "2.0.119",
+      "purl": "pkg:cargo/syn@2.0.119",
+      "bom-ref": "pkg:cargo/syn@2.0.119",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Parser for Rust source code"
+    },
+    {
+      "type": "library",
+      "name": "syn",
+      "version": "3.0.3",
+      "purl": "pkg:cargo/syn@3.0.3",
+      "bom-ref": "pkg:cargo/syn@3.0.3",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Parser for Rust source code"
+    },
+    {
+      "type": "library",
+      "name": "synstructure",
+      "version": "0.13.2",
+      "purl": "pkg:cargo/synstructure@0.13.2",
+      "bom-ref": "pkg:cargo/synstructure@0.13.2",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Helper methods and macros for custom derives"
+    },
+    {
+      "type": "library",
+      "name": "tao",
+      "version": "0.35.3",
+      "purl": "pkg:cargo/tao@0.35.3",
+      "bom-ref": "pkg:cargo/tao@0.35.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ],
+      "description": "Cross-platform window manager library."
+    },
+    {
+      "type": "library",
+      "name": "tauri-build",
+      "version": "2.6.3",
+      "purl": "pkg:cargo/tauri-build@2.6.3",
+      "bom-ref": "pkg:cargo/tauri-build@2.6.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "build time code to pair with https://crates.io/crates/tauri"
+    },
+    {
+      "type": "library",
+      "name": "tauri-codegen",
+      "version": "2.6.3",
+      "purl": "pkg:cargo/tauri-codegen@2.6.3",
+      "bom-ref": "pkg:cargo/tauri-codegen@2.6.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "code generation meant to be consumed inside of `tauri` through `tauri-build` or `tauri-macros`"
+    },
+    {
+      "type": "library",
+      "name": "tauri-macros",
+      "version": "2.6.3",
+      "purl": "pkg:cargo/tauri-macros@2.6.3",
+      "bom-ref": "pkg:cargo/tauri-macros@2.6.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Macros for the tauri crate."
+    },
+    {
+      "type": "library",
+      "name": "tauri-plugin-dialog",
+      "version": "2.7.2",
+      "purl": "pkg:cargo/tauri-plugin-dialog@2.7.2",
+      "bom-ref": "pkg:cargo/tauri-plugin-dialog@2.7.2",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Native system dialogs for opening and saving files along with message dialogs on your Tauri application."
+    },
+    {
+      "type": "library",
+      "name": "tauri-plugin-fs",
+      "version": "2.5.1",
+      "purl": "pkg:cargo/tauri-plugin-fs@2.5.1",
+      "bom-ref": "pkg:cargo/tauri-plugin-fs@2.5.1",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Access the file system."
+    },
+    {
+      "type": "library",
+      "name": "tauri-plugin",
+      "version": "2.6.3",
+      "purl": "pkg:cargo/tauri-plugin@2.6.3",
+      "bom-ref": "pkg:cargo/tauri-plugin@2.6.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Build script and runtime Tauri plugin definitions"
+    },
+    {
+      "type": "library",
+      "name": "tauri-runtime-wry",
+      "version": "2.11.4",
+      "purl": "pkg:cargo/tauri-runtime-wry@2.11.4",
+      "bom-ref": "pkg:cargo/tauri-runtime-wry@2.11.4",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Wry bindings to the Tauri runtime"
+    },
+    {
+      "type": "library",
+      "name": "tauri-runtime",
+      "version": "2.11.3",
+      "purl": "pkg:cargo/tauri-runtime@2.11.3",
+      "bom-ref": "pkg:cargo/tauri-runtime@2.11.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Runtime for Tauri applications"
+    },
+    {
+      "type": "library",
+      "name": "tauri-utils",
+      "version": "2.9.3",
+      "purl": "pkg:cargo/tauri-utils@2.9.3",
+      "bom-ref": "pkg:cargo/tauri-utils@2.9.3",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Utilities for Tauri"
+    },
+    {
+      "type": "library",
+      "name": "tauri-winres",
+      "version": "0.3.6",
+      "purl": "pkg:cargo/tauri-winres@0.3.6",
+      "bom-ref": "pkg:cargo/tauri-winres@0.3.6",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "Create and set windows icons and metadata for executables"
+    },
+    {
+      "type": "library",
+      "name": "tauri",
+      "version": "2.11.5",
+      "purl": "pkg:cargo/tauri@2.11.5",
+      "bom-ref": "pkg:cargo/tauri@2.11.5",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Make tiny, secure apps for all desktop platforms with Tauri"
+    },
+    {
+      "type": "library",
+      "name": "tendril",
+      "version": "0.5.1",
+      "purl": "pkg:cargo/tendril@0.5.1",
+      "bom-ref": "pkg:cargo/tendril@0.5.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Compact buffer/string type for zero-copy parsing"
+    },
+    {
+      "type": "library",
+      "name": "thiserror-impl",
+      "version": "1.0.69",
+      "purl": "pkg:cargo/thiserror-impl@1.0.69",
+      "bom-ref": "pkg:cargo/thiserror-impl@1.0.69",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Implementation detail of the `thiserror` crate"
+    },
+    {
+      "type": "library",
+      "name": "thiserror-impl",
+      "version": "2.0.20",
+      "purl": "pkg:cargo/thiserror-impl@2.0.20",
+      "bom-ref": "pkg:cargo/thiserror-impl@2.0.20",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Implementation detail of the `thiserror` crate"
+    },
+    {
+      "type": "library",
+      "name": "thiserror",
+      "version": "1.0.69",
+      "purl": "pkg:cargo/thiserror@1.0.69",
+      "bom-ref": "pkg:cargo/thiserror@1.0.69",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "derive(Error)"
+    },
+    {
+      "type": "library",
+      "name": "thiserror",
+      "version": "2.0.20",
+      "purl": "pkg:cargo/thiserror@2.0.20",
+      "bom-ref": "pkg:cargo/thiserror@2.0.20",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "derive(Error)"
+    },
+    {
+      "type": "library",
+      "name": "time-core",
+      "version": "0.1.9",
+      "purl": "pkg:cargo/time-core@0.1.9",
+      "bom-ref": "pkg:cargo/time-core@0.1.9",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "This crate is an implementation detail and should not be relied upon directly."
+    },
+    {
+      "type": "library",
+      "name": "time-macros",
+      "version": "0.2.32",
+      "purl": "pkg:cargo/time-macros@0.2.32",
+      "bom-ref": "pkg:cargo/time-macros@0.2.32",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "    Procedural macros for the time crate.\n    This crate is an implementation detail and should not be relied upon directly.\n"
+    },
+    {
+      "type": "library",
+      "name": "time",
+      "version": "0.3.55",
+      "purl": "pkg:cargo/time@0.3.55",
+      "bom-ref": "pkg:cargo/time@0.3.55",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Date and time library. Fully interoperable with the standard library. Mostly compatible with #![no_std]."
+    },
+    {
+      "type": "library",
+      "name": "tinystr",
+      "version": "0.8.3",
+      "purl": "pkg:cargo/tinystr@0.8.3",
+      "bom-ref": "pkg:cargo/tinystr@0.8.3",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "A small ASCII-only bounded length string representation."
+    },
+    {
+      "type": "library",
+      "name": "tinyvec_macros",
+      "version": "0.1.1",
+      "purl": "pkg:cargo/tinyvec_macros@0.1.1",
+      "bom-ref": "pkg:cargo/tinyvec_macros@0.1.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0 OR Zlib"
+        }
+      ],
+      "description": "Some macros for tiny containers"
+    },
+    {
+      "type": "library",
+      "name": "tinyvec",
+      "version": "1.12.0",
+      "purl": "pkg:cargo/tinyvec@1.12.0",
+      "bom-ref": "pkg:cargo/tinyvec@1.12.0",
+      "licenses": [
+        {
+          "expression": "Zlib OR Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "`tinyvec` provides 100% safe vec-like data structures."
+    },
+    {
+      "type": "library",
+      "name": "tokio",
+      "version": "1.53.1",
+      "purl": "pkg:cargo/tokio@1.53.1",
+      "bom-ref": "pkg:cargo/tokio@1.53.1",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "An event-driven, non-blocking I/O platform for writing asynchronous I/O\nbacked applications.\n"
+    },
+    {
+      "type": "library",
+      "name": "toml_datetime",
+      "version": "0.7.5+spec-1.1.0",
+      "purl": "pkg:cargo/toml_datetime@0.7.5+spec-1.1.0",
+      "bom-ref": "pkg:cargo/toml_datetime@0.7.5+spec-1.1.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A TOML-compatible datetime type"
+    },
+    {
+      "type": "library",
+      "name": "toml_datetime",
+      "version": "1.1.1+spec-1.1.0",
+      "purl": "pkg:cargo/toml_datetime@1.1.1+spec-1.1.0",
+      "bom-ref": "pkg:cargo/toml_datetime@1.1.1+spec-1.1.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A TOML-compatible datetime type"
+    },
+    {
+      "type": "library",
+      "name": "toml_parser",
+      "version": "1.1.3+spec-1.1.0",
+      "purl": "pkg:cargo/toml_parser@1.1.3+spec-1.1.0",
+      "bom-ref": "pkg:cargo/toml_parser@1.1.3+spec-1.1.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Yet another format-preserving TOML parser."
+    },
+    {
+      "type": "library",
+      "name": "toml_writer",
+      "version": "1.1.2+spec-1.1.0",
+      "purl": "pkg:cargo/toml_writer@1.1.2+spec-1.1.0",
+      "bom-ref": "pkg:cargo/toml_writer@1.1.2+spec-1.1.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A low-level interface for writing out TOML\n"
+    },
+    {
+      "type": "library",
+      "name": "toml",
+      "version": "0.9.12+spec-1.1.0",
+      "purl": "pkg:cargo/toml@0.9.12+spec-1.1.0",
+      "bom-ref": "pkg:cargo/toml@0.9.12+spec-1.1.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A native Rust encoder and decoder of TOML-formatted files and streams. Provides\nimplementations of the standard Serialize/Deserialize traits for TOML data to\nfacilitate deserializing and serializing Rust structures.\n"
+    },
+    {
+      "type": "library",
+      "name": "toml",
+      "version": "1.1.4+spec-1.1.0",
+      "purl": "pkg:cargo/toml@1.1.4+spec-1.1.0",
+      "bom-ref": "pkg:cargo/toml@1.1.4+spec-1.1.0",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "A native Rust encoder and decoder of TOML-formatted files and streams. Provides\nimplementations of the standard Serialize/Deserialize traits for TOML data to\nfacilitate deserializing and serializing Rust structures.\n"
+    },
+    {
+      "type": "library",
+      "name": "tray-icon",
+      "version": "0.24.2",
+      "purl": "pkg:cargo/tray-icon@0.24.2",
+      "bom-ref": "pkg:cargo/tray-icon@0.24.2",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Create tray icons for desktop applications"
+    },
+    {
+      "type": "library",
+      "name": "typeid",
+      "version": "1.0.3",
+      "purl": "pkg:cargo/typeid@1.0.3",
+      "bom-ref": "pkg:cargo/typeid@1.0.3",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Const TypeId and non-'static TypeId"
+    },
+    {
+      "type": "library",
+      "name": "typenum",
+      "version": "1.20.1",
+      "purl": "pkg:cargo/typenum@1.20.1",
+      "bom-ref": "pkg:cargo/typenum@1.20.1",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Typenum is a Rust library for type-level numbers evaluated at\n    compile time. It currently supports bits, unsigned integers, and signed\n    integers. It also provides a type-level array of type-level numbers, but its\n    implementation is incomplete."
+    },
+    {
+      "type": "library",
+      "name": "unic-char-property",
+      "version": "0.9.0",
+      "purl": "pkg:cargo/unic-char-property@0.9.0",
+      "bom-ref": "pkg:cargo/unic-char-property@0.9.0",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "UNIC — Unicode Character Tools — Character Property taxonomy, contracts and build macros"
+    },
+    {
+      "type": "library",
+      "name": "unic-char-range",
+      "version": "0.9.0",
+      "purl": "pkg:cargo/unic-char-range@0.9.0",
+      "bom-ref": "pkg:cargo/unic-char-range@0.9.0",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "UNIC — Unicode Character Tools — Character Range and Iteration"
+    },
+    {
+      "type": "library",
+      "name": "unic-common",
+      "version": "0.9.0",
+      "purl": "pkg:cargo/unic-common@0.9.0",
+      "bom-ref": "pkg:cargo/unic-common@0.9.0",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "UNIC — Common Utilities"
+    },
+    {
+      "type": "library",
+      "name": "unic-ucd-ident",
+      "version": "0.9.0",
+      "purl": "pkg:cargo/unic-ucd-ident@0.9.0",
+      "bom-ref": "pkg:cargo/unic-ucd-ident@0.9.0",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "UNIC — Unicode Character Database — Identifier Properties"
+    },
+    {
+      "type": "library",
+      "name": "unic-ucd-version",
+      "version": "0.9.0",
+      "purl": "pkg:cargo/unic-ucd-version@0.9.0",
+      "bom-ref": "pkg:cargo/unic-ucd-version@0.9.0",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "UNIC — Unicode Character Database — Version"
+    },
+    {
+      "type": "library",
+      "name": "unicode-ident",
+      "version": "1.0.24",
+      "purl": "pkg:cargo/unicode-ident@1.0.24",
+      "bom-ref": "pkg:cargo/unicode-ident@1.0.24",
+      "licenses": [
+        {
+          "expression": "(MIT OR Apache-2.0) AND Unicode-3.0"
+        }
+      ],
+      "description": "Determine whether characters have the XID_Start or XID_Continue properties according to Unicode Standard Annex #31"
+    },
+    {
+      "type": "library",
+      "name": "unicode-segmentation",
+      "version": "1.13.3",
+      "purl": "pkg:cargo/unicode-segmentation@1.13.3",
+      "bom-ref": "pkg:cargo/unicode-segmentation@1.13.3",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "This crate provides Grapheme Cluster, Word and Sentence boundaries\naccording to Unicode Standard Annex #29 rules.\n"
+    },
+    {
+      "type": "library",
+      "name": "url",
+      "version": "2.5.8",
+      "purl": "pkg:cargo/url@2.5.8",
+      "bom-ref": "pkg:cargo/url@2.5.8",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "URL library for Rust, based on the WHATWG URL Standard"
+    },
+    {
+      "type": "library",
+      "name": "urlpattern",
+      "version": "0.3.0",
+      "purl": "pkg:cargo/urlpattern@0.3.0",
+      "bom-ref": "pkg:cargo/urlpattern@0.3.0",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "rust-urlpattern is a Rust implementation of the URLPattern standard"
+    },
+    {
+      "type": "library",
+      "name": "utf8_iter",
+      "version": "1.0.4",
+      "purl": "pkg:cargo/utf8_iter@1.0.4",
+      "bom-ref": "pkg:cargo/utf8_iter@1.0.4",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Iterator by char over potentially-invalid UTF-8 in &[u8]"
+    },
+    {
+      "type": "library",
+      "name": "uuid",
+      "version": "1.24.0",
+      "purl": "pkg:cargo/uuid@1.24.0",
+      "bom-ref": "pkg:cargo/uuid@1.24.0",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "A library to generate and parse UUIDs."
+    },
+    {
+      "type": "library",
+      "name": "vcpkg",
+      "version": "0.2.15",
+      "purl": "pkg:cargo/vcpkg@0.2.15",
+      "bom-ref": "pkg:cargo/vcpkg@0.2.15",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "A library to find native dependencies in a vcpkg tree at build\ntime in order to be used in Cargo build scripts.\n"
+    },
+    {
+      "type": "library",
+      "name": "version_check",
+      "version": "0.9.5",
+      "purl": "pkg:cargo/version_check@0.9.5",
+      "bom-ref": "pkg:cargo/version_check@0.9.5",
+      "licenses": [
+        {
+          "expression": "MIT/Apache-2.0"
+        }
+      ],
+      "description": "Tiny crate to check the version of the installed/running rustc."
+    },
+    {
+      "type": "library",
+      "name": "walkdir",
+      "version": "2.5.0",
+      "purl": "pkg:cargo/walkdir@2.5.0",
+      "bom-ref": "pkg:cargo/walkdir@2.5.0",
+      "licenses": [
+        {
+          "expression": "Unlicense/MIT"
+        }
+      ],
+      "description": "Recursively walk a directory."
+    },
+    {
+      "type": "library",
+      "name": "web_atoms",
+      "version": "0.2.5",
+      "purl": "pkg:cargo/web_atoms@0.2.5",
+      "bom-ref": "pkg:cargo/web_atoms@0.2.5",
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ],
+      "description": "Atoms for xml5ever and html5ever"
+    },
+    {
+      "type": "library",
+      "name": "window-vibrancy",
+      "version": "0.6.0",
+      "purl": "pkg:cargo/window-vibrancy@0.6.0",
+      "bom-ref": "pkg:cargo/window-vibrancy@0.6.0",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Make your windows vibrant."
+    },
+    {
+      "type": "library",
+      "name": "winnow",
+      "version": "0.7.15",
+      "purl": "pkg:cargo/winnow@0.7.15",
+      "bom-ref": "pkg:cargo/winnow@0.7.15",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "A byte-oriented, zero-copy, parser combinators library"
+    },
+    {
+      "type": "library",
+      "name": "winnow",
+      "version": "1.0.4",
+      "purl": "pkg:cargo/winnow@1.0.4",
+      "bom-ref": "pkg:cargo/winnow@1.0.4",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "A byte-oriented, zero-copy, parser combinators library"
+    },
+    {
+      "type": "library",
+      "name": "writeable",
+      "version": "0.6.3",
+      "purl": "pkg:cargo/writeable@0.6.3",
+      "bom-ref": "pkg:cargo/writeable@0.6.3",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "A more efficient alternative to fmt::Display"
+    },
+    {
+      "type": "library",
+      "name": "wry",
+      "version": "0.55.1",
+      "purl": "pkg:cargo/wry@0.55.1",
+      "bom-ref": "pkg:cargo/wry@0.55.1",
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ],
+      "description": "Cross-platform WebView rendering library"
+    },
+    {
+      "type": "library",
+      "name": "yoke-derive",
+      "version": "0.8.2",
+      "purl": "pkg:cargo/yoke-derive@0.8.2",
+      "bom-ref": "pkg:cargo/yoke-derive@0.8.2",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Custom derive for the yoke crate"
+    },
+    {
+      "type": "library",
+      "name": "yoke",
+      "version": "0.8.3",
+      "purl": "pkg:cargo/yoke@0.8.3",
+      "bom-ref": "pkg:cargo/yoke@0.8.3",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Abstraction allowing borrowed data to be carried along with the backing data it borrows from"
+    },
+    {
+      "type": "library",
+      "name": "zerofrom-derive",
+      "version": "0.1.7",
+      "purl": "pkg:cargo/zerofrom-derive@0.1.7",
+      "bom-ref": "pkg:cargo/zerofrom-derive@0.1.7",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Custom derive for the zerofrom crate"
+    },
+    {
+      "type": "library",
+      "name": "zerofrom",
+      "version": "0.1.8",
+      "purl": "pkg:cargo/zerofrom@0.1.8",
+      "bom-ref": "pkg:cargo/zerofrom@0.1.8",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "ZeroFrom trait for constructing"
+    },
+    {
+      "type": "library",
+      "name": "zerotrie",
+      "version": "0.2.4",
+      "purl": "pkg:cargo/zerotrie@0.2.4",
+      "bom-ref": "pkg:cargo/zerotrie@0.2.4",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "A data structure that efficiently maps strings to integers"
+    },
+    {
+      "type": "library",
+      "name": "zerovec-derive",
+      "version": "0.11.3",
+      "purl": "pkg:cargo/zerovec-derive@0.11.3",
+      "bom-ref": "pkg:cargo/zerovec-derive@0.11.3",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Custom derive for the zerovec crate"
+    },
+    {
+      "type": "library",
+      "name": "zerovec",
+      "version": "0.11.6",
+      "purl": "pkg:cargo/zerovec@0.11.6",
+      "bom-ref": "pkg:cargo/zerovec@0.11.6",
+      "licenses": [
+        {
+          "expression": "Unicode-3.0"
+        }
+      ],
+      "description": "Zero-copy vector backed by a byte array"
+    },
+    {
+      "type": "library",
+      "name": "zmij",
+      "version": "1.0.23",
+      "purl": "pkg:cargo/zmij@1.0.23",
+      "bom-ref": "pkg:cargo/zmij@1.0.23",
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ],
+      "description": "A double-to-string conversion algorithm based on Schubfach and xjb"
+    },
+    {
+      "type": "library",
+      "name": "float16",
+      "version": "3.9.3",
+      "purl": "pkg:npm/%40petamoriken/float16@3.9.3",
+      "bom-ref": "pkg:npm/%40petamoriken/float16@3.9.3",
+      "group": "@petamoriken",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@petamoriken/float16/-/float16-3.9.3.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "f1ac2da475c2c7f6cda45b789addb176482d815bcaaadcbc55b8c723f596590b84c3e28bcc5a2dddfe3e2e4418f5898eb6aec0e4674e9eaa080bc3ddca08e4da"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "api",
+      "version": "2.11.1",
+      "purl": "pkg:npm/%40tauri-apps/api@2.11.1",
+      "bom-ref": "pkg:npm/%40tauri-apps/api@2.11.1",
+      "group": "@tauri-apps",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@tauri-apps/api/-/api-2.11.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "33614fb98343da6fb087985f5bd66949dc4c3dd109a2f3c15b0a07266c14a72b1360d1da3a4545378d7d9bf2b42c88236ffeca536bc182c51ea495ae8100af00"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "Apache-2.0 OR MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "plugin-dialog",
+      "version": "2.7.2",
+      "purl": "pkg:npm/%40tauri-apps/plugin-dialog@2.7.2",
+      "bom-ref": "pkg:npm/%40tauri-apps/plugin-dialog@2.7.2",
+      "group": "@tauri-apps",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@tauri-apps/plugin-dialog/-/plugin-dialog-2.7.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "a57d081a6d48dc8eb073ecde29872ad464aaa202baa2408d5f97ce75a354e5a6f5023192ea5d44e7014d8c46fb99e83b6454a9d0952cfb48d01903723af2ebb2"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT OR Apache-2.0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "rbush",
+      "version": "4.0.0",
+      "purl": "pkg:npm/%40types/rbush@4.0.0",
+      "bom-ref": "pkg:npm/%40types/rbush@4.0.0",
+      "group": "@types",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@types/rbush/-/rbush-4.0.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "f8dfb61f7f4ff17f87cb5239982e9ac254d7e789371618949afb7b1d6cc6259bc5facc94000c4ffecb70a694bc244f38607a8581132fe9f0b2df5db4d82305c5"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "storage",
+      "version": "0.2.0",
+      "purl": "pkg:npm/%40zarrita/storage@0.2.0",
+      "bom-ref": "pkg:npm/%40zarrita/storage@0.2.0",
+      "group": "@zarrita",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@zarrita/storage/-/storage-0.2.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "f39e595eab6776ceeca674fcbcdbc3f8c5dadd01313f59b61aa4a17bccadeee6571e740b8091e09295701631350742830d13b4922d3d86693a39ba136887cfb1"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "earcut",
+      "version": "3.2.3",
+      "purl": "pkg:npm/earcut@3.2.3",
+      "bom-ref": "pkg:npm/earcut@3.2.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/earcut/-/earcut-3.2.3.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "be74b8015c29d4a1c0175de2d6fa75ff60f97af5b2de4e6efe25bf07cd5056c519b55f1cbf6b54d1bd9534596abe1e24630ac53037633c27c099fc895bdcb5e1"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "ISC"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fflate",
+      "version": "0.8.3",
+      "purl": "pkg:npm/fflate@0.8.3",
+      "bom-ref": "pkg:npm/fflate@0.8.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/fflate/-/fflate-0.8.3.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b5b64db89acbc06529df3b2106d772e16f8e47166e221f1ae629722044030b9ad8d5fdd4db424caf2d0b977581cd4e7c1192ac12e2455e16f9830bfc0ac3ef80"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "geotiff",
+      "version": "3.1.0-beta.0",
+      "purl": "pkg:npm/geotiff@3.1.0-beta.0",
+      "bom-ref": "pkg:npm/geotiff@3.1.0-beta.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/geotiff/-/geotiff-3.1.0-beta.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "c1b57039a418b8dfb2c25cb93683179f7ee71ec9709108391051ea31e513b630c00ab49a83410456516c73ed832b73f39a6a7a5f3256d914d939a98fb0133a9e"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lerc",
+      "version": "3.0.0",
+      "purl": "pkg:npm/lerc@3.0.0",
+      "bom-ref": "pkg:npm/lerc@3.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lerc/-/lerc-3.0.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "466e09fd66878516bdde708dda6c160d9168455175f06d5fe3b0be92f416c871846711694d48bbde9ee53154809ddcb11adea5276fc215b39c7fdadae69f1ac3"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "numcodecs",
+      "version": "0.3.2",
+      "purl": "pkg:npm/numcodecs@0.3.2",
+      "bom-ref": "pkg:npm/numcodecs@0.3.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/numcodecs/-/numcodecs-0.3.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "e9848f9e66608343fcee39cd862decf8554b39c227df2fb509322052e940dc87404b32bd7c933ceec505929c80f9b7bd1a26c645a493db00a0903fba53e7d62b"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ol",
+      "version": "10.10.0",
+      "purl": "pkg:npm/ol@10.10.0",
+      "bom-ref": "pkg:npm/ol@10.10.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ol/-/ol-10.10.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b4b3ca9face5fbab9674fb9f625a86fe5433b955135667f06a142a56be7ec1937265e73202d221313c8eb4aa6eee8a0d0cb636b048ca64d5f0f472feb0e8c2d4"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "BSD-2-Clause"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pako",
+      "version": "2.2.0",
+      "purl": "pkg:npm/pako@2.2.0",
+      "bom-ref": "pkg:npm/pako@2.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/pako/-/pako-2.2.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "cc9aba44fff9abe4ced8ea45577147ce53e71639a46fb35cf7d6b948d8c913ebaefcf9290a1b3e3486524b36c1a03fba9238884978df61dc23d59450f35773ff"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "(MIT AND Zlib)"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "parse-headers",
+      "version": "2.0.6",
+      "purl": "pkg:npm/parse-headers@2.0.6",
+      "bom-ref": "pkg:npm/parse-headers@2.0.6",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/parse-headers/-/parse-headers-2.0.6.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "4f3d75b77b8aced116e451156678f5a31f0629b9569fe3ef1d8f53989579325976b8713045d47fe4b8b53a55e81028cb6240297615b2e38a1c38dc172e228ee4"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "pbf",
+      "version": "5.1.2",
+      "purl": "pkg:npm/pbf@5.1.2",
+      "bom-ref": "pkg:npm/pbf@5.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/pbf/-/pbf-5.1.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "9a7bc676f3ab22f24e04650474692b5578cdf04fd590824291fd9e4b50c7db2bfcd8e45494bb6d983b74ad6637f32619995c1c899c0152f1ccdb4ab10597f8d3"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "BSD-3-Clause"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "protocol-buffers-schema",
+      "version": "3.6.1",
+      "purl": "pkg:npm/protocol-buffers-schema@3.6.1",
+      "bom-ref": "pkg:npm/protocol-buffers-schema@3.6.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/protocol-buffers-schema/-/protocol-buffers-schema-3.6.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "546d8aeb7220922bfda7bead93596295ccc42b5713fa40a32ad91d870d5d41957793721725b777a3a1e8f1bf732596874a74f684a7b823e39b997f70ea6e5299"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "quick-lru",
+      "version": "6.1.2",
+      "purl": "pkg:npm/quick-lru@6.1.2",
+      "bom-ref": "pkg:npm/quick-lru@6.1.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/quick-lru/-/quick-lru-6.1.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "0001540393b577cde9207121270582abf450711ba40a49ff3529b642c4c43257b97f684fd02848dbedd76f4e753d90a42ebc88fc8af53152af893d85225a1a4d"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "quickselect",
+      "version": "3.0.0",
+      "purl": "pkg:npm/quickselect@3.0.0",
+      "bom-ref": "pkg:npm/quickselect@3.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/quickselect/-/quickselect-3.0.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "5dd8d402b6cae019b97cb2ef966e4aa5314e88e4e181f5962386b10190d683813fd2629d67223db4d11f76cdbba828b5cdefefc13475ea4be6986851adaddcda"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "ISC"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "rbush",
+      "version": "4.0.1",
+      "purl": "pkg:npm/rbush@4.0.1",
+      "bom-ref": "pkg:npm/rbush@4.0.1",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/rbush/-/rbush-4.0.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "20fd14a5f79642e8d80bc260d7adab30d734d517f481630c01bd94c6eb3f434a8e170e2509caba66740467052826a5b250627db61ec98f0238c885a8faebe801"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "react-dom",
+      "version": "19.2.8",
+      "purl": "pkg:npm/react-dom@19.2.8",
+      "bom-ref": "pkg:npm/react-dom@19.2.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/react-dom/-/react-dom-19.2.8.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "ad5a6b8a67c6046dc347e4ead08406d834f93f12ad8755881839a3e723e6973af86017bbbb213e0eee2856a4c35d948718619746d4c910649278fc9008c06095"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "19.2.8",
+      "purl": "pkg:npm/react@19.2.8",
+      "bom-ref": "pkg:npm/react@19.2.8",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/react/-/react-19.2.8.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "3d66980352ffabdbb6bbbc58422f98dcbdd87e789eed7c8b79a248095d4c183e8ba6bb01c5c02a1a3632af4798de9f9076c03ec7f22b92de1089ff03eb7f926f"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "realm",
+      "version": "0.1.0",
+      "purl": "pkg:npm/realm@0.1.0",
+      "bom-ref": "pkg:npm/realm@0.1.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "AGPL-3.0-or-later"
+          }
+        }
+      ],
+      "description": "A local macOS application for authoring fictional world maps across historical time."
+    },
+    {
+      "type": "library",
+      "name": "reference-spec-reader",
+      "version": "0.2.0",
+      "purl": "pkg:npm/reference-spec-reader@0.2.0",
+      "bom-ref": "pkg:npm/reference-spec-reader@0.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/reference-spec-reader/-/reference-spec-reader-0.2.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "ab499f0a2e726524875e90b2c6381079a391ab7b6f0ecc43cb369a740ff9f806c053047246eb9387469142e13fbc03adfeacf3c62749e620debb570b1da34195"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "resolve-protobuf-schema",
+      "version": "2.1.0",
+      "purl": "pkg:npm/resolve-protobuf-schema@2.1.0",
+      "bom-ref": "pkg:npm/resolve-protobuf-schema@2.1.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/resolve-protobuf-schema/-/resolve-protobuf-schema-2.1.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "908e5f7d38995a625a4bf86e33cc197c431eaf579177ba094210eec5e08b7b7b7b37b997df3f7808dd313f1050c456104d2373f53d22fafea29caa9274af31ad"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "scheduler",
+      "version": "0.27.0",
+      "purl": "pkg:npm/scheduler@0.27.0",
+      "bom-ref": "pkg:npm/scheduler@0.27.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "78dbfe5ab55b2aed5fdef6d8253ff1b62179b320391cf20cb5ff48818fe72a0d2c5aacc0504bea63fc66ece71973fa9a7cbc7f88ef4580e99e480a78bf9b62fd"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "unzipit",
+      "version": "2.0.0",
+      "purl": "pkg:npm/unzipit@2.0.0",
+      "bom-ref": "pkg:npm/unzipit@2.0.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/unzipit/-/unzipit-2.0.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "0d579521651908040f3739b9b01d21a6c1b51b28134dd067ccdb58604a489e4b6dc797af932a918198baad3733a324aaa7c84ee631d52b3ac7d1fdb75fc1592e"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "web-worker",
+      "version": "1.5.0",
+      "purl": "pkg:npm/web-worker@1.5.0",
+      "bom-ref": "pkg:npm/web-worker@1.5.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/web-worker/-/web-worker-1.5.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "462311789ad302203e9818c638d3278d50cfdaede9f51d6f91c1b3ea00c8ace313de81ae6305f659131823d8a9929852b84e5728487275b84d109878358f6697"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "Apache-2.0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "xml-utils",
+      "version": "1.10.2",
+      "purl": "pkg:npm/xml-utils@1.10.2",
+      "bom-ref": "pkg:npm/xml-utils@1.10.2",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/xml-utils/-/xml-utils-1.10.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "46a33eda8d5162ce93f3edc3cc34a84d10147ebbda7a36d51dca77fad86702d0caa3c2ec911f87a262da8c4cb95234f3db8ae991aec0c55051477836c1352424"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "CC0-1.0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "zarrita",
+      "version": "0.7.4",
+      "purl": "pkg:npm/zarrita@0.7.4",
+      "bom-ref": "pkg:npm/zarrita@0.7.4",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/zarrita/-/zarrita-0.7.4.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "34286e7e3f3a49c7858f8e73e026239dd988f7c76985a1bb854f168f4506a4cc93db5a345771d363ace8f3b692a1b616b6cd6d3458af497cc7d804750246968c"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "zstddec",
+      "version": "0.2.0",
+      "purl": "pkg:npm/zstddec@0.2.0",
+      "bom-ref": "pkg:npm/zstddec@0.2.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/zstddec/-/zstddec-0.2.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "a323e70dad57e5cd77f98ee603f14330d26b9f84bc50d05ed0a0aab439a8af8d117bb00bacf37a9e9170c98551461f8faa8cd941d7a0db742d6dc6a66671b9ac"
+            }
+          ]
+        }
+      ],
+      "licenses": [
+        {
+          "expression": "MIT AND BSD-3-Clause"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:cargo/adler2@2.0.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/aho-corasick@1.1.5",
+      "dependsOn": [
+        "pkg:cargo/memchr@2.8.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/alloc-no-stdlib@2.0.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/alloc-stdlib@0.2.4",
+      "dependsOn": [
+        "pkg:cargo/alloc-no-stdlib@2.0.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/anyhow@1.0.104",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/autocfg@1.5.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/base64@0.21.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/base64@0.22.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/bit-set@0.8.0",
+      "dependsOn": [
+        "pkg:cargo/bit-vec@0.8.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/bit-vec@0.8.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/bitflags@1.3.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/bitflags@2.13.1",
+      "dependsOn": [
+        "pkg:cargo/serde_core@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/block-buffer@0.10.4",
+      "dependsOn": [
+        "pkg:cargo/generic-array@0.14.7"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/block2@0.6.2",
+      "dependsOn": [
+        "pkg:cargo/objc2@0.6.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/brotli-decompressor@5.0.3",
+      "dependsOn": [
+        "pkg:cargo/alloc-no-stdlib@2.0.4",
+        "pkg:cargo/alloc-stdlib@0.2.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/brotli@8.0.4",
+      "dependsOn": [
+        "pkg:cargo/alloc-no-stdlib@2.0.4",
+        "pkg:cargo/alloc-stdlib@0.2.4",
+        "pkg:cargo/brotli-decompressor@5.0.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/bs58@0.5.1",
+      "dependsOn": [
+        "pkg:cargo/tinyvec@1.12.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/byteorder@1.5.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/bytes@1.12.1",
+      "dependsOn": [
+        "pkg:cargo/serde@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/camino@1.2.5",
+      "dependsOn": [
+        "pkg:cargo/serde_core@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/cargo_metadata@0.19.2",
+      "dependsOn": [
+        "pkg:cargo/camino@1.2.5",
+        "pkg:cargo/cargo-platform@0.1.9",
+        "pkg:cargo/semver@1.0.28",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/thiserror@2.0.20"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/cargo_toml@0.22.3",
+      "dependsOn": [
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/toml@0.9.12+spec-1.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/cargo-platform@0.1.9",
+      "dependsOn": [
+        "pkg:cargo/serde@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/cc@1.4.2",
+      "dependsOn": [
+        "pkg:cargo/find-msvc-tools@0.1.10",
+        "pkg:cargo/shlex@2.0.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/cfb@0.7.3",
+      "dependsOn": [
+        "pkg:cargo/byteorder@1.5.0",
+        "pkg:cargo/fnv@1.0.7",
+        "pkg:cargo/uuid@1.24.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/cfg-if@1.0.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/chrono@0.4.45",
+      "dependsOn": [
+        "pkg:cargo/iana-time-zone@0.1.65",
+        "pkg:cargo/num-traits@0.2.19",
+        "pkg:cargo/serde@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/cookie@0.18.2",
+      "dependsOn": [
+        "pkg:cargo/time@0.3.55",
+        "pkg:cargo/version_check@0.9.5"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/core-foundation-sys@0.8.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/core-foundation@0.10.1",
+      "dependsOn": [
+        "pkg:cargo/core-foundation-sys@0.8.7",
+        "pkg:cargo/libc@0.2.189"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/core-graphics-types@0.2.0",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/core-foundation@0.10.1",
+        "pkg:cargo/libc@0.2.189"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/core-graphics@0.25.0",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/core-foundation@0.10.1",
+        "pkg:cargo/core-graphics-types@0.2.0",
+        "pkg:cargo/foreign-types@0.5.0",
+        "pkg:cargo/libc@0.2.189"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/cpufeatures@0.2.17",
+      "dependsOn": [
+        "pkg:cargo/libc@0.2.189"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/crc32fast@1.5.0",
+      "dependsOn": [
+        "pkg:cargo/cfg-if@1.0.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/crossbeam-channel@0.5.16",
+      "dependsOn": [
+        "pkg:cargo/crossbeam-utils@0.8.22"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/crossbeam-utils@0.8.22",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/crypto-common@0.1.7",
+      "dependsOn": [
+        "pkg:cargo/generic-array@0.14.7",
+        "pkg:cargo/typenum@1.20.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/cssparser-macros@0.6.1",
+      "dependsOn": [
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/cssparser@0.36.0",
+      "dependsOn": [
+        "pkg:cargo/cssparser-macros@0.6.1",
+        "pkg:cargo/dtoa-short@0.3.5",
+        "pkg:cargo/itoa@1.0.18",
+        "pkg:cargo/phf@0.13.1",
+        "pkg:cargo/smallvec@1.15.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/ctor-proc-macro@0.0.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/ctor@0.8.0",
+      "dependsOn": [
+        "pkg:cargo/ctor-proc-macro@0.0.7",
+        "pkg:cargo/dtor@0.3.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/darling_core@0.23.0",
+      "dependsOn": [
+        "pkg:cargo/ident_case@1.0.1",
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/strsim@0.11.1",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/darling_macro@0.23.0",
+      "dependsOn": [
+        "pkg:cargo/darling_core@0.23.0",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/darling@0.23.0",
+      "dependsOn": [
+        "pkg:cargo/darling_core@0.23.0",
+        "pkg:cargo/darling_macro@0.23.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/deranged@0.5.8",
+      "dependsOn": [
+        "pkg:cargo/serde_core@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/derive_more-impl@2.1.1",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/rustc_version@0.4.1",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/derive_more@2.1.1",
+      "dependsOn": [
+        "pkg:cargo/derive_more-impl@2.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/digest@0.10.7",
+      "dependsOn": [
+        "pkg:cargo/block-buffer@0.10.4",
+        "pkg:cargo/crypto-common@0.1.7"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/dirs-sys@0.5.0",
+      "dependsOn": [
+        "pkg:cargo/libc@0.2.189",
+        "pkg:cargo/option-ext@0.2.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/dirs@6.0.0",
+      "dependsOn": [
+        "pkg:cargo/dirs-sys@0.5.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/dispatch2@0.3.1",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/block2@0.6.2",
+        "pkg:cargo/libc@0.2.189",
+        "pkg:cargo/objc2@0.6.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/displaydoc@0.2.7",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@3.0.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/dom_query@0.27.0",
+      "dependsOn": [
+        "pkg:cargo/bit-set@0.8.0",
+        "pkg:cargo/cssparser@0.36.0",
+        "pkg:cargo/foldhash@0.2.0",
+        "pkg:cargo/html5ever@0.38.0",
+        "pkg:cargo/precomputed-hash@0.1.1",
+        "pkg:cargo/selectors@0.36.1",
+        "pkg:cargo/tendril@0.5.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/dpi@0.1.2",
+      "dependsOn": [
+        "pkg:cargo/serde@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/dtoa-short@0.3.5",
+      "dependsOn": [
+        "pkg:cargo/dtoa@1.0.11"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/dtoa@1.0.11",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/dtor-proc-macro@0.0.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/dtor@0.3.0",
+      "dependsOn": [
+        "pkg:cargo/dtor-proc-macro@0.0.6"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/dunce@1.0.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/dyn-clone@1.0.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/embed_plist@1.2.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/embed-resource@3.0.11",
+      "dependsOn": [
+        "pkg:cargo/cc@1.4.2",
+        "pkg:cargo/memchr@2.8.3",
+        "pkg:cargo/rustc_version@0.4.1",
+        "pkg:cargo/toml@1.1.4+spec-1.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/equivalent@1.0.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/erased-serde@0.4.10",
+      "dependsOn": [
+        "pkg:cargo/serde_core@1.0.229",
+        "pkg:cargo/typeid@1.0.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/fallible-iterator@0.3.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/fallible-streaming-iterator@0.1.9",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/fastrand@2.5.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/fdeflate@0.3.7",
+      "dependsOn": [
+        "pkg:cargo/simd-adler32@0.3.10"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/find-msvc-tools@0.1.10",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/flate2@1.1.9",
+      "dependsOn": [
+        "pkg:cargo/crc32fast@1.5.0",
+        "pkg:cargo/miniz_oxide@0.8.9"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/fnv@1.0.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/foldhash@0.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/foreign-types-macros@0.2.4",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@3.0.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/foreign-types-shared@0.3.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/foreign-types@0.5.0",
+      "dependsOn": [
+        "pkg:cargo/foreign-types-macros@0.2.4",
+        "pkg:cargo/foreign-types-shared@0.3.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/form_urlencoded@1.2.2",
+      "dependsOn": [
+        "pkg:cargo/percent-encoding@2.3.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/generic-array@0.14.7",
+      "dependsOn": [
+        "pkg:cargo/typenum@1.20.1",
+        "pkg:cargo/version_check@0.9.5"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/getrandom@0.3.4",
+      "dependsOn": [
+        "pkg:cargo/cfg-if@1.0.4",
+        "pkg:cargo/libc@0.2.189"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/getrandom@0.4.3",
+      "dependsOn": [
+        "pkg:cargo/cfg-if@1.0.4",
+        "pkg:cargo/libc@0.2.189"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/glob@0.3.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/hashbrown@0.12.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/hashbrown@0.16.1",
+      "dependsOn": [
+        "pkg:cargo/foldhash@0.2.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/hashbrown@0.17.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/hashlink@0.11.1",
+      "dependsOn": [
+        "pkg:cargo/hashbrown@0.16.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/heck@0.5.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/hex@0.4.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/html5ever@0.38.0",
+      "dependsOn": [
+        "pkg:cargo/log@0.4.33",
+        "pkg:cargo/markup5ever@0.38.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/http@1.5.0",
+      "dependsOn": [
+        "pkg:cargo/bytes@1.12.1",
+        "pkg:cargo/itoa@1.0.18"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/iana-time-zone@0.1.65",
+      "dependsOn": [
+        "pkg:cargo/core-foundation-sys@0.8.7"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/ico@0.5.0",
+      "dependsOn": [
+        "pkg:cargo/byteorder@1.5.0",
+        "pkg:cargo/png@0.17.16"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/icu_collections@2.2.0",
+      "dependsOn": [
+        "pkg:cargo/displaydoc@0.2.7",
+        "pkg:cargo/potential_utf@0.1.5",
+        "pkg:cargo/utf8_iter@1.0.4",
+        "pkg:cargo/yoke@0.8.3",
+        "pkg:cargo/zerofrom@0.1.8",
+        "pkg:cargo/zerovec@0.11.6"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/icu_locale_core@2.2.0",
+      "dependsOn": [
+        "pkg:cargo/displaydoc@0.2.7",
+        "pkg:cargo/litemap@0.8.2",
+        "pkg:cargo/tinystr@0.8.3",
+        "pkg:cargo/writeable@0.6.3",
+        "pkg:cargo/zerovec@0.11.6"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/icu_normalizer_data@2.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/icu_normalizer@2.2.0",
+      "dependsOn": [
+        "pkg:cargo/icu_collections@2.2.0",
+        "pkg:cargo/icu_normalizer_data@2.2.0",
+        "pkg:cargo/icu_properties@2.2.0",
+        "pkg:cargo/icu_provider@2.2.0",
+        "pkg:cargo/smallvec@1.15.2",
+        "pkg:cargo/zerovec@0.11.6"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/icu_properties_data@2.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/icu_properties@2.2.0",
+      "dependsOn": [
+        "pkg:cargo/icu_collections@2.2.0",
+        "pkg:cargo/icu_locale_core@2.2.0",
+        "pkg:cargo/icu_properties_data@2.2.0",
+        "pkg:cargo/icu_provider@2.2.0",
+        "pkg:cargo/zerotrie@0.2.4",
+        "pkg:cargo/zerovec@0.11.6"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/icu_provider@2.2.0",
+      "dependsOn": [
+        "pkg:cargo/displaydoc@0.2.7",
+        "pkg:cargo/icu_locale_core@2.2.0",
+        "pkg:cargo/writeable@0.6.3",
+        "pkg:cargo/yoke@0.8.3",
+        "pkg:cargo/zerofrom@0.1.8",
+        "pkg:cargo/zerotrie@0.2.4",
+        "pkg:cargo/zerovec@0.11.6"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/ident_case@1.0.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/idna_adapter@1.2.2",
+      "dependsOn": [
+        "pkg:cargo/icu_normalizer@2.2.0",
+        "pkg:cargo/icu_properties@2.2.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/idna@1.1.0",
+      "dependsOn": [
+        "pkg:cargo/idna_adapter@1.2.2",
+        "pkg:cargo/smallvec@1.15.2",
+        "pkg:cargo/utf8_iter@1.0.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/indexmap@1.9.3",
+      "dependsOn": [
+        "pkg:cargo/autocfg@1.5.1",
+        "pkg:cargo/hashbrown@0.12.3",
+        "pkg:cargo/serde@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/indexmap@2.14.0",
+      "dependsOn": [
+        "pkg:cargo/equivalent@1.0.2",
+        "pkg:cargo/hashbrown@0.17.1",
+        "pkg:cargo/serde_core@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/infer@0.19.0",
+      "dependsOn": [
+        "pkg:cargo/cfb@0.7.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/itoa@1.0.18",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/json-patch@3.0.1",
+      "dependsOn": [
+        "pkg:cargo/jsonptr@0.6.3",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/thiserror@1.0.69"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/jsonptr@0.6.3",
+      "dependsOn": [
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/keyboard-types@0.7.0",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/unicode-segmentation@1.13.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/libc@0.2.189",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/libsqlite3-sys@0.36.0",
+      "dependsOn": [
+        "pkg:cargo/cc@1.4.2",
+        "pkg:cargo/pkg-config@0.3.33",
+        "pkg:cargo/vcpkg@0.2.15"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/litemap@0.8.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/lock_api@0.4.14",
+      "dependsOn": [
+        "pkg:cargo/scopeguard@1.2.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/log@0.4.33",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/markup5ever@0.38.0",
+      "dependsOn": [
+        "pkg:cargo/log@0.4.33",
+        "pkg:cargo/tendril@0.5.1",
+        "pkg:cargo/web_atoms@0.2.5"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/memchr@2.8.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/mime@0.3.17",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/miniz_oxide@0.8.9",
+      "dependsOn": [
+        "pkg:cargo/adler2@2.0.1",
+        "pkg:cargo/simd-adler32@0.3.10"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/mio@1.2.2",
+      "dependsOn": [
+        "pkg:cargo/libc@0.2.189"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/muda@0.19.3",
+      "dependsOn": [
+        "pkg:cargo/crossbeam-channel@0.5.16",
+        "pkg:cargo/dpi@0.1.2",
+        "pkg:cargo/keyboard-types@0.7.0",
+        "pkg:cargo/objc2-app-kit@0.3.2",
+        "pkg:cargo/objc2-core-foundation@0.3.2",
+        "pkg:cargo/objc2-foundation@0.3.2",
+        "pkg:cargo/objc2@0.6.4",
+        "pkg:cargo/once_cell@1.21.4",
+        "pkg:cargo/png@0.18.1",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/thiserror@2.0.20"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/new_debug_unreachable@1.0.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/num-conv@0.2.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/num-traits@0.2.19",
+      "dependsOn": [
+        "pkg:cargo/autocfg@1.5.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/objc2-app-kit@0.3.2",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/block2@0.6.2",
+        "pkg:cargo/objc2-core-foundation@0.3.2",
+        "pkg:cargo/objc2-foundation@0.3.2",
+        "pkg:cargo/objc2@0.6.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/objc2-core-foundation@0.3.2",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/dispatch2@0.3.1",
+        "pkg:cargo/objc2@0.6.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/objc2-core-graphics@0.3.2",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/dispatch2@0.3.1",
+        "pkg:cargo/objc2-core-foundation@0.3.2",
+        "pkg:cargo/objc2-io-surface@0.3.2",
+        "pkg:cargo/objc2@0.6.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/objc2-encode@4.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/objc2-exception-helper@0.1.1",
+      "dependsOn": [
+        "pkg:cargo/cc@1.4.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/objc2-foundation@0.3.2",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/block2@0.6.2",
+        "pkg:cargo/libc@0.2.189",
+        "pkg:cargo/objc2-core-foundation@0.3.2",
+        "pkg:cargo/objc2@0.6.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/objc2-io-surface@0.3.2",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/objc2-core-foundation@0.3.2",
+        "pkg:cargo/objc2@0.6.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/objc2-web-kit@0.3.2",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/block2@0.6.2",
+        "pkg:cargo/objc2-app-kit@0.3.2",
+        "pkg:cargo/objc2-core-foundation@0.3.2",
+        "pkg:cargo/objc2-foundation@0.3.2",
+        "pkg:cargo/objc2@0.6.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/objc2@0.6.4",
+      "dependsOn": [
+        "pkg:cargo/objc2-encode@4.1.0",
+        "pkg:cargo/objc2-exception-helper@0.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/once_cell@1.21.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/option-ext@0.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/parking_lot_core@0.9.12",
+      "dependsOn": [
+        "pkg:cargo/cfg-if@1.0.4",
+        "pkg:cargo/libc@0.2.189",
+        "pkg:cargo/smallvec@1.15.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/parking_lot@0.12.5",
+      "dependsOn": [
+        "pkg:cargo/lock_api@0.4.14",
+        "pkg:cargo/parking_lot_core@0.9.12"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/percent-encoding@2.3.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/phf_codegen@0.13.1",
+      "dependsOn": [
+        "pkg:cargo/phf_generator@0.13.1",
+        "pkg:cargo/phf_shared@0.13.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/phf_generator@0.13.1",
+      "dependsOn": [
+        "pkg:cargo/fastrand@2.5.0",
+        "pkg:cargo/phf_shared@0.13.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/phf_macros@0.13.1",
+      "dependsOn": [
+        "pkg:cargo/phf_generator@0.13.1",
+        "pkg:cargo/phf_shared@0.13.1",
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/phf_shared@0.13.1",
+      "dependsOn": [
+        "pkg:cargo/siphasher@1.0.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/phf@0.13.1",
+      "dependsOn": [
+        "pkg:cargo/phf_macros@0.13.1",
+        "pkg:cargo/phf_shared@0.13.1",
+        "pkg:cargo/serde@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/pin-project-lite@0.2.17",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/pkg-config@0.3.33",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/plist@1.10.0",
+      "dependsOn": [
+        "pkg:cargo/base64@0.22.1",
+        "pkg:cargo/indexmap@2.14.0",
+        "pkg:cargo/quick-xml@0.41.0",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/time@0.3.55"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/png@0.17.16",
+      "dependsOn": [
+        "pkg:cargo/bitflags@1.3.2",
+        "pkg:cargo/crc32fast@1.5.0",
+        "pkg:cargo/fdeflate@0.3.7",
+        "pkg:cargo/flate2@1.1.9",
+        "pkg:cargo/miniz_oxide@0.8.9"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/png@0.18.1",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/crc32fast@1.5.0",
+        "pkg:cargo/fdeflate@0.3.7",
+        "pkg:cargo/flate2@1.1.9",
+        "pkg:cargo/miniz_oxide@0.8.9"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/potential_utf@0.1.5",
+      "dependsOn": [
+        "pkg:cargo/zerovec@0.11.6"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/powerfmt@0.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/precomputed-hash@0.1.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/proc-macro2@1.0.107",
+      "dependsOn": [
+        "pkg:cargo/unicode-ident@1.0.24"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/quick-xml@0.41.0",
+      "dependsOn": [
+        "pkg:cargo/memchr@2.8.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/quote@1.0.47",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/raw-window-handle@0.6.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/realm-app@0.1.0",
+      "dependsOn": [
+        "pkg:cargo/libc@0.2.189",
+        "pkg:cargo/rusqlite@0.38.0",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/tauri-build@2.6.3",
+        "pkg:cargo/tauri-plugin-dialog@2.7.2",
+        "pkg:cargo/tauri@2.11.5",
+        "pkg:cargo/thiserror@2.0.20",
+        "pkg:cargo/uuid@1.24.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/ref-cast-impl@1.0.26",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@3.0.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/ref-cast@1.0.26",
+      "dependsOn": [
+        "pkg:cargo/ref-cast-impl@1.0.26"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/regex-automata@0.4.18",
+      "dependsOn": [
+        "pkg:cargo/aho-corasick@1.1.5",
+        "pkg:cargo/memchr@2.8.3",
+        "pkg:cargo/regex-syntax@0.8.11"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/regex-syntax@0.8.11",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/regex@1.13.1",
+      "dependsOn": [
+        "pkg:cargo/aho-corasick@1.1.5",
+        "pkg:cargo/memchr@2.8.3",
+        "pkg:cargo/regex-automata@0.4.18",
+        "pkg:cargo/regex-syntax@0.8.11"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/rfd@0.16.0",
+      "dependsOn": [
+        "pkg:cargo/block2@0.6.2",
+        "pkg:cargo/dispatch2@0.3.1",
+        "pkg:cargo/log@0.4.33",
+        "pkg:cargo/objc2-app-kit@0.3.2",
+        "pkg:cargo/objc2-core-foundation@0.3.2",
+        "pkg:cargo/objc2-foundation@0.3.2",
+        "pkg:cargo/objc2@0.6.4",
+        "pkg:cargo/raw-window-handle@0.6.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/rusqlite@0.38.0",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/fallible-iterator@0.3.0",
+        "pkg:cargo/fallible-streaming-iterator@0.1.9",
+        "pkg:cargo/hashlink@0.11.1",
+        "pkg:cargo/libsqlite3-sys@0.36.0",
+        "pkg:cargo/smallvec@1.15.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/rustc_version@0.4.1",
+      "dependsOn": [
+        "pkg:cargo/semver@1.0.28"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/rustc-hash@2.1.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/same-file@1.0.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/schemars_derive@0.8.22",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/serde_derive_internals@0.29.1",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/schemars@0.8.22",
+      "dependsOn": [
+        "pkg:cargo/dyn-clone@1.0.20",
+        "pkg:cargo/indexmap@1.9.3",
+        "pkg:cargo/schemars_derive@0.8.22",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/url@2.5.8",
+        "pkg:cargo/uuid@1.24.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/schemars@0.9.0",
+      "dependsOn": [
+        "pkg:cargo/dyn-clone@1.0.20",
+        "pkg:cargo/ref-cast@1.0.26",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/schemars@1.2.2",
+      "dependsOn": [
+        "pkg:cargo/dyn-clone@1.0.20",
+        "pkg:cargo/ref-cast@1.0.26",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/scopeguard@1.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/selectors@0.36.1",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/cssparser@0.36.0",
+        "pkg:cargo/derive_more@2.1.1",
+        "pkg:cargo/log@0.4.33",
+        "pkg:cargo/new_debug_unreachable@1.0.6",
+        "pkg:cargo/phf@0.13.1",
+        "pkg:cargo/phf_codegen@0.13.1",
+        "pkg:cargo/precomputed-hash@0.1.1",
+        "pkg:cargo/rustc-hash@2.1.3",
+        "pkg:cargo/servo_arc@0.4.3",
+        "pkg:cargo/smallvec@1.15.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/semver@1.0.28",
+      "dependsOn": [
+        "pkg:cargo/serde_core@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serde_core@1.0.229",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/serde_derive_internals@0.29.1",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serde_derive@1.0.229",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@3.0.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serde_json@1.0.151",
+      "dependsOn": [
+        "pkg:cargo/itoa@1.0.18",
+        "pkg:cargo/memchr@2.8.3",
+        "pkg:cargo/serde_core@1.0.229",
+        "pkg:cargo/zmij@1.0.23"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serde_repr@0.1.21",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@3.0.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serde_spanned@1.1.1",
+      "dependsOn": [
+        "pkg:cargo/serde_core@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serde_with_macros@3.21.0",
+      "dependsOn": [
+        "pkg:cargo/darling@0.23.0",
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serde_with@3.21.0",
+      "dependsOn": [
+        "pkg:cargo/base64@0.22.1",
+        "pkg:cargo/bs58@0.5.1",
+        "pkg:cargo/chrono@0.4.45",
+        "pkg:cargo/hex@0.4.3",
+        "pkg:cargo/indexmap@1.9.3",
+        "pkg:cargo/indexmap@2.14.0",
+        "pkg:cargo/schemars@0.9.0",
+        "pkg:cargo/schemars@1.2.2",
+        "pkg:cargo/serde_core@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/serde_with_macros@3.21.0",
+        "pkg:cargo/time@0.3.55"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serde-untagged@0.1.9",
+      "dependsOn": [
+        "pkg:cargo/erased-serde@0.4.10",
+        "pkg:cargo/serde_core@1.0.229",
+        "pkg:cargo/typeid@1.0.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serde@1.0.229",
+      "dependsOn": [
+        "pkg:cargo/serde_core@1.0.229",
+        "pkg:cargo/serde_derive@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serialize-to-javascript-impl@0.1.2",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/serialize-to-javascript@0.1.2",
+      "dependsOn": [
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/serialize-to-javascript-impl@0.1.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/servo_arc@0.4.3",
+      "dependsOn": [
+        "pkg:cargo/stable_deref_trait@1.2.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/sha2@0.10.9",
+      "dependsOn": [
+        "pkg:cargo/cfg-if@1.0.4",
+        "pkg:cargo/cpufeatures@0.2.17",
+        "pkg:cargo/digest@0.10.7"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/shlex@2.0.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/simd-adler32@0.3.10",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/siphasher@1.0.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/smallvec@1.15.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/socket2@0.6.5",
+      "dependsOn": [
+        "pkg:cargo/libc@0.2.189"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/stable_deref_trait@1.2.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/string_cache_codegen@0.6.1",
+      "dependsOn": [
+        "pkg:cargo/phf_generator@0.13.1",
+        "pkg:cargo/phf_shared@0.13.1",
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/string_cache@0.9.0",
+      "dependsOn": [
+        "pkg:cargo/new_debug_unreachable@1.0.6",
+        "pkg:cargo/parking_lot@0.12.5",
+        "pkg:cargo/phf_shared@0.13.1",
+        "pkg:cargo/precomputed-hash@0.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/strsim@0.11.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/swift-rs@1.0.7",
+      "dependsOn": [
+        "pkg:cargo/base64@0.21.7",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/syn@2.0.119",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/unicode-ident@1.0.24"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/syn@3.0.3",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/unicode-ident@1.0.24"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/synstructure@0.13.2",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tao@0.35.3",
+      "dependsOn": [
+        "pkg:cargo/bitflags@2.13.1",
+        "pkg:cargo/block2@0.6.2",
+        "pkg:cargo/core-foundation@0.10.1",
+        "pkg:cargo/core-graphics@0.25.0",
+        "pkg:cargo/crossbeam-channel@0.5.16",
+        "pkg:cargo/dispatch2@0.3.1",
+        "pkg:cargo/dpi@0.1.2",
+        "pkg:cargo/libc@0.2.189",
+        "pkg:cargo/log@0.4.33",
+        "pkg:cargo/objc2-app-kit@0.3.2",
+        "pkg:cargo/objc2-foundation@0.3.2",
+        "pkg:cargo/objc2@0.6.4",
+        "pkg:cargo/once_cell@1.21.4",
+        "pkg:cargo/raw-window-handle@0.6.2",
+        "pkg:cargo/url@2.5.8"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri-build@2.6.3",
+      "dependsOn": [
+        "pkg:cargo/anyhow@1.0.104",
+        "pkg:cargo/cargo_toml@0.22.3",
+        "pkg:cargo/dirs@6.0.0",
+        "pkg:cargo/glob@0.3.4",
+        "pkg:cargo/heck@0.5.0",
+        "pkg:cargo/json-patch@3.0.1",
+        "pkg:cargo/schemars@0.8.22",
+        "pkg:cargo/semver@1.0.28",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/tauri-utils@2.9.3",
+        "pkg:cargo/tauri-winres@0.3.6",
+        "pkg:cargo/walkdir@2.5.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri-codegen@2.6.3",
+      "dependsOn": [
+        "pkg:cargo/base64@0.22.1",
+        "pkg:cargo/brotli@8.0.4",
+        "pkg:cargo/ico@0.5.0",
+        "pkg:cargo/json-patch@3.0.1",
+        "pkg:cargo/plist@1.10.0",
+        "pkg:cargo/png@0.17.16",
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/semver@1.0.28",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/sha2@0.10.9",
+        "pkg:cargo/syn@2.0.119",
+        "pkg:cargo/tauri-utils@2.9.3",
+        "pkg:cargo/thiserror@2.0.20",
+        "pkg:cargo/time@0.3.55",
+        "pkg:cargo/url@2.5.8",
+        "pkg:cargo/uuid@1.24.0",
+        "pkg:cargo/walkdir@2.5.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri-macros@2.6.3",
+      "dependsOn": [
+        "pkg:cargo/heck@0.5.0",
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119",
+        "pkg:cargo/tauri-codegen@2.6.3",
+        "pkg:cargo/tauri-utils@2.9.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri-plugin-dialog@2.7.2",
+      "dependsOn": [
+        "pkg:cargo/log@0.4.33",
+        "pkg:cargo/raw-window-handle@0.6.2",
+        "pkg:cargo/rfd@0.16.0",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/tauri-plugin-fs@2.5.1",
+        "pkg:cargo/tauri-plugin@2.6.3",
+        "pkg:cargo/tauri@2.11.5",
+        "pkg:cargo/thiserror@2.0.20",
+        "pkg:cargo/url@2.5.8"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri-plugin-fs@2.5.1",
+      "dependsOn": [
+        "pkg:cargo/anyhow@1.0.104",
+        "pkg:cargo/dunce@1.0.5",
+        "pkg:cargo/glob@0.3.4",
+        "pkg:cargo/log@0.4.33",
+        "pkg:cargo/percent-encoding@2.3.2",
+        "pkg:cargo/schemars@0.8.22",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/serde_repr@0.1.21",
+        "pkg:cargo/tauri-plugin@2.6.3",
+        "pkg:cargo/tauri-utils@2.9.3",
+        "pkg:cargo/tauri@2.11.5",
+        "pkg:cargo/thiserror@2.0.20",
+        "pkg:cargo/toml@1.1.4+spec-1.1.0",
+        "pkg:cargo/url@2.5.8"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri-plugin@2.6.3",
+      "dependsOn": [
+        "pkg:cargo/anyhow@1.0.104",
+        "pkg:cargo/glob@0.3.4",
+        "pkg:cargo/plist@1.10.0",
+        "pkg:cargo/schemars@0.8.22",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/tauri-utils@2.9.3",
+        "pkg:cargo/walkdir@2.5.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri-runtime-wry@2.11.4",
+      "dependsOn": [
+        "pkg:cargo/http@1.5.0",
+        "pkg:cargo/log@0.4.33",
+        "pkg:cargo/objc2-app-kit@0.3.2",
+        "pkg:cargo/objc2@0.6.4",
+        "pkg:cargo/raw-window-handle@0.6.2",
+        "pkg:cargo/tao@0.35.3",
+        "pkg:cargo/tauri-runtime@2.11.3",
+        "pkg:cargo/tauri-utils@2.9.3",
+        "pkg:cargo/url@2.5.8",
+        "pkg:cargo/wry@0.55.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri-runtime@2.11.3",
+      "dependsOn": [
+        "pkg:cargo/cookie@0.18.2",
+        "pkg:cargo/dpi@0.1.2",
+        "pkg:cargo/http@1.5.0",
+        "pkg:cargo/objc2-web-kit@0.3.2",
+        "pkg:cargo/objc2@0.6.4",
+        "pkg:cargo/raw-window-handle@0.6.2",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/tauri-utils@2.9.3",
+        "pkg:cargo/thiserror@2.0.20",
+        "pkg:cargo/url@2.5.8"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri-utils@2.9.3",
+      "dependsOn": [
+        "pkg:cargo/anyhow@1.0.104",
+        "pkg:cargo/brotli@8.0.4",
+        "pkg:cargo/cargo_metadata@0.19.2",
+        "pkg:cargo/ctor@0.8.0",
+        "pkg:cargo/dom_query@0.27.0",
+        "pkg:cargo/dunce@1.0.5",
+        "pkg:cargo/glob@0.3.4",
+        "pkg:cargo/http@1.5.0",
+        "pkg:cargo/infer@0.19.0",
+        "pkg:cargo/json-patch@3.0.1",
+        "pkg:cargo/log@0.4.33",
+        "pkg:cargo/memchr@2.8.3",
+        "pkg:cargo/phf@0.13.1",
+        "pkg:cargo/plist@1.10.0",
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/regex@1.13.1",
+        "pkg:cargo/schemars@0.8.22",
+        "pkg:cargo/semver@1.0.28",
+        "pkg:cargo/serde-untagged@0.1.9",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/serde_with@3.21.0",
+        "pkg:cargo/swift-rs@1.0.7",
+        "pkg:cargo/thiserror@2.0.20",
+        "pkg:cargo/toml@1.1.4+spec-1.1.0",
+        "pkg:cargo/url@2.5.8",
+        "pkg:cargo/urlpattern@0.3.0",
+        "pkg:cargo/uuid@1.24.0",
+        "pkg:cargo/walkdir@2.5.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri-winres@0.3.6",
+      "dependsOn": [
+        "pkg:cargo/dunce@1.0.5",
+        "pkg:cargo/embed-resource@3.0.11",
+        "pkg:cargo/toml@1.1.4+spec-1.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tauri@2.11.5",
+      "dependsOn": [
+        "pkg:cargo/anyhow@1.0.104",
+        "pkg:cargo/cookie@0.18.2",
+        "pkg:cargo/dirs@6.0.0",
+        "pkg:cargo/dunce@1.0.5",
+        "pkg:cargo/embed_plist@1.2.2",
+        "pkg:cargo/getrandom@0.3.4",
+        "pkg:cargo/glob@0.3.4",
+        "pkg:cargo/heck@0.5.0",
+        "pkg:cargo/http@1.5.0",
+        "pkg:cargo/log@0.4.33",
+        "pkg:cargo/mime@0.3.17",
+        "pkg:cargo/muda@0.19.3",
+        "pkg:cargo/objc2-app-kit@0.3.2",
+        "pkg:cargo/objc2-foundation@0.3.2",
+        "pkg:cargo/objc2-web-kit@0.3.2",
+        "pkg:cargo/objc2@0.6.4",
+        "pkg:cargo/percent-encoding@2.3.2",
+        "pkg:cargo/plist@1.10.0",
+        "pkg:cargo/raw-window-handle@0.6.2",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_json@1.0.151",
+        "pkg:cargo/serde_repr@0.1.21",
+        "pkg:cargo/serialize-to-javascript@0.1.2",
+        "pkg:cargo/tauri-build@2.6.3",
+        "pkg:cargo/tauri-macros@2.6.3",
+        "pkg:cargo/tauri-runtime-wry@2.11.4",
+        "pkg:cargo/tauri-runtime@2.11.3",
+        "pkg:cargo/tauri-utils@2.9.3",
+        "pkg:cargo/thiserror@2.0.20",
+        "pkg:cargo/tokio@1.53.1",
+        "pkg:cargo/tray-icon@0.24.2",
+        "pkg:cargo/url@2.5.8",
+        "pkg:cargo/window-vibrancy@0.6.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tendril@0.5.1",
+      "dependsOn": [
+        "pkg:cargo/new_debug_unreachable@1.0.6"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/thiserror-impl@1.0.69",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/thiserror-impl@2.0.20",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@3.0.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/thiserror@1.0.69",
+      "dependsOn": [
+        "pkg:cargo/thiserror-impl@1.0.69"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/thiserror@2.0.20",
+      "dependsOn": [
+        "pkg:cargo/thiserror-impl@2.0.20"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/time-core@0.1.9",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/time-macros@0.2.32",
+      "dependsOn": [
+        "pkg:cargo/num-conv@0.2.2",
+        "pkg:cargo/time-core@0.1.9"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/time@0.3.55",
+      "dependsOn": [
+        "pkg:cargo/deranged@0.5.8",
+        "pkg:cargo/num-conv@0.2.2",
+        "pkg:cargo/powerfmt@0.2.0",
+        "pkg:cargo/serde_core@1.0.229",
+        "pkg:cargo/time-core@0.1.9",
+        "pkg:cargo/time-macros@0.2.32"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tinystr@0.8.3",
+      "dependsOn": [
+        "pkg:cargo/displaydoc@0.2.7",
+        "pkg:cargo/zerovec@0.11.6"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tinyvec_macros@0.1.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/tinyvec@1.12.0",
+      "dependsOn": [
+        "pkg:cargo/tinyvec_macros@0.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tokio@1.53.1",
+      "dependsOn": [
+        "pkg:cargo/bytes@1.12.1",
+        "pkg:cargo/libc@0.2.189",
+        "pkg:cargo/mio@1.2.2",
+        "pkg:cargo/pin-project-lite@0.2.17",
+        "pkg:cargo/socket2@0.6.5"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/toml_datetime@0.7.5+spec-1.1.0",
+      "dependsOn": [
+        "pkg:cargo/serde_core@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/toml_datetime@1.1.1+spec-1.1.0",
+      "dependsOn": [
+        "pkg:cargo/serde_core@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/toml_parser@1.1.3+spec-1.1.0",
+      "dependsOn": [
+        "pkg:cargo/winnow@1.0.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/toml_writer@1.1.2+spec-1.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/toml@0.9.12+spec-1.1.0",
+      "dependsOn": [
+        "pkg:cargo/indexmap@2.14.0",
+        "pkg:cargo/serde_core@1.0.229",
+        "pkg:cargo/serde_spanned@1.1.1",
+        "pkg:cargo/toml_datetime@0.7.5+spec-1.1.0",
+        "pkg:cargo/toml_parser@1.1.3+spec-1.1.0",
+        "pkg:cargo/toml_writer@1.1.2+spec-1.1.0",
+        "pkg:cargo/winnow@0.7.15"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/toml@1.1.4+spec-1.1.0",
+      "dependsOn": [
+        "pkg:cargo/indexmap@2.14.0",
+        "pkg:cargo/serde_core@1.0.229",
+        "pkg:cargo/serde_spanned@1.1.1",
+        "pkg:cargo/toml_datetime@1.1.1+spec-1.1.0",
+        "pkg:cargo/toml_parser@1.1.3+spec-1.1.0",
+        "pkg:cargo/toml_writer@1.1.2+spec-1.1.0",
+        "pkg:cargo/winnow@1.0.4"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/tray-icon@0.24.2",
+      "dependsOn": [
+        "pkg:cargo/crossbeam-channel@0.5.16",
+        "pkg:cargo/muda@0.19.3",
+        "pkg:cargo/objc2-app-kit@0.3.2",
+        "pkg:cargo/objc2-core-foundation@0.3.2",
+        "pkg:cargo/objc2-core-graphics@0.3.2",
+        "pkg:cargo/objc2-foundation@0.3.2",
+        "pkg:cargo/objc2@0.6.4",
+        "pkg:cargo/once_cell@1.21.4",
+        "pkg:cargo/png@0.18.1",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/thiserror@2.0.20"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/typeid@1.0.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/typenum@1.20.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/unic-char-property@0.9.0",
+      "dependsOn": [
+        "pkg:cargo/unic-char-range@0.9.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/unic-char-range@0.9.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/unic-common@0.9.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/unic-ucd-ident@0.9.0",
+      "dependsOn": [
+        "pkg:cargo/unic-char-property@0.9.0",
+        "pkg:cargo/unic-char-range@0.9.0",
+        "pkg:cargo/unic-ucd-version@0.9.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/unic-ucd-version@0.9.0",
+      "dependsOn": [
+        "pkg:cargo/unic-common@0.9.0"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/unicode-ident@1.0.24",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/unicode-segmentation@1.13.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/url@2.5.8",
+      "dependsOn": [
+        "pkg:cargo/form_urlencoded@1.2.2",
+        "pkg:cargo/idna@1.1.0",
+        "pkg:cargo/percent-encoding@2.3.2",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/serde_derive@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/urlpattern@0.3.0",
+      "dependsOn": [
+        "pkg:cargo/regex@1.13.1",
+        "pkg:cargo/serde@1.0.229",
+        "pkg:cargo/unic-ucd-ident@0.9.0",
+        "pkg:cargo/url@2.5.8"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/utf8_iter@1.0.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/uuid@1.24.0",
+      "dependsOn": [
+        "pkg:cargo/getrandom@0.4.3",
+        "pkg:cargo/serde_core@1.0.229"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/vcpkg@0.2.15",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/version_check@0.9.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/walkdir@2.5.0",
+      "dependsOn": [
+        "pkg:cargo/same-file@1.0.6"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/web_atoms@0.2.5",
+      "dependsOn": [
+        "pkg:cargo/phf@0.13.1",
+        "pkg:cargo/phf_codegen@0.13.1",
+        "pkg:cargo/string_cache@0.9.0",
+        "pkg:cargo/string_cache_codegen@0.6.1"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/window-vibrancy@0.6.0",
+      "dependsOn": [
+        "pkg:cargo/objc2-app-kit@0.3.2",
+        "pkg:cargo/objc2-core-foundation@0.3.2",
+        "pkg:cargo/objc2-foundation@0.3.2",
+        "pkg:cargo/objc2@0.6.4",
+        "pkg:cargo/raw-window-handle@0.6.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/winnow@0.7.15",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/winnow@1.0.4",
+      "dependsOn": [
+        "pkg:cargo/memchr@2.8.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/writeable@0.6.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:cargo/wry@0.55.1",
+      "dependsOn": [
+        "pkg:cargo/block2@0.6.2",
+        "pkg:cargo/cookie@0.18.2",
+        "pkg:cargo/dirs@6.0.0",
+        "pkg:cargo/dpi@0.1.2",
+        "pkg:cargo/http@1.5.0",
+        "pkg:cargo/objc2-app-kit@0.3.2",
+        "pkg:cargo/objc2-core-foundation@0.3.2",
+        "pkg:cargo/objc2-foundation@0.3.2",
+        "pkg:cargo/objc2-web-kit@0.3.2",
+        "pkg:cargo/objc2@0.6.4",
+        "pkg:cargo/once_cell@1.21.4",
+        "pkg:cargo/raw-window-handle@0.6.2",
+        "pkg:cargo/thiserror@2.0.20",
+        "pkg:cargo/url@2.5.8"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/yoke-derive@0.8.2",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119",
+        "pkg:cargo/synstructure@0.13.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/yoke@0.8.3",
+      "dependsOn": [
+        "pkg:cargo/stable_deref_trait@1.2.1",
+        "pkg:cargo/yoke-derive@0.8.2",
+        "pkg:cargo/zerofrom@0.1.8"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/zerofrom-derive@0.1.7",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119",
+        "pkg:cargo/synstructure@0.13.2"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/zerofrom@0.1.8",
+      "dependsOn": [
+        "pkg:cargo/zerofrom-derive@0.1.7"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/zerotrie@0.2.4",
+      "dependsOn": [
+        "pkg:cargo/displaydoc@0.2.7",
+        "pkg:cargo/yoke@0.8.3",
+        "pkg:cargo/zerofrom@0.1.8"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/zerovec-derive@0.11.3",
+      "dependsOn": [
+        "pkg:cargo/proc-macro2@1.0.107",
+        "pkg:cargo/quote@1.0.47",
+        "pkg:cargo/syn@2.0.119"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/zerovec@0.11.6",
+      "dependsOn": [
+        "pkg:cargo/yoke@0.8.3",
+        "pkg:cargo/zerofrom@0.1.8",
+        "pkg:cargo/zerovec-derive@0.11.3"
+      ]
+    },
+    {
+      "ref": "pkg:cargo/zmij@1.0.23",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:generic/realm@0.1.0",
+      "dependsOn": [
+        "pkg:cargo/realm-app@0.1.0",
+        "pkg:npm/realm@0.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40petamoriken/float16@3.9.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40tauri-apps/api@2.11.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40tauri-apps/plugin-dialog@2.7.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40types/rbush@4.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40zarrita/storage@0.2.0",
+      "dependsOn": [
+        "pkg:npm/reference-spec-reader@0.2.0",
+        "pkg:npm/unzipit@2.0.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/earcut@3.2.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/fflate@0.8.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/geotiff@3.1.0-beta.0",
+      "dependsOn": [
+        "pkg:npm/%40petamoriken/float16@3.9.3",
+        "pkg:npm/lerc@3.0.0",
+        "pkg:npm/pako@2.2.0",
+        "pkg:npm/parse-headers@2.0.6",
+        "pkg:npm/quick-lru@6.1.2",
+        "pkg:npm/web-worker@1.5.0",
+        "pkg:npm/xml-utils@1.10.2",
+        "pkg:npm/zstddec@0.2.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/lerc@3.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/numcodecs@0.3.2",
+      "dependsOn": [
+        "pkg:npm/fflate@0.8.3"
+      ]
+    },
+    {
+      "ref": "pkg:npm/ol@10.10.0",
+      "dependsOn": [
+        "pkg:npm/%40types/rbush@4.0.0",
+        "pkg:npm/earcut@3.2.3",
+        "pkg:npm/geotiff@3.1.0-beta.0",
+        "pkg:npm/pbf@5.1.2",
+        "pkg:npm/rbush@4.0.1",
+        "pkg:npm/zarrita@0.7.4"
+      ]
+    },
+    {
+      "ref": "pkg:npm/pako@2.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/parse-headers@2.0.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/pbf@5.1.2",
+      "dependsOn": [
+        "pkg:npm/resolve-protobuf-schema@2.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/protocol-buffers-schema@3.6.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/quick-lru@6.1.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/quickselect@3.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/rbush@4.0.1",
+      "dependsOn": [
+        "pkg:npm/quickselect@3.0.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/react-dom@19.2.8",
+      "dependsOn": [
+        "pkg:npm/scheduler@0.27.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/react@19.2.8",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/realm@0.1.0",
+      "dependsOn": [
+        "pkg:npm/%40tauri-apps/api@2.11.1",
+        "pkg:npm/%40tauri-apps/plugin-dialog@2.7.2",
+        "pkg:npm/ol@10.10.0",
+        "pkg:npm/react@19.2.8",
+        "pkg:npm/react-dom@19.2.8"
+      ]
+    },
+    {
+      "ref": "pkg:npm/reference-spec-reader@0.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/resolve-protobuf-schema@2.1.0",
+      "dependsOn": [
+        "pkg:npm/protocol-buffers-schema@3.6.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/scheduler@0.27.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/unzipit@2.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/web-worker@1.5.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/xml-utils@1.10.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/zarrita@0.7.4",
+      "dependsOn": [
+        "pkg:npm/%40zarrita/storage@0.2.0",
+        "pkg:npm/numcodecs@0.3.2"
+      ]
+    },
+    {
+      "ref": "pkg:npm/zstddec@0.2.0",
+      "dependsOn": []
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+# OS/editor noise
+.DS_Store
+.AppleDouble
+.LSOverride
+.vscode/
+.idea/
+
+# JavaScript/Rust build output
+node_modules/
+.pnpm-store/
+dist/
+build/
+target/
+coverage/
+artifacts/
+*.tsbuildinfo
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.npmrc
+*.pem
+*.key
+*.p12
+*.pfx
+
+# User map databases and transient SQLite files
+*.realmmap
+*.realmmap-*
+*.[Rr][Ee][Aa][Ll][Mm][Mm][Aa][Pp]
+*.[Rr][Ee][Aa][Ll][Mm][Mm][Aa][Pp]-*
+*.sqlite
+*.sqlite3
+*.[Ss][Qq][Ll][Ii][Tt][Ee]
+*.[Ss][Qq][Ll][Ii][Tt][Ee]3
+*.db
+*.db-wal
+*.db-shm
+
+# Local release output
+release-assets/
+*.dmg

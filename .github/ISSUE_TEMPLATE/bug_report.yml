@@ -1,0 +1,29 @@
+name: Bug report
+description: Report a reproducible problem without private data
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Realm is owner-led; a report does not guarantee a response or fix. Never attach a private `.realmmap`, secret, credential, or personal location.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Give minimal synthetic steps and the year/era used.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and macOS
+    validations:
+      required: true

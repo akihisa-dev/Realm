@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a focused improvement
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Realm is owner-led and does not actively solicit a roadmap. Do not include private map data or credentials.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What local editing problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the smallest useful behavior and its year/revision impact.
+    validations:
+      required: true
