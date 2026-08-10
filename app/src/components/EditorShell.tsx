@@ -131,7 +131,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
 
   return (
     <main className="editor-shell" aria-label="Realm地形編集画面">
-      <header className="editor-history">
+      <header className="editor-history" data-tauri-drag-region="deep">
         <nav aria-label="編集履歴">
           <button type="button" onClick={() => { void run(() => backend.undoProject(), "操作を戻せませんでした。"); }} disabled={locked || !viewedSnapshot.canUndo}>戻す</button>
           <button type="button" onClick={() => { void run(() => backend.redoProject(), "操作を進められませんでした。"); }} disabled={locked || !viewedSnapshot.canRedo}>進む</button>

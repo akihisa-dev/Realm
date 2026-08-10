@@ -4,6 +4,7 @@
   "description": "The minimal permissions required by the Realm desktop window.",
   "windows": ["main"],
   "permissions": [
+    "core:window:allow-start-dragging",
     "dialog:allow-open",
     "dialog:allow-save"
   ]

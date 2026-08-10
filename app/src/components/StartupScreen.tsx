@@ -10,7 +10,7 @@ type StartupScreenProps = {
 
 export function StartupScreen({ projects, onCreate, onOpen, onImport, busy }: StartupScreenProps) {
   return (
-    <main className="startup-screen">
+    <main className="startup-screen" data-tauri-drag-region="deep">
       <section className="startup-panel" aria-labelledby="startup-title">
         <h1 id="startup-title">Realm</h1>
         <p>創作世界の地図を、アプリ内で安全に管理。</p>

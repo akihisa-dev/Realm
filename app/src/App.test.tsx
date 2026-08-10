@@ -11,6 +11,14 @@ describe("Realm library workflow", () => {
     expect(await screen.findByRole("main", { name: "Realm地形編集画面" })).toBeInTheDocument();
     expect((await backend.getOpenProject())?.world.name).toBe("無題の世界");
   });
+
+  it("keeps the startup surface available as a native window drag region", async () => {
+    const backend = new MemoryRealmBackend(); render(<App backend={backend} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "新しい世界を作成" })).toBeEnabled());
+    expect(screen.getByRole("main")).toHaveAttribute("data-tauri-drag-region", "deep");
+    expect(screen.getByRole("button", { name: "新しい世界を作成" })).not.toHaveAttribute("data-tauri-drag-region");
+  });
+
   it("opens a library project", async () => {
     const backend = new MemoryRealmBackend([emptySnapshot]); render(<App backend={backend} />);
     fireEvent.click(await screen.findByRole("button", { name: /テスト世界/u }));
