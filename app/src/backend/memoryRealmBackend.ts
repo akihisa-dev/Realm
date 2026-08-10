@@ -10,11 +10,38 @@ type MemoryProject = {
 };
 
 const makeSnapshot = (path: string, name: string): RealmSnapshot => ({
-  formatVersion: 3, path, world: { id: crypto.randomUUID(), name }, features: [], featureCount: 0,
+  formatVersion: 3, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, features: [], featureCount: 0,
   canUndo: false, canRedo: false,
 });
 
 const clone = <T>(value: T): T => structuredClone(value);
+const normalizeName = (name: string): string => {
+  const normalized = name.trim();
+  if (!normalized) throw new Error("世界の名前を入力してください。");
+  if ([...normalized].length > 200) throw new Error("世界の名前は200文字以内にしてください。");
+  return normalized;
+};
+
+const validPosition = (position: readonly number[]): position is [number, number] =>
+  position.length === 2 && position.every((value, index) => Number.isFinite(value) && (index === 0 ? value >= -180 && value <= 180 : value >= -90 && value <= 90));
+
+const validateGeometry = (input: CreateFeatureInput): void => {
+  const expected = input.featureType === "city" || input.featureType === "town" ? "Point"
+    : input.featureType === "river" || input.featureType === "coastline" || input.featureType === "boundary" ? "LineString" : "Polygon";
+  if (input.geometry.type !== expected) throw new Error("地物の形状が種類と一致しません。");
+  if (input.geometry.type === "Point") {
+    if (!validPosition(input.geometry.coordinates)) throw new Error("地物の座標が不正です。");
+    return;
+  }
+  if (input.geometry.type === "LineString") {
+    if (input.geometry.coordinates.length < 2 || input.geometry.coordinates.some((position) => !validPosition(position))) throw new Error("地物の線が不正です。");
+    return;
+  }
+  if (input.geometry.coordinates.length === 0 || input.geometry.coordinates.some((ring) => ring.length < 4 || ring.some((position) => !validPosition(position)) || ring[0]?.[0] !== ring.at(-1)?.[0] || ring[0]?.[1] !== ring.at(-1)?.[1])) {
+    throw new Error("地物の領域が不正です。");
+  }
+};
+
 const validCell = (id: string): boolean => {
   const match = /^(\d+):(\d+)$/u.exec(id);
   if (!match) return false;
@@ -75,17 +102,20 @@ export class MemoryRealmBackend implements RealmBackend {
   async exportProject(_input: { path: string }): Promise<void> {}
   async writeArtifact(_input: { path: string; bytes: number[] }): Promise<void> {}
   async saveProject(input: SaveProjectInput): Promise<RealmSnapshot> {
-    const project = this.current(); this.checkpoint(project); project.snapshot.world.name = input.name.trim(); return this.result(project);
+    const project = this.current(); const name = normalizeName(input.name);
+    if (project.snapshot.world.name !== name) { this.checkpoint(project); project.snapshot.world.name = name; }
+    return this.result(project);
   }
   async createFeature(input: CreateFeatureInput): Promise<RealmSnapshot> {
-    const project = this.current(); this.checkpoint(project);
-    const feature: RealmFeature = { id: crypto.randomUUID(), featureType: input.featureType, name: input.name.trim(), geometry: clone(input.geometry) };
+    const project = this.current(); const name = normalizeName(input.name); validateGeometry(input); this.checkpoint(project);
+    const feature: RealmFeature = { id: crypto.randomUUID(), featureType: input.featureType, name, geometry: clone(input.geometry) };
     project.snapshot.features.push(feature); return this.result(project);
   }
   async reviseFeature(input: ReviseFeatureInput): Promise<RealmSnapshot> {
     const project = this.current(); const feature = project.snapshot.features.find((item) => item.id === input.id);
-    if (!feature) throw new Error("地物が見つかりません。"); this.checkpoint(project);
-    feature.name = input.name.trim(); feature.geometry = clone(input.geometry); return this.result(project);
+    if (!feature) throw new Error("地物が見つかりません。"); const name = normalizeName(input.name);
+    validateGeometry({ featureType: feature.featureType, name, geometry: input.geometry }); this.checkpoint(project);
+    feature.name = name; feature.geometry = clone(input.geometry); return this.result(project);
   }
   async deleteFeature(input: { id: string }): Promise<RealmSnapshot> {
     const project = this.current(); const index = project.snapshot.features.findIndex((item) => item.id === input.id);

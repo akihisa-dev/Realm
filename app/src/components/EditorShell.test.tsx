@@ -21,8 +21,10 @@ it("renders single-state editor without chronology controls", async () => {
   expect(screen.getByRole("button", { name: "元に戻す" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "やり直す" })).toBeDisabled();
   expect(screen.getByRole("textbox", { name: "値" })).toBeDisabled();
-  fireEvent.change(screen.getByRole("combobox", { name: "筆の属性" }), { target: { value: "country:country" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "筆の属性" }), { target: { value: "country" } });
   expect(screen.getByRole("textbox", { name: "値" })).toBeEnabled();
+  fireEvent.change(screen.getByRole("textbox", { name: "値" }), { target: { value: "王国" } });
+  expect(screen.getByRole("combobox", { name: "筆の属性" })).toHaveValue("country");
   fireEvent.change(screen.getByRole("textbox", { name: "世界の名前" }), { target: { value: "Renamed" } });
   await waitFor(() => expect(backend.getOpenProject()).resolves.toMatchObject({ world: { name: "Renamed" } }), { timeout: 1000 });
 });
@@ -40,6 +42,58 @@ it("runs feature, cell, history, and export actions", async () => {
   fireEvent.click(screen.getByRole("button", { name: "元に戻す" })); await waitFor(() => expect(screen.getByText("地物 1件")).toBeInTheDocument()); fireEvent.click(screen.getByRole("button", { name: "やり直す" }));
   fireEvent.click(screen.getByRole("button", { name: "テストセル" })); await waitFor(() => expect(backend.viewCellAttributes({})).resolves.toEqual([]));
   fireEvent.click(screen.getByRole("button", { name: "テストexport準備" })); fireEvent.click(screen.getByRole("button", { name: "PNG" })); await waitFor(() => expect(onArtifact).toHaveBeenCalledWith("png", [1, 2, 3])); fireEvent.click(screen.getByRole("button", { name: "移行データ" })); await waitFor(() => expect(onTransfer).toHaveBeenCalled()); fireEvent.click(screen.getByRole("button", { name: "ライブラリ" })); await waitFor(() => expect(onClose).toHaveBeenCalled());
+});
+
+it("refreshes cell attributes only for cell-affecting operations", async () => {
+  const backend = new MemoryRealmBackend(); const initial = await backend.createProject({ path: "browser://refresh.realmmap", name: "Refresh" });
+  const viewCells = vi.spyOn(backend, "viewCellAttributes");
+  render(<EditorShell snapshot={initial} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+  await waitFor(() => expect(viewCells).toHaveBeenCalledTimes(1));
+  fireEvent.change(screen.getByRole("textbox", { name: "世界の名前" }), { target: { value: "Renamed" } });
+  await waitFor(() => expect(backend.getOpenProject()).resolves.toMatchObject({ world: { name: "Renamed" } }));
+  expect(viewCells).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "都市" })); fireEvent.click(screen.getByRole("button", { name: "テスト描画" }));
+  await waitFor(() => expect(screen.getByText("地物 1件")).toBeInTheDocument());
+  expect(viewCells).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "テストセル" }));
+  await waitFor(() => expect(viewCells).toHaveBeenCalledTimes(2));
+});
+
+it("keeps a selected feature when the parent receives a same-project snapshot", async () => {
+  const backend = new MemoryRealmBackend(); const initial = await backend.createProject({ path: "browser://selection.realmmap", name: "Selection" });
+  let current = initial;
+  let rerender: ReturnType<typeof render>["rerender"];
+  const renderEditor = () => <EditorShell snapshot={current} backend={backend} busy={false} onClose={vi.fn()} onSaved={(next) => { current = next; rerender(renderEditor()); }} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />;
+  const view = render(renderEditor()); rerender = view.rerender;
+  fireEvent.click(screen.getByRole("button", { name: "都市" })); fireEvent.click(screen.getByRole("button", { name: "テスト描画" }));
+  await waitFor(() => expect(screen.getByText("地物 1件")).toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: "テスト選択" }));
+  expect(screen.getByRole("button", { name: "削除" })).toBeInTheDocument();
+  fireEvent.change(screen.getByRole("textbox", { name: "地物名" }), { target: { value: "王都" } }); fireEvent.click(screen.getByRole("button", { name: "名前を保存" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: /王都/ })).toBeInTheDocument());
+  expect(screen.getByRole("button", { name: "削除" })).toBeInTheDocument();
+});
+
+it("keeps newer name input when an older automatic save finishes", async () => {
+  const backend = new MemoryRealmBackend();
+  const initial = await backend.createProject({ path: "browser://autosave.realmmap", name: "Initial" });
+  const saveNormally = backend.saveProject.bind(backend);
+  let finishFirst: ((snapshot: typeof initial) => void) | undefined;
+  const saveProject = vi.spyOn(backend, "saveProject").mockImplementation((input) => {
+    if (input.name === "First") return new Promise((resolve) => { finishFirst = resolve; });
+    return saveNormally(input);
+  });
+  render(<EditorShell snapshot={initial} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+  const nameInput = screen.getByRole("textbox", { name: "世界の名前" });
+
+  fireEvent.change(nameInput, { target: { value: "First" } });
+  await waitFor(() => expect(saveProject).toHaveBeenCalledWith({ name: "First" }), { timeout: 1000 });
+  fireEvent.change(nameInput, { target: { value: "Second" } });
+  finishFirst?.({ ...initial, world: { ...initial.world, name: "First" } });
+
+  await waitFor(() => expect(saveProject).toHaveBeenCalledWith({ name: "Second" }), { timeout: 1000 });
+  await waitFor(() => expect(nameInput).toHaveValue("Second"));
+  expect(await backend.getOpenProject()).toMatchObject({ world: { name: "Second" } });
 });
 
 it("shows validation and operation failures without losing the editor", async () => {

@@ -27,7 +27,11 @@ The coarse IPC surface lists, creates, opens, saves, closes, imports, and export
 
 Tauri imports are isolated in `app/src/backend/tauriRealmBackend.ts`. The browser-only memory backend implements the same interface for deterministic UI tests without pretending to be a second persistence format.
 
-OpenLayers imports are isolated in `app/src/map/MapAdapter.ts`. `RealmMapRenderer` is the UI-facing contract and its factory is injected into the canvas, so a later viewing style can be selected without moving project state out of Rust.
+OpenLayers imports are isolated below `app/src/map/`. `contracts.ts` is the UI-facing renderer contract, while grid geometry and world-bound checks remain pure modules. `MapAdapter.ts` owns the OpenLayers map, layers, interactions, and lifecycle; its factory is injected into the canvas, so a later viewing style can be selected without moving project state out of Rust. Cell features are created only for persisted or selected cells until brush mode needs the complete fixed grid.
+
+React coordinates library operations through `app/src/state/useRealmOperations.ts`. Operation generations reject stale project and library responses. The editor serializes automatic save, mutations, exports, and close so a delayed response cannot replace a newer draft or snapshot.
+
+Rust keeps `lib.rs` as the composition root and command registry. IPC data contracts, domain validation, open-session state, read models, edit application, command handlers, and storage concerns live in separate modules. Within storage, schema verification, path validation, atomic publication, library lookup, project connection setup, and artifact output are separate dependencies. Storage modules do not depend on command handlers.
 
 ## Safety invariants
 

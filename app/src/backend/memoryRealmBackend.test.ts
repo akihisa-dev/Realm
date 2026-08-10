@@ -26,12 +26,21 @@ describe("MemoryRealmBackend", () => {
     await expect(backend.openProject({ path: "browser://missing" })).rejects.toThrow("見つかりません");
     const created = await backend.createProject({ path: "browser://copy.realmmap", name: "Copy" });
     await expect(backend.createProject({ path: created.path, name: "Duplicate" })).rejects.toThrow("すでに");
-    await expect(backend.createFeature({ featureType: "city", name: "", geometry: { type: "Point", coordinates: [0, 0] } })).resolves.toBeTruthy();
+    await expect(backend.createFeature({ featureType: "city", name: "", geometry: { type: "Point", coordinates: [0, 0] } })).rejects.toThrow("名前");
+    await expect(backend.createFeature({ featureType: "city", name: "City", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } })).rejects.toThrow("形状");
+    await expect(backend.createFeature({ featureType: "city", name: "City", geometry: { type: "Point", coordinates: [0, 0] } })).resolves.toBeTruthy();
     await backend.undoProject(); await backend.redoProject();
     await backend.closeProject(); await expect(backend.getOpenProject()).resolves.toBeNull();
     await backend.openProject({ path: created.path }); await backend.importProject({ path: created.path });
     await expect(backend.applyCellAttributes({ cellIds: [], attribute: "forest", value: "on" })).rejects.toThrow("セルを選択");
     await expect(backend.applyCellAttributes({ cellIds: ["999:999"], attribute: "forest", value: "on" })).rejects.toThrow("不正");
     await expect(backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "forest", value: " " })).rejects.toThrow("属性値");
+  });
+
+  it("does not create undo history for a canonical no-op name save", async () => {
+    const backend = new MemoryRealmBackend();
+    await backend.createProject({ path: "browser://name.realmmap", name: "World" });
+    await backend.saveProject({ name: "  World  " });
+    expect((await backend.getOpenProject())?.canUndo).toBe(false);
   });
 });

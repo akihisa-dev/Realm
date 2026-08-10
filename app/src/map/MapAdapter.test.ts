@@ -1,4 +1,4 @@
-import { CELL_GRID_CELL_COUNT, RealmMapAdapter, cellCenter, cellIdsWithinBrushPath } from "./MapAdapter";
+import { CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellCenter, cellIdsWithinBrushPath, isGeometryWithinWorld } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -23,6 +23,15 @@ describe("RealmMapAdapter", () => {
     expect(cellIdsWithinBrushPath([cellCenter(0, 0)], 0)).toEqual(["0:0"]);
     expect(cellIdsWithinBrushPath([[-180, -90]], 1)).toContain("0:0");
     expect(cellIdsWithinBrushPath([[180, 90]], 1)).toContain("511:255");
+    expect(cellIdsWithinBrushPath([[-Infinity, -90], [Infinity, 90]], 1)).toEqual([]);
+  });
+
+  it("guards feature geometry at the bounded world edge", () => {
+    expect(isGeometryWithinWorld({ type: "Point", coordinates: [180, 90] })).toBe(true);
+    expect(isGeometryWithinWorld({ type: "Point", coordinates: [180.01, 90] })).toBe(false);
+    expect(isGeometryWithinWorld({ type: "LineString", coordinates: [[0, 0], [0, 91]] })).toBe(false);
+    expect(isGeometryWithinWorld({ type: "Polygon", coordinates: [[[0, 0], [1, 0], [0, 1], [0, 0]]] })).toBe(true);
+    expect(() => assertGeometryWithinWorld({ type: "Point", coordinates: [181, 0] })).toThrow("bounded world");
   });
 
   it("creates a bounded world view and disposes its OpenLayers target", () => {
@@ -77,6 +86,7 @@ describe("RealmMapAdapter", () => {
     adapter.setSelectedCells(["0:0"]);
     adapter.setSelectedCells([]);
     adapter.setCellAttributes([]);
+    expect((adapter.getMap().getLayers().item(3) as VectorLayer).getSource()?.getFeatures()).toHaveLength(1);
     adapter.setMode("river");
     const riverDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
     expect(riverDraw).toBeInstanceOf(Draw);
@@ -160,6 +170,7 @@ describe("RealmMapAdapter", () => {
     const resizedFitZoom = view.getZoomForResolution(resizedFitResolution);
     expect(resizedFitZoom).not.toBeUndefined();
     expect(view.getResolution()).toBeCloseTo(view.getResolutionForZoom((resizedFitZoom ?? 0) + 2));
+    adapter.dispose();
     adapter.dispose();
     expect(adapter.getMap().getTarget()).toBeNull();
     host.remove();

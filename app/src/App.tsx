@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 import {
   chooseArtifactPath,
   chooseTransferPath,
   defaultBackend,
-  errorMessage,
-  type ProjectSummary,
   type RealmBackend,
-  type RealmSnapshot,
 } from "./backend";
 import { EditorShell } from "./components/EditorShell";
 import { StartupScreen } from "./components/StartupScreen";
+import { useRealmOperations } from "./state";
 
 type AppProps = {
   backend?: RealmBackend;
@@ -22,55 +20,7 @@ export default function App({
   chooseTransfer = chooseTransferPath,
   chooseArtifact = chooseArtifactPath,
 }: AppProps) {
-  const [snapshot, setSnapshot] = useState<RealmSnapshot | null>(null);
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [restoring, setRestoring] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const operationSequence = useRef(0);
-
-  const refreshProjects = useCallback(async () => {
-    setProjects(await backend.listProjects());
-  }, [backend]);
-
-  useEffect(() => {
-    const operation = ++operationSequence.current;
-    let active = true;
-    setBusy(false);
-    setRestoring(true);
-    setSnapshot(null);
-    setError(null);
-    void Promise.all([backend.getOpenProject(), backend.listProjects()])
-      .then(([openProject, library]) => {
-        if (!active || operationSequence.current !== operation) return;
-        setSnapshot(openProject);
-        setProjects(library);
-      })
-      .catch((cause: unknown) => {
-        if (active && operationSequence.current === operation) {
-          setError(errorMessage(cause, "世界ライブラリを読み込めませんでした。"));
-        }
-      })
-      .finally(() => {
-        if (active && operationSequence.current === operation) setRestoring(false);
-      });
-    return () => { active = false; };
-  }, [backend]);
-
-  const run = useCallback(async (action: () => Promise<RealmSnapshot>, fallback: string) => {
-    const operation = ++operationSequence.current;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await action();
-      if (operationSequence.current === operation) setSnapshot(result);
-      await refreshProjects();
-    } catch (cause) {
-      if (operationSequence.current === operation) setError(errorMessage(cause, fallback));
-    } finally {
-      if (operationSequence.current === operation) setBusy(false);
-    }
-  }, [refreshProjects]);
+  const { snapshot, projects, busy, restoring, error, commitSnapshot, run, closeProject } = useRealmOperations({ backend });
 
   const createProject = useCallback(() => run(
     () => backend.createProject({ name: "無題の世界" }),
@@ -86,21 +36,6 @@ export default function App({
     const path = await chooseTransfer("import");
     if (path) await run(() => backend.importProject({ path }), "移行データを読み込めませんでした。");
   }, [backend, chooseTransfer, run]);
-
-  const closeProject = useCallback(async () => {
-    const operation = ++operationSequence.current;
-    setBusy(true);
-    setError(null);
-    try {
-      await backend.closeProject();
-      if (operationSequence.current === operation) setSnapshot(null);
-      await refreshProjects();
-    } catch (cause) {
-      if (operationSequence.current === operation) setError(errorMessage(cause, "ライブラリへ戻れませんでした。"));
-    } finally {
-      if (operationSequence.current === operation) setBusy(false);
-    }
-  }, [backend, refreshProjects]);
 
   const exportTransfer = useCallback(async () => {
     if (!snapshot) return;
@@ -123,8 +58,8 @@ export default function App({
           snapshot={snapshot}
           backend={backend}
           busy={unavailable}
-          onClose={() => { void closeProject(); }}
-          onSaved={(next) => { setSnapshot(next); void refreshProjects(); }}
+          onClose={closeProject}
+          onSaved={commitSnapshot}
           onExportTransfer={exportTransfer}
           onExportArtifact={exportArtifact}
         />

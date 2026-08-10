@@ -26,10 +26,9 @@ for (const file of files) {
   if (!isTauriAdapter && !isTauriAdapterTest && /@tauri-apps\/(?:api|plugin-dialog)/.test(source)) {
     failures.push(`${relative} crosses the Tauri boundary; use backend/tauriRealmBackend.ts.`);
   }
-  const isOpenLayersAdapter = relative === path.join("map", "MapAdapter.ts");
-  const isOpenLayersAdapterTest = relative === path.join("map", "MapAdapter.test.ts");
-  if (!isOpenLayersAdapter && !isOpenLayersAdapterTest && /from\s+["']ol(?:\/|["'])/.test(source)) {
-    failures.push(`${relative} crosses the renderer boundary; use map/MapAdapter.ts.`);
+  const isOpenLayersAdapter = relative.startsWith(`${path.join("map", "")}`);
+  if (!isOpenLayersAdapter && /from\s+["']ol(?:\/|["'])/.test(source)) {
+    failures.push(`${relative} crosses the renderer boundary; use the app/src/map boundary.`);
   }
   if (/from\s+["'](?:node:|fs|path|child_process|net|http)/.test(source)) {
     failures.push(`${relative} imports a Node.js native module into the webview.`);

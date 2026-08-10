@@ -1,10 +1,8 @@
-import Feature, { type FeatureLike } from "ol/Feature";
+import Feature from "ol/Feature";
 import Map from "ol/Map";
 import View from "ol/View";
 import LineString from "ol/geom/LineString";
 import Point from "ol/geom/Point";
-import Polygon from "ol/geom/Polygon";
-import type Geometry from "ol/geom/Geometry";
 import Draw from "ol/interaction/Draw";
 import PointerInteraction from "ol/interaction/Pointer";
 import Modify from "ol/interaction/Modify";
@@ -15,166 +13,22 @@ import Graticule from "ol/layer/Graticule";
 import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import Fill from "ol/style/Fill";
-import CircleStyle from "ol/style/Circle";
 import Stroke from "ol/style/Stroke";
 import Style from "ol/style/Style";
 import Text from "ol/style/Text";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
-import type { CellAttributeSnapshot, FeatureType, GeoJsonGeometry, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, GeoJsonGeometry, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
+import { CELL_BRUSH_RADII, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellCenter as gridCellCenter, cellId as gridCellId, cellIdsWithinBrushPath as gridCellIdsWithinBrushPath, parseCellId } from "./gridGeometry";
+import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
+import { createCellStyle, createFeatureStyle, MAP_LABEL_FONT } from "./styles";
+import type { MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 
-export type MapAdapterOptions = {
-  target: HTMLElement;
-};
-
-export type RealmMapMode = "pan" | "cell-select" | FeatureType;
-
-export const CELL_GRID_COLUMNS = 512;
-export const CELL_GRID_ROWS = 256;
-export const CELL_GRID_CELL_COUNT = CELL_GRID_COLUMNS * CELL_GRID_ROWS;
-export const CELL_BRUSH_RADII = { small: 1, medium: 2, large: 4 } as const;
-export type CellBrushSize = keyof typeof CELL_BRUSH_RADII;
-
-/** Stable persisted identity: x (column) first, then y (row). */
-export const cellId = (row: number, column: number): string => `${column}:${row}`;
-
-export const cellCenter = (row: number, column: number): [number, number] => [
-  -180 + ((column + 0.5) * 360) / CELL_GRID_COLUMNS,
-  -90 + ((row + 0.5) * 180) / CELL_GRID_ROWS,
-];
-
-const gridCoordinate = (coordinate: [number, number]): [number, number] => [
-  ((coordinate[0] + 180) / 360) * CELL_GRID_COLUMNS - 0.5,
-  ((coordinate[1] + 90) / 180) * CELL_GRID_ROWS - 0.5,
-];
-
-const distanceSquaredToSegment = (point: [number, number], start: [number, number], end: [number, number]): number => {
-  const dx = end[0] - start[0];
-  const dy = end[1] - start[1];
-  if (dx === 0 && dy === 0) return ((point[0] - start[0]) ** 2) + ((point[1] - start[1]) ** 2);
-  const ratio = Math.max(0, Math.min(1, (((point[0] - start[0]) * dx) + ((point[1] - start[1]) * dy)) / ((dx * dx) + (dy * dy))));
-  const closest: [number, number] = [start[0] + ratio * dx, start[1] + ratio * dy];
-  return ((point[0] - closest[0]) ** 2) + ((point[1] - closest[1]) ** 2);
-};
-
-/** Returns cells whose centers fall within the brush radius of every tested stroke segment. */
-export const cellIdsWithinBrushPath = (path: readonly [number, number][], radiusCells: number): string[] => {
-  if (path.length === 0 || !Number.isFinite(radiusCells) || radiusCells < 0) return [];
-  const gridPath = path.map(gridCoordinate);
-  const radiusSquared = radiusCells ** 2;
-  const minColumn = Math.max(0, Math.floor(Math.min(...gridPath.map(([x]) => x)) - radiusCells));
-  const maxColumn = Math.min(CELL_GRID_COLUMNS - 1, Math.ceil(Math.max(...gridPath.map(([x]) => x)) + radiusCells));
-  const minRow = Math.max(0, Math.floor(Math.min(...gridPath.map(([, y]) => y)) - radiusCells));
-  const maxRow = Math.min(CELL_GRID_ROWS - 1, Math.ceil(Math.max(...gridPath.map(([, y]) => y)) + radiusCells));
-  const selected: string[] = [];
-  for (let row = minRow; row <= maxRow; row += 1) {
-    for (let column = minColumn; column <= maxColumn; column += 1) {
-      const point: [number, number] = [column, row];
-      let distanceSquared = Number.POSITIVE_INFINITY;
-      for (let index = 1; index < gridPath.length; index += 1) {
-        distanceSquared = Math.min(distanceSquared, distanceSquaredToSegment(point, gridPath[index - 1]!, gridPath[index]!));
-      }
-      if (gridPath.length === 1) distanceSquared = distanceSquaredToSegment(point, gridPath[0]!, gridPath[0]!);
-      if (distanceSquared <= radiusSquared) selected.push(cellId(row, column));
-    }
-  }
-  return selected;
-};
-
-export interface RealmMapRenderer {
-  getZoom(): number;
-  setZoom(zoom: number): void;
-  resetView(): void;
-  setFeatures(features: RealmFeature[]): void;
-  setMode(mode: RealmMapMode): void;
-  setCellBrushRadius(radiusCells: number): void;
-  setSelected(featureId: string | null): void;
-  setSelectedCells(cellIds: readonly string[]): void;
-  setCellAttributes(attributes: readonly CellAttributeSnapshot[]): void;
-  onDraw(listener: (geometry: GeoJsonGeometry) => void): () => void;
-  onSelect(listener: (featureId: string | null) => void): () => void;
-  onCellSelect(listener: (cellIds: readonly string[]) => void): () => void;
-  onModify(listener: (featureId: string, geometry: GeoJsonGeometry) => void): () => void;
-  onZoomChange(listener: (zoom: number) => void): () => void;
-  updateSize(): void;
-  exportRaster(mimeType: "image/png" | "image/jpeg"): Promise<MapRaster>;
-  dispose(): void;
-}
-
-export type RealmMapRendererFactory = (options: MapAdapterOptions) => RealmMapRenderer;
-
-const MAP_LABEL_FONT = '12px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif';
-const geometryFromGeoJson = (geometry: GeoJsonGeometry): Geometry => {
-  if (geometry.type === "Point") return new Point(geometry.coordinates);
-  if (geometry.type === "LineString") return new LineString(geometry.coordinates);
-  return new Polygon(geometry.coordinates);
-};
-
-const geometryToGeoJson = (geometry: Geometry): GeoJsonGeometry => {
-  if (geometry instanceof Point) return { type: "Point", coordinates: geometry.getCoordinates() as [number, number] };
-  if (geometry instanceof LineString) return { type: "LineString", coordinates: geometry.getCoordinates() as [number, number][] };
-  if (geometry instanceof Polygon) return { type: "Polygon", coordinates: geometry.getCoordinates() as [number, number][][] };
-  throw new Error("Unsupported Realm geometry.");
-};
-
-const featureStyle = (feature: FeatureLike): Style => {
-  const type = feature.get("featureType") as FeatureType | undefined;
-  const presentation = type === "terrain" ? { color: "#8b7754", fillAlpha: "28", zIndex: 10 }
-    : type === "forest" ? { color: "#3f7c55", fillAlpha: "28", zIndex: 20 }
-      : type === "country" ? { color: "#315f7d", fillAlpha: "24", zIndex: 30 }
-        : type === "region" ? { color: "#76568c", fillAlpha: "1c", zIndex: 40 }
-          : type === "river" || type === "coastline" ? { color: "#2e78a6", fillAlpha: "28", zIndex: 50 }
-            : type === "boundary" ? { color: "#915f3d", fillAlpha: "28", zIndex: 60 }
-              : { color: "#8a3f58", fillAlpha: "28", zIndex: 70 };
-  const areaName = type === "country" || type === "region" ? feature.get("name") : null;
-  return new Style({
-    fill: new Fill({ color: `${presentation.color}${presentation.fillAlpha}` }),
-    stroke: new Stroke({
-      color: presentation.color,
-      width: type === "region" ? 1.75 : type === "boundary" ? 2 : 2.5,
-      lineDash: type === "region" ? [5, 4] : undefined,
-    }),
-    image: new CircleStyle({ radius: type === "city" ? 6 : 4.5, fill: new Fill({ color: presentation.color }), stroke: new Stroke({ color: "#fff", width: 1.5 }) }),
-    text: typeof areaName === "string" ? new Text({
-      text: areaName,
-      font: type === "country" ? `600 ${MAP_LABEL_FONT}` : MAP_LABEL_FONT,
-      overflow: true,
-      fill: new Fill({ color: "#26323b" }),
-      stroke: new Stroke({ color: "rgba(255, 255, 255, 0.92)", width: 3 }),
-    }) : undefined,
-    zIndex: presentation.zIndex,
-  });
-};
-
-const cellStyle = (feature: FeatureLike): Style | Style[] | undefined => {
-  const attributes = feature.get("attributes") as CellAttributeSnapshot[] | undefined;
-  const has = (attribute: CellAttributeSnapshot["attribute"]): boolean => attributes?.some((item) => item.attribute === attribute) ?? false;
-  const selected = feature.get("selected") === true;
-  const showGrid = feature.get("showGrid") === true;
-  const hasPhysical = has("forest");
-  if (!showGrid && !hasPhysical && !has("country") && !has("region") && !selected) return undefined;
-  const styles: Style[] = [new Style({
-    image: new CircleStyle({
-      radius: hasPhysical ? 2 : 1.25,
-      fill: new Fill({ color: has("forest") ? "#3f7c55" : "rgba(74, 87, 98, 0.24)" }),
-    }),
-    zIndex: 5,
-  })];
-  if (has("country")) styles.push(new Style({
-    image: new CircleStyle({ radius: 3.4, fill: new Fill({ color: "rgba(49, 95, 125, 0.08)" }), stroke: new Stroke({ color: "#315f7d", width: 1.1 }) }),
-    zIndex: 6,
-  }));
-  if (has("region")) styles.push(new Style({
-    image: new CircleStyle({ radius: 4.4, fill: new Fill({ color: "rgba(118, 86, 140, 0.05)" }), stroke: new Stroke({ color: "#76568c", width: 1.1, lineDash: [3, 2] }) }),
-    zIndex: 7,
-  }));
-  if (selected) styles.push(new Style({
-    image: new CircleStyle({ radius: 5.3, fill: new Fill({ color: "rgba(7, 140, 152, 0.08)" }), stroke: new Stroke({ color: "#078c98", width: 1.2 }) }),
-    zIndex: 85,
-  }));
-  return styles;
-};
+export type { MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
+export type { CellBrushSize } from "./gridGeometry";
+export { CELL_BRUSH_RADII, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellCenter, cellId, cellIdsWithinBrushPath, parseCellId } from "./gridGeometry";
+export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
 
 /** Owns OpenLayers objects and leaves project state in React/Rust. */
 export class RealmMapAdapter implements RealmMapRenderer {
@@ -183,8 +37,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly fitPadding = 24;
   private readonly featureSource = new VectorSource();
   private readonly featureLayer: VectorLayer;
+  private readonly featureStyle = createFeatureStyle();
   private readonly cellSource = new VectorSource();
   private readonly cellLayer: VectorLayer;
+  private readonly cellStyle = createCellStyle();
   private readonly selection: SelectModule.default;
   private readonly modify: Modify;
   private readonly target: HTMLElement;
@@ -195,13 +51,34 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private brushLastPoint: [number, number] | null = null;
   private brushStrokeSelection = new Set<string>();
   private brushSelectionBeforeStroke: string[] = [];
-  private cellsReady = false;
+  private allCellsReady = false;
+  private readonly cellFeatures = new globalThis.Map<string, Feature>();
+  private cellAttributesById = new globalThis.Map<string, CellAttributeSnapshot[]>();
   private selectedCellIds = new Set<string>();
   private readonly drawListeners = new Set<(geometry: GeoJsonGeometry) => void>();
   private readonly selectListeners = new Set<(featureId: string | null) => void>();
   private readonly cellSelectListeners = new Set<(cellIds: readonly string[]) => void>();
   private readonly modifyListeners = new Set<(featureId: string, geometry: GeoJsonGeometry) => void>();
   private baseZoom = 0;
+  private disposed = false;
+
+  private readonly handleSelection = (): void => {
+    const selected = this.selection.getFeatures().item(0);
+    const id = selected?.getId();
+    const featureId = typeof id === "string" ? id : null;
+    for (const listener of this.selectListeners) listener(featureId);
+  };
+
+  private readonly handleModify = (event: { features: { getArray(): Feature[] } }): void => {
+    for (const feature of event.features.getArray()) {
+      const id = feature.getId();
+      const geometry = feature.getGeometry();
+      if (typeof id !== "string" || !geometry) continue;
+      let encoded: GeoJsonGeometry;
+      try { encoded = guardedGeometryToGeoJson(geometry); } catch { continue; }
+      for (const listener of this.modifyListeners) listener(id, encoded);
+    }
+  };
 
   constructor({ target }: MapAdapterOptions) {
     this.target = target;
@@ -247,8 +124,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
       }),
     });
 
-    this.featureLayer = new VectorLayer({ source: this.featureSource, style: featureStyle });
-    this.cellLayer = new VectorLayer({ source: this.cellSource, style: cellStyle, visible: true });
+    this.featureLayer = new VectorLayer({ source: this.featureSource, style: this.featureStyle });
+    this.cellLayer = new VectorLayer({ source: this.cellSource, style: this.cellStyle, visible: true });
     this.selection = new SelectModule.default({ layers: [this.featureLayer] });
     this.modify = new Modify({ features: this.selection.getFeatures() });
 
@@ -275,21 +152,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.target.addEventListener("keydown", this.handleKeyDown);
     this.map.getViewport().addEventListener("pointercancel", this.handlePointerCancel);
     this.map.getViewport().addEventListener("lostpointercapture", this.handlePointerCancel);
-    this.selection.on("select", () => {
-      const selected = this.selection.getFeatures().item(0);
-      const id = selected?.getId();
-      const featureId = typeof id === "string" ? id : null;
-      for (const listener of this.selectListeners) listener(featureId);
-    });
-    this.modify.on("modifyend", (event) => {
-      for (const feature of event.features.getArray()) {
-        const id = feature.getId();
-        const geometry = feature.getGeometry();
-        if (typeof id !== "string" || !geometry) continue;
-        const encoded = geometryToGeoJson(geometry);
-        for (const listener of this.modifyListeners) listener(id, encoded);
-      }
-    });
+    this.selection.on("select", this.handleSelection);
+    this.modify.on("modifyend", this.handleModify);
     this.rebaseZoom();
   }
 
@@ -313,7 +177,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     const selectedId = this.selection.getFeatures().item(0)?.getId();
     const rendered = features.map((snapshot) => {
       const feature = new Feature({
-        geometry: geometryFromGeoJson(snapshot.geometry),
+        geometry: guardedGeometryFromGeoJson(snapshot.geometry),
         featureType: snapshot.featureType,
         name: snapshot.name,
       });
@@ -356,21 +220,21 @@ export class RealmMapAdapter implements RealmMapRenderer {
           if (!pointer.isPrimary || pointer.button !== 0) return false;
           this.brushSelectionBeforeStroke = [...this.selectedCellIds];
           this.brushLastPoint = event.coordinate as [number, number];
-          this.brushStrokeSelection = new Set(cellIdsWithinBrushPath([this.brushLastPoint], this.cellBrushRadius));
+          this.brushStrokeSelection = new Set(gridCellIdsWithinBrushPath([this.brushLastPoint], this.cellBrushRadius));
           this.setSelectedCells([...this.brushStrokeSelection]);
           return true;
         },
         handleDragEvent: (event) => {
           const nextPoint = event.coordinate as [number, number];
           if (!this.brushLastPoint) this.brushLastPoint = nextPoint;
-          for (const id of cellIdsWithinBrushPath([this.brushLastPoint, nextPoint], this.cellBrushRadius)) this.brushStrokeSelection.add(id);
+          for (const id of gridCellIdsWithinBrushPath([this.brushLastPoint, nextPoint], this.cellBrushRadius)) this.brushStrokeSelection.add(id);
           this.brushLastPoint = nextPoint;
           this.setSelectedCells([...this.brushStrokeSelection]);
         },
         handleUpEvent: (event) => {
           const nextPoint = event.coordinate as [number, number];
           if (!this.brushLastPoint) this.brushLastPoint = nextPoint;
-          for (const id of cellIdsWithinBrushPath([this.brushLastPoint, nextPoint], this.cellBrushRadius)) this.brushStrokeSelection.add(id);
+          for (const id of gridCellIdsWithinBrushPath([this.brushLastPoint, nextPoint], this.cellBrushRadius)) this.brushStrokeSelection.add(id);
           const selected = [...this.brushStrokeSelection];
           this.setSelectedCells(selected);
           for (const listener of this.cellSelectListeners) listener([...selected]);
@@ -384,9 +248,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       return;
     }
     if (mode === "pan") return;
-    const drawType = mode === "city" || mode === "town" ? "Point"
-      : mode === "river" || mode === "coastline" || mode === "boundary" ? "LineString"
-        : "Polygon";
+    const drawType = drawTypeForMode(mode);
     this.draw = new Draw({ type: drawType });
     // Lines and areas follow the pointer continuously from press to release.
     // Point features remain a single click because they have no path to trace.
@@ -394,7 +256,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.draw.on("drawend", (event) => {
       const geometry = event.feature.getGeometry();
       if (!geometry) return;
-      const encoded = geometryToGeoJson(geometry);
+      let encoded: GeoJsonGeometry;
+      try { encoded = guardedGeometryToGeoJson(geometry); } catch { return; }
       for (const listener of this.drawListeners) listener(encoded);
     });
     this.map.addInteraction(this.draw);
@@ -429,18 +292,35 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellBrushRadius = Math.max(0.25, Math.min(32, radiusCells));
   }
 
-  private ensureCells(): void {
-    if (this.cellsReady) return;
+  private ensureCells(cellIds?: Iterable<string>): void {
+    if (!cellIds && this.allCellsReady) return;
     const features: Feature[] = [];
-    for (let row = 0; row < CELL_GRID_ROWS; row += 1) {
-      for (let column = 0; column < CELL_GRID_COLUMNS; column += 1) {
-        const feature = new Feature({ geometry: new Point(cellCenter(row, column)), selected: false, showGrid: false, attributes: [] });
-        feature.setId(cellId(row, column));
-        features.push(feature);
+    const ids = cellIds ?? (function* allCellIds() {
+      for (let row = 0; row < CELL_GRID_ROWS; row += 1) {
+        for (let column = 0; column < CELL_GRID_COLUMNS; column += 1) yield gridCellId(row, column);
       }
+    }());
+    for (const id of ids) {
+      if (this.cellFeatures.has(id) || !parseCellId(id)) continue;
+      const [row, column] = parseCellId(id)!;
+      const feature = new Feature({ geometry: new Point(gridCellCenter(row, column)), selected: false, showGrid: false, attributes: this.cellAttributesById.get(id) ?? [] });
+      feature.setId(id);
+      this.cellFeatures.set(id, feature);
+      features.push(feature);
     }
-    this.cellSource.addFeatures(features);
-    this.cellsReady = true;
+    if (features.length > 0) this.cellSource.addFeatures(features);
+    if (!cellIds) {
+      this.allCellsReady = true;
+      if (this.cellFeatures.size !== CELL_GRID_CELL_COUNT) throw new Error("Cell grid initialization failed.");
+    }
+  }
+
+  private getCellFeature(id: string): Feature | undefined {
+    return this.cellFeatures.get(id);
+  }
+
+  private validCellIds(cellIds: readonly string[]): string[] {
+    return cellIds.filter((id) => parseCellId(id) !== null);
   }
 
   setSelected(featureId: string | null): void {
@@ -451,35 +331,39 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   setSelectedCells(cellIds: readonly string[]): void {
-    if (cellIds.length === 0 && !this.cellsReady) {
+    const validIds = this.validCellIds(cellIds);
+    if (validIds.length === 0 && this.cellFeatures.size === 0) {
       this.selectedCellIds.clear();
       return;
     }
-    this.ensureCells();
-    const next = new Set(cellIds);
+    this.ensureCells(validIds);
+    const next = new Set(validIds);
     for (const id of this.selectedCellIds) {
-      if (!next.has(id)) this.cellSource.getFeatureById(id)?.set("selected", false, true);
+      if (!next.has(id)) this.getCellFeature(id)?.set("selected", false, true);
     }
     for (const id of next) {
-      if (!this.selectedCellIds.has(id)) this.cellSource.getFeatureById(id)?.set("selected", true, true);
+      if (!this.selectedCellIds.has(id)) this.getCellFeature(id)?.set("selected", true, true);
     }
     this.selectedCellIds = next;
     this.cellLayer.changed();
   }
 
   setCellAttributes(attributes: readonly CellAttributeSnapshot[]): void {
-    if (attributes.length === 0 && !this.cellsReady) return;
-    this.ensureCells();
     const byCell = new globalThis.Map<string, CellAttributeSnapshot[]>();
     for (const attribute of attributes) {
+      if (parseCellId(attribute.cellId) === null) continue;
       const current = byCell.get(attribute.cellId) ?? [];
       current.push(attribute);
       byCell.set(attribute.cellId, current);
     }
-    for (const feature of this.cellSource.getFeatures()) {
-      const id = feature.getId();
-      feature.set("attributes", typeof id === "string" ? (byCell.get(id) ?? []) : [], true);
+    this.ensureCells(byCell.keys());
+    const changedIds = new Set([...this.cellAttributesById.keys(), ...byCell.keys()]);
+    for (const id of changedIds) {
+      const next = byCell.get(id) ?? [];
+      const feature = this.getCellFeature(id);
+      if (feature) feature.set("attributes", next, true);
     }
+    this.cellAttributesById = byCell;
     this.cellLayer.changed();
   }
 
@@ -562,6 +446,20 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this.draw) {
+      this.map.removeInteraction(this.draw);
+      this.draw.dispose();
+      this.draw = null;
+    }
+    if (this.brush) {
+      this.map.removeInteraction(this.brush);
+      this.brush.dispose();
+      this.brush = null;
+    }
+    this.selection.un("select", this.handleSelection);
+    this.modify.un("modifyend", this.handleModify);
     this.drawListeners.clear();
     this.selectListeners.clear();
     this.cellSelectListeners.clear();
@@ -569,6 +467,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.map.getViewport().removeEventListener("pointercancel", this.handlePointerCancel);
     this.map.getViewport().removeEventListener("lostpointercapture", this.handlePointerCancel);
     this.modifyListeners.clear();
+    this.selection.getFeatures().clear();
+    this.featureSource.clear();
+    this.cellSource.clear();
+    this.cellFeatures.clear();
+    this.cellAttributesById.clear();
+    this.selectedCellIds.clear();
     this.map.setTarget(undefined);
     this.map.dispose();
   }
