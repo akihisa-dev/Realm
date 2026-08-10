@@ -1,24 +1,8 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { RealmMapRenderer } from "../map/MapAdapter";
-import { MapCanvas, MapZoomControls } from "./MapCanvas";
+import { MapCanvas } from "./MapCanvas";
 
-describe("MapZoomControls", () => {
-  it("reports the scale and clamps zoom actions at both boundaries", () => {
-    const onChange = vi.fn();
-    const { rerender } = render(<MapZoomControls zoom={1} onChange={onChange} />);
-    expect(screen.getByRole("group", { name: "地図のズーム" })).toBeInTheDocument();
-    expect(screen.getByText("100%")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "縮小" }));
-    fireEvent.click(screen.getByRole("button", { name: "拡大" }));
-    expect(onChange).toHaveBeenNthCalledWith(1, 0);
-    expect(onChange).toHaveBeenNthCalledWith(2, 2);
-
-    rerender(<MapZoomControls zoom={0} onChange={onChange} />);
-    expect(screen.getByRole("button", { name: "縮小" })).toBeDisabled();
-    rerender(<MapZoomControls zoom={8} onChange={onChange} />);
-    expect(screen.getByRole("button", { name: "拡大" })).toBeDisabled();
-  });
-
+describe("MapCanvas", () => {
   it("drives the canvas only through the replaceable renderer contract", () => {
     let zoom = 1;
     let zoomListener: ((nextZoom: number) => void) | null = null;
@@ -74,14 +58,10 @@ describe("MapZoomControls", () => {
     expect(renderer.setThemeOverrides).toHaveBeenCalledWith({});
     expect(renderer.setGridOptions).toHaveBeenCalledWith({ kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 });
     expect(renderer.setDrawingOptions).toHaveBeenCalledWith({ gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null });
-    expect(screen.getByRole("group", { name: "現在の地図操作" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "地図を移動" }));
-    expect(screen.getByRole("region", { name: "世界地図" })).toHaveFocus();
+    expect(screen.queryByRole("group", { name: "現在の地図操作" })).not.toBeInTheDocument();
     (drawListener as ((geometry: never) => void) | null)?.({} as never);
     (selectFeaturesListener as ((ids: readonly string[]) => void) | null)?.([]);
     (modifyFeaturesListener as ((changes: readonly { id: string; geometry: never }[]) => void) | null)?.([{ id: "id", geometry: {} as never }]);
-    fireEvent.click(screen.getByRole("button", { name: "表示を中央に戻す" }));
-    expect(renderer.resetView).toHaveBeenCalledOnce();
     act(() => { zoomListener?.(4); });
     expect(onZoomChange).toHaveBeenLastCalledWith(4);
 

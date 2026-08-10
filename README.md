@@ -12,7 +12,7 @@ Realm uses one SQLite database per world inside its app-managed library. Each da
 - project-local canvas, palette, grid, and export settings;
 - compatibility rows from older Realm versions, which are preserved but are not shown or edited by the terrain-only editor.
 
-The database remains local. Normal terrain editing is automatically saved without asking the user to manage a project file. A terrain map can be exported as PNG, JPEG, or PDF, while a dedicated `.realmmap` transfer export carries editable data to another Mac. Realm does not generate geography, create settlements or political objects, synchronize to a cloud service, or require a hosted account.
+The database remains local. Terrain edits are automatically saved without asking the user to manage a project file. The open editor is intentionally limited to move, draw, erase, undo, and redo; transfer import remains available from the startup screen. Realm does not generate geography, create settlements or political objects, synchronize to a cloud service, or require a hosted account.
 
 ## Platform and stack
 
@@ -53,6 +53,6 @@ Security reports must not contain secrets or exploit details in a public issue. 
 
 ## Japanese
 
-Realmは、Apple Silicon搭載macOS向けのローカル地形描画アプリです。扱う編集対象は手動で描く地形ポリゴンだけです。地形はアプリ内ライブラリへ自動保存し、成果物はPNG・JPEG・PDF、別Macへの移行は専用`.realmmap`データとして書き出します。森林、水系、道路、政治領域、集落、記号、ラベル、地理の自動生成、クラウド同期は編集機能として提供しません。
+Realmは、Apple Silicon搭載macOS向けのローカル地形描画アプリです。扱う編集対象は手動で描く地形ポリゴンだけです。編集画面は移動・描画・消去・戻す・進むに限定し、地形はアプリ内ライブラリへ自動保存します。森林、水系、道路、政治領域、集落、記号、ラベル、地理の自動生成、クラウド同期は編集機能として提供しません。
 
 詳細な正本は[文書索引](docs/INDEX.md)から参照してください。Realmはowner-ledで運用し、AGPL-3.0-or-laterで公開します。

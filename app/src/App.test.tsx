@@ -5,18 +5,23 @@ import App from "./App";
 const emptySnapshot: RealmSnapshot = { formatVersion: 7, path: "browser://test.realmmap", world: { id: "world-test", name: "テスト世界" }, features: [], assets: [], settings: { themeId: "ink", showGrid: true, exportScale: 2, exportExtent: "world", canvasWidth: 2048, canvasHeight: 1024, gridKind: "graticule", gridColor: "#687784", gridWidth: 1, gridSpacing: 10, themeOverrides: {} }, featureCount: 0, canUndo: false, canRedo: false };
 
 describe("Realm library workflow", () => {
-  it("creates and reopens a world", async () => {
+  it("creates a world and opens the terrain editor", async () => {
     const backend = new MemoryRealmBackend(); render(<App backend={backend} />);
     const create = await screen.findByRole("button", { name: "新しい世界を作成" }); await waitFor(() => expect(create).toBeEnabled()); fireEvent.click(create);
-    expect(await screen.findByRole("textbox", { name: "世界の名前" })).toHaveValue("無題の世界");
-    fireEvent.click(screen.getByRole("button", { name: "ライブラリ" }));
-    expect(await screen.findByRole("button", { name: /無題の世界/u })).toBeInTheDocument();
+    expect(await screen.findByRole("main", { name: "Realm地形編集画面" })).toBeInTheDocument();
+    expect((await backend.getOpenProject())?.world.name).toBe("無題の世界");
   });
-  it("opens and imports library projects", async () => {
+  it("opens a library project", async () => {
+    const backend = new MemoryRealmBackend([emptySnapshot]); render(<App backend={backend} />);
+    fireEvent.click(await screen.findByRole("button", { name: /テスト世界/u }));
+    expect(await screen.findByRole("main", { name: "Realm地形編集画面" })).toBeInTheDocument();
+    expect((await backend.getOpenProject())?.world.name).toBe("テスト世界");
+  });
+
+  it("imports a transfer project from the startup screen", async () => {
     const backend = new MemoryRealmBackend([emptySnapshot]); render(<App backend={backend} chooseTransfer={async () => emptySnapshot.path} />);
-    fireEvent.click(await screen.findByRole("button", { name: /テスト世界/u })); expect(await screen.findByRole("textbox", { name: "世界の名前" })).toHaveValue("テスト世界");
-    fireEvent.click(screen.getByRole("button", { name: "ライブラリ" })); fireEvent.click(await screen.findByRole("button", { name: "移行データを読み込む" }));
-    expect(await screen.findByRole("textbox", { name: "世界の名前" })).toHaveValue("テスト世界");
+    fireEvent.click(await screen.findByRole("button", { name: "移行データを読み込む" }));
+    expect(await screen.findByRole("main", { name: "Realm地形編集画面" })).toBeInTheDocument();
   });
 
   it("handles create/import/export cancellation and failures", async () => {
@@ -35,21 +40,8 @@ describe("Realm library workflow", () => {
     resolveOpen?.(null); await waitFor(() => expect(screen.getByRole("button", { name: "新しい世界を作成" })).toBeEnabled());
   });
 
-  it("surfaces initial library and close errors", async () => {
+  it("surfaces initial library errors", async () => {
     const backend = new MemoryRealmBackend(); backend.listProjects = async () => { throw new Error("ライブラリ失敗"); };
     render(<App backend={backend} />); expect(await screen.findByRole("alert")).toHaveTextContent("ライブラリ失敗"); cleanup();
-    const working = new MemoryRealmBackend(); render(<App backend={working} />);
-    fireEvent.click(await screen.findByRole("button", { name: "新しい世界を作成" }));
-    working.closeProject = async () => { throw new Error("終了失敗"); };
-    fireEvent.click(await screen.findByRole("button", { name: "ライブラリ" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("終了失敗");
-  });
-
-  it("exports transfer data and returns to library successfully", async () => {
-    const backend = new MemoryRealmBackend(); const exportProject = vi.spyOn(backend, "exportProject");
-    render(<App backend={backend} chooseTransfer={async (mode) => mode === "export" ? "/tmp/world.realmmap" : null} />);
-    fireEvent.click(await screen.findByRole("button", { name: "新しい世界を作成" }));
-    fireEvent.click(await screen.findByRole("button", { name: "移行データ" })); await waitFor(() => expect(exportProject).toHaveBeenCalledWith({ path: "/tmp/world.realmmap" }));
-    fireEvent.click(screen.getByRole("button", { name: "ライブラリ" })); expect(await screen.findByRole("button", { name: /無題の世界/u })).toBeInTheDocument();
   });
 });

@@ -26,9 +26,9 @@
     "component": {
       "type": "application",
       "name": "Realm",
-      "version": "0.12.2",
-      "purl": "pkg:generic/realm@0.12.2",
-      "bom-ref": "pkg:generic/realm@0.12.2",
+      "version": "0.12.3",
+      "purl": "pkg:generic/realm@0.12.3",
+      "bom-ref": "pkg:generic/realm@0.12.3",
       "licenses": [
         {
           "license": {
@@ -2024,9 +2024,9 @@
     {
       "type": "application",
       "name": "realm-app",
-      "version": "0.12.2",
-      "purl": "pkg:cargo/realm-app@0.12.2",
-      "bom-ref": "pkg:cargo/realm-app@0.12.2",
+      "version": "0.12.3",
+      "purl": "pkg:cargo/realm-app@0.12.3",
+      "bom-ref": "pkg:cargo/realm-app@0.12.3",
       "licenses": [
         {
           "expression": "AGPL-3.0-or-later"
@@ -3912,9 +3912,9 @@
     {
       "type": "library",
       "name": "realm",
-      "version": "0.12.2",
-      "purl": "pkg:npm/realm@0.12.2",
-      "bom-ref": "pkg:npm/realm@0.12.2",
+      "version": "0.12.3",
+      "purl": "pkg:npm/realm@0.12.3",
+      "bom-ref": "pkg:npm/realm@0.12.3",
       "licenses": [
         {
           "license": {
@@ -5093,7 +5093,7 @@
       "dependsOn": []
     },
     {
-      "ref": "pkg:cargo/realm-app@0.12.2",
+      "ref": "pkg:cargo/realm-app@0.12.3",
       "dependsOn": [
         "pkg:cargo/libc@0.2.189",
         "pkg:cargo/rusqlite@0.38.0",
@@ -6017,10 +6017,10 @@
       "dependsOn": []
     },
     {
-      "ref": "pkg:generic/realm@0.12.2",
+      "ref": "pkg:generic/realm@0.12.3",
       "dependsOn": [
-        "pkg:cargo/realm-app@0.12.2",
-        "pkg:npm/realm@0.12.2"
+        "pkg:cargo/realm-app@0.12.3",
+        "pkg:npm/realm@0.12.3"
       ]
     },
     {
@@ -6135,7 +6135,7 @@
       "dependsOn": []
     },
     {
-      "ref": "pkg:npm/realm@0.12.2",
+      "ref": "pkg:npm/realm@0.12.3",
       "dependsOn": [
         "pkg:npm/%40phosphor-icons/react@2.1.10",
         "pkg:npm/%40tauri-apps/api@2.11.1",

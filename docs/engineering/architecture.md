@@ -23,7 +23,7 @@ Rust command boundary ── validation ── current-state service
 - React owns transient terrain selection, viewport, tool mode, and form drafts awaiting the short automatic-save debounce.
 - OpenLayers owns only rendering and interaction objects derived from terrain rows in the current snapshot; map objects are not an additional source of truth. Completed terrain draw and modify gestures cross the renderer boundary as GeoJSON polygon geometry.
 
-The active editor uses the coarse IPC surface to list, create, open, save, close, import, and export library worlds; write validated PNG/JPEG/PDF artifact bytes; read the current project snapshot; update bounded canvas, palette, grid, and export settings; create, revise, delete, lock, or batch-mutate terrain; and perform undo or redo. Automatic save replaces the editable world name in one Rust transaction. Terrain commands accept complete validated GeoJSON polygon geometry. Older non-terrain, asset, and cell rows and commands remain internal compatibility support only and have no editor entry.
+The active editor reads the current project snapshot; creates, revises, deletes, or batch-mutates terrain; and performs undo or redo. Startup uses the coarse IPC surface to list, create, open, and import library worlds. File export, project-name editing, presentation settings, older non-terrain, asset, and cell commands remain compatibility infrastructure without an active editor entry. Terrain commands accept complete validated GeoJSON polygon geometry.
 
 Tauri imports are isolated in `app/src/backend/tauriRealmBackend.ts`. The browser-only memory backend implements the same interface for deterministic UI tests without pretending to be a second persistence format.
 

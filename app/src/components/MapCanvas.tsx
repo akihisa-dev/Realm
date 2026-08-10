@@ -6,10 +6,6 @@ import {
   type RealmMapRenderer,
   type RealmMapRendererFactory,
 } from "../map/MapAdapter";
-import { Crosshair } from "@phosphor-icons/react/dist/csr/Crosshair";
-import { Hand } from "@phosphor-icons/react/dist/csr/Hand";
-import { Minus } from "@phosphor-icons/react/dist/csr/Minus";
-import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
 import type { GeoJsonGeometry, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { ExportCanvasSize } from "../map/contracts";
@@ -176,37 +172,6 @@ export function MapCanvas({
       <p id="map-help" className="sr-only">{mapHelp}</p>
       <div ref={hostRef} className={mode === "pan" ? "map-canvas" : "map-canvas map-canvas-draw"} role="region" tabIndex={0} aria-label="世界地図" aria-describedby="map-help" />
       <span className={`map-texture map-texture-${themeId}`} aria-hidden="true" />
-      <div className="map-tools" role="group" aria-label="現在の地図操作">
-        <button
-          className={mode === "pan" ? "map-tool map-tool-active" : "map-tool"}
-          type="button"
-          aria-label="地図を移動"
-          aria-pressed={mode === "pan"}
-          onClick={() => hostRef.current?.focus()}
-        >
-          <Hand aria-hidden="true" size={22} weight="regular" />
-        </button>
-        <button className="map-tool" type="button" aria-label="表示を中央に戻す" onClick={() => {
-          adapterRef.current?.resetView();
-        }}>
-          <Crosshair aria-hidden="true" size={21} weight="regular" />
-        </button>
-      </div>
     </>
-  );
-}
-
-export function MapZoomControls({ zoom, onChange }: { zoom: number; onChange: (zoom: number) => void }) {
-  const percentage = `${Math.round(Math.pow(2, zoom - 1) * 100)}%`;
-  return (
-    <div className="zoom-controls" role="group" aria-label="地図のズーム">
-      <button type="button" aria-label="縮小" onClick={() => onChange(Math.max(0, zoom - 1))} disabled={zoom <= 0}>
-        <Minus aria-hidden="true" size={16} weight="regular" />
-      </button>
-      <span aria-live="polite">{percentage}</span>
-      <button type="button" aria-label="拡大" onClick={() => onChange(Math.min(8, zoom + 1))} disabled={zoom >= 8}>
-        <Plus aria-hidden="true" size={16} weight="regular" />
-      </button>
-    </div>
   );
 }
