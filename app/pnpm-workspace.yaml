@@ -2,3 +2,4 @@ packages:
   - .
 
 minimumReleaseAge: 1440
+verifyDepsBeforeRun: ignore

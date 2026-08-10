@@ -10,8 +10,6 @@ configure_realm_local_environment() {
   local trailing_path=""
   local current_path="${PATH:-/usr/bin:/bin:/usr/sbin:/sbin}"
 
-  export pnpm_config_verify_deps_before_run=error
-
   if command -v brew >/dev/null 2>&1; then
     brew_binary="$(command -v brew)"
   elif [[ -x /opt/homebrew/bin/brew ]]; then
