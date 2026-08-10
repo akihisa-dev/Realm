@@ -47,6 +47,9 @@ describe("RealmMapAdapter", () => {
     // Keep labels inset at the top/left so coordinate text remains readable.
     expect((graticule as unknown as { lonLabelPosition_: number }).lonLabelPosition_).toBeCloseTo(0.96);
     expect((graticule as unknown as { latLabelPosition_: number }).latLabelPosition_).toBeCloseTo(0.035);
+    adapter.setGridVisible(false);
+    expect(graticule.getVisible()).toBe(false);
+    adapter.setGridVisible(true);
     const referenceAxes = adapter.getMap().getLayers().item(1);
     expect(referenceAxes).toBeInstanceOf(VectorLayer);
     expect((referenceAxes as VectorLayer).getSource()?.getFeatures()).toHaveLength(2);
@@ -72,6 +75,24 @@ describe("RealmMapAdapter", () => {
       return style as Style;
     };
     expect(featureSource?.getFeatures()).toHaveLength(9);
+    const retainedCity = featureSource?.getFeatureById("city-1");
+    adapter.setFeatures([
+      { id: "city-1", featureType: "city", name: "Renamed", geometry: { type: "Point", coordinates: [13, 35] }, properties: { zIndex: 1 } },
+    ]);
+    expect(featureSource?.getFeatures()).toHaveLength(1);
+    expect(featureSource?.getFeatureById("city-1")).toBe(retainedCity);
+    expect(featureSource?.getFeatureById("city-1")?.get("name")).toBe("Renamed");
+    adapter.setFeatures([
+      { id: "city-1", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [12, 34] } },
+      { id: "river-1", featureType: "river", name: "River", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
+      { id: "terrain-1", featureType: "terrain", name: "Land", geometry: { type: "Polygon", coordinates: [[[-2, -2], [2, -2], [2, 2], [-2, -2]]] } },
+      { id: "country-1", featureType: "country", name: "Country", geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } },
+      { id: "region-1", featureType: "region", name: "Region", geometry: { type: "Polygon", coordinates: [[[0, 0], [0.5, 0], [0.5, 0.5], [0, 0]]] } },
+      { id: "forest-1", featureType: "forest", name: "Forest", geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } },
+      { id: "coast-1", featureType: "coastline", name: "Coast", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
+      { id: "boundary-1", featureType: "boundary", name: "Boundary", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
+      { id: "town-1", featureType: "town", name: "Town", geometry: { type: "Point", coordinates: [1, 1] } },
+    ]);
     const terrainStyle = styleFor("terrain-1");
     const countryStyle = styleFor("country-1");
     const regionStyle = styleFor("region-1");
@@ -91,6 +112,11 @@ describe("RealmMapAdapter", () => {
     const riverDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
     expect(riverDraw).toBeInstanceOf(Draw);
     expect((riverDraw as Draw).getFreehand()).toBe(true);
+    host.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", bubbles: true }));
+    expect(adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof DragPan)?.getActive()).toBe(true);
+    expect((riverDraw as Draw).getActive()).toBe(false);
+    host.dispatchEvent(new KeyboardEvent("keyup", { code: "Space", bubbles: true }));
+    expect((riverDraw as Draw).getActive()).toBe(true);
     adapter.setMode("terrain");
     const terrainDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
     expect(terrainDraw).toBeInstanceOf(Draw);
@@ -103,6 +129,7 @@ describe("RealmMapAdapter", () => {
     const cityDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
     expect(cityDraw).toBeInstanceOf(Draw);
     expect((cityDraw as Draw).getFreehand()).toBe(false);
+    expect(host.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }))).toBe(false);
     adapter.setMode("pan");
     expect(adapter.getMap().getInteractions().getArray().some((interaction) => interaction instanceof Draw)).toBe(false);
     const interactions = adapter.getMap().getInteractions().getArray();
@@ -114,16 +141,20 @@ describe("RealmMapAdapter", () => {
     adapter.setMode("cell-select");
     const cellLayer = adapter.getMap().getLayers().item(3) as VectorLayer;
     expect(cellLayer.getVisible()).toBe(true);
-    expect(cellLayer.getSource()?.getFeatures()).toHaveLength(CELL_GRID_CELL_COUNT);
+    expect(cellLayer.getSource()?.getFeatures()).toHaveLength(1);
     adapter.setCellAttributes([
       { cellId: "1:0", attribute: "forest", value: "forest" },
       { cellId: "3:0", attribute: "country", value: "A" },
       { cellId: "4:0", attribute: "region", value: "B" },
     ]);
+    expect(cellLayer.getSource()?.getFeatures().length).toBeLessThan(CELL_GRID_CELL_COUNT);
     const cellStyleFunction = cellLayer.getStyleFunction();
     const forestCell = cellLayer.getSource()?.getFeatureById("1:0");
     const forestStyle = (cellStyleFunction?.(forestCell!, 1) as Style[])[0]!;
-    expect((forestStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#3f7c55");
+    expect((forestStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#426a45");
+    adapter.setTheme("midnight");
+    expect(host.dataset.mapTheme).toBe("midnight");
+    expect(host.style.background).not.toBe("");
     const cellBrush = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof PointerInteraction && !(interaction instanceof DragPan));
     expect(cellBrush).toBeInstanceOf(PointerInteraction);
     expect(interactions.find((interaction) => interaction instanceof DragPan)?.getActive()).toBe(false);
@@ -138,13 +169,15 @@ describe("RealmMapAdapter", () => {
     adapter.setMode("pan");
     expect(cellLayer.getVisible()).toBe(true);
     const emptyCell = cellLayer.getSource()?.getFeatureById("10:10");
-    expect(cellStyleFunction?.(emptyCell!, 1)).toBeUndefined();
+    expect(emptyCell).toBeNull();
     adapter.setZoom(3);
     expect(adapter.getZoom()).toBe(3);
     adapter.setZoom(99);
     expect(adapter.getZoom()).toBe(8);
     adapter.setZoom(-99);
     expect(adapter.getZoom()).toBe(0);
+    host.dispatchEvent(new KeyboardEvent("keydown", { key: "1", ctrlKey: true, bubbles: true }));
+    expect(adapter.getZoom()).toBe(1);
     adapter.setCellBrushRadius(Number.NaN);
     adapter.setCellBrushRadius(999);
     adapter.setSelected("missing");

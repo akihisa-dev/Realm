@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::storage::schema::validate_existing_schema;
+use crate::storage::schema::validate_existing_schema_for_preflight;
 use rusqlite::{Connection, OpenFlags};
 use std::{
     fs,
@@ -113,7 +113,7 @@ pub(crate) fn preflight_existing_project(path: &Path) -> Result<(PathBuf, i32), 
             | OpenFlags::SQLITE_OPEN_NOFOLLOW,
     )
     .map_err(AppError::from)?;
-    validate_existing_schema(&read_only)?;
+    let version = validate_existing_schema_for_preflight(&read_only)?;
     let world_count: i64 = read_only
         .query_row("SELECT COUNT(*) FROM world", [], |row| row.get(0))
         .map_err(AppError::from)?;
@@ -123,8 +123,5 @@ pub(crate) fn preflight_existing_project(path: &Path) -> Result<(PathBuf, i32), 
             "The project must contain exactly one world record.",
         ));
     }
-    let version: i32 = read_only
-        .pragma_query_value(None, "user_version", |row| row.get(0))
-        .map_err(AppError::from)?;
     Ok((path, version))
 }

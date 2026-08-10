@@ -31,6 +31,10 @@ describe("MapZoomControls", () => {
       setZoom: vi.fn((nextZoom) => { zoom = nextZoom; }),
       resetView: vi.fn(),
       setFeatures: vi.fn(),
+      setTheme: vi.fn(),
+      setGridVisible: vi.fn(),
+      setAssets: vi.fn(),
+      setLayerVisibility: vi.fn(),
       setMode: vi.fn(),
       setCellBrushRadius: vi.fn(),
       setSelected: vi.fn(),
@@ -40,6 +44,8 @@ describe("MapZoomControls", () => {
       onSelect: vi.fn((listener) => { selectListener = listener; return vi.fn(); }),
       onCellSelect: vi.fn((listener) => { cellListener = listener; return vi.fn(); }),
       onModify: vi.fn((listener) => { modifyListener = listener as typeof modifyListener; return vi.fn(); }),
+      onErase: vi.fn(() => vi.fn()),
+      onError: vi.fn(() => vi.fn()),
       onZoomChange: vi.fn((listener) => {
         zoomListener = listener;
         return vi.fn();
@@ -57,6 +63,7 @@ describe("MapZoomControls", () => {
     expect(createRenderer).toHaveBeenCalledOnce();
     expect(renderer.setZoom).toHaveBeenCalledWith(3);
     expect(onZoomChange).toHaveBeenLastCalledWith(3);
+    expect(renderer.setGridVisible).toHaveBeenCalledWith(true);
     expect(screen.getByRole("group", { name: "現在の地図操作" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "地図を移動" }));
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveFocus();
@@ -71,9 +78,11 @@ describe("MapZoomControls", () => {
 
     rerender(<MapCanvas zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setZoom).toHaveBeenLastCalledWith(5);
+    rerender(<MapCanvas showGrid={false} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(renderer.setGridVisible).toHaveBeenLastCalledWith(false);
 
     rerender(<MapCanvas mode="river" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("地図上でマウスまたはトラックパッドを押したままドラッグし、線または領域を描きます。")).toBeInTheDocument();
+    expect(screen.getByText("地図上で押したまま線または領域を描きます。続けて複数の地物を描けます。Escapeで描画中の線を取り消せます。")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
     expect(renderer.setMode).toHaveBeenLastCalledWith("river");
 

@@ -3,7 +3,9 @@ use crate::state::OpenProject;
 use crate::storage::atomic::{publish_new_project, remove_unpublished_project};
 use crate::storage::path::{path_with_canonical_parent, preflight_existing_project};
 use crate::storage::schema::{
-    configure_connection, initialize_new_schema, validate_existing_schema,
+    PREVIOUS_SCHEMA_VERSION, SCHEMA_VERSION_V3, SCHEMA_VERSION_V4, configure_connection,
+    initialize_new_schema, migrate_v3_to_v6, migrate_v4_to_v6, migrate_v5_to_v6,
+    validate_existing_schema,
 };
 use rusqlite::{Connection, OpenFlags};
 use std::{
@@ -14,8 +16,8 @@ use std::{
 use uuid::Uuid;
 
 pub(crate) fn open_connection(path: &Path) -> Result<Connection, AppError> {
-    let (path, _) = preflight_existing_project(path)?;
-    let connection = Connection::open_with_flags(
+    let (path, version) = preflight_existing_project(path)?;
+    let mut connection = Connection::open_with_flags(
         &path,
         OpenFlags::SQLITE_OPEN_READ_WRITE
             | OpenFlags::SQLITE_OPEN_NO_MUTEX
@@ -23,6 +25,14 @@ pub(crate) fn open_connection(path: &Path) -> Result<Connection, AppError> {
     )
     .map_err(AppError::from)?;
     configure_connection(&connection)?;
+    match version {
+        SCHEMA_VERSION_V3 => {
+            migrate_v3_to_v6(&mut connection)?;
+        }
+        SCHEMA_VERSION_V4 => migrate_v4_to_v6(&mut connection)?,
+        PREVIOUS_SCHEMA_VERSION => migrate_v5_to_v6(&mut connection)?,
+        _ => {}
+    }
     validate_existing_schema(&connection)?;
     Ok(connection)
 }

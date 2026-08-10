@@ -22,6 +22,15 @@ pub enum FeatureType {
     Boundary,
     City,
     Town,
+    Road,
+    Lake,
+    Mountain,
+    Tree,
+    Symbol,
+    Label,
+    Overlay,
+    Frame,
+    Scale,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -62,6 +71,15 @@ impl FeatureType {
             Self::Boundary => "boundary",
             Self::City => "city",
             Self::Town => "town",
+            Self::Road => "road",
+            Self::Lake => "lake",
+            Self::Mountain => "mountain",
+            Self::Tree => "tree",
+            Self::Symbol => "symbol",
+            Self::Label => "label",
+            Self::Overlay => "overlay",
+            Self::Frame => "frame",
+            Self::Scale => "scale",
         }
     }
     pub(crate) fn from_storage(value: &str) -> Result<Self, AppError> {
@@ -75,14 +93,35 @@ impl FeatureType {
             "boundary" => Ok(Self::Boundary),
             "city" => Ok(Self::City),
             "town" => Ok(Self::Town),
+            "road" => Ok(Self::Road),
+            "lake" => Ok(Self::Lake),
+            "mountain" => Ok(Self::Mountain),
+            "tree" => Ok(Self::Tree),
+            "symbol" => Ok(Self::Symbol),
+            "label" => Ok(Self::Label),
+            "overlay" => Ok(Self::Overlay),
+            "frame" => Ok(Self::Frame),
+            "scale" => Ok(Self::Scale),
             _ => Err(corrupt_schema()),
         }
     }
     pub(crate) fn geometry_type(self) -> &'static str {
         match self {
-            Self::City | Self::Town => "Point",
-            Self::River | Self::Coastline | Self::Boundary => "LineString",
-            Self::Terrain | Self::Forest | Self::Country | Self::Region => "Polygon",
+            Self::City
+            | Self::Town
+            | Self::Mountain
+            | Self::Tree
+            | Self::Symbol
+            | Self::Label
+            | Self::Scale => "Point",
+            Self::River | Self::Coastline | Self::Boundary | Self::Road => "LineString",
+            Self::Terrain
+            | Self::Forest
+            | Self::Country
+            | Self::Region
+            | Self::Lake
+            | Self::Overlay
+            | Self::Frame => "Polygon",
         }
     }
 }
@@ -94,6 +133,7 @@ pub struct FeatureSnapshot {
     pub feature_type: FeatureType,
     pub name: String,
     pub geometry: Value,
+    pub properties: Value,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -102,10 +142,31 @@ pub struct ProjectSnapshot {
     pub format_version: i32,
     pub path: String,
     pub world: WorldSnapshot,
+    pub settings: Value,
     pub features: Vec<FeatureSnapshot>,
+    pub assets: Vec<AssetManifest>,
     pub feature_count: i64,
     pub can_undo: bool,
     pub can_redo: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetManifest {
+    pub id: String,
+    pub sha256: String,
+    pub mime: String,
+    pub byte_length: i64,
+    pub width: u32,
+    pub height: u32,
+    pub metadata: Value,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetRead {
+    pub manifest: AssetManifest,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -148,10 +209,42 @@ pub struct SaveProjectInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateProjectSettingsInput {
+    pub settings: Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateFeatureInput {
     pub feature_type: FeatureType,
     pub name: String,
     pub geometry: Value,
+    #[serde(default = "empty_properties")]
+    pub properties: Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateFeaturesBatchInput {
+    pub features: Vec<CreateFeatureInput>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportAssetInput {
+    pub sha256: Option<String>,
+    pub mime: String,
+    pub bytes: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+    #[serde(default = "empty_properties")]
+    pub metadata: Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetIdInput {
+    pub id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -160,10 +253,16 @@ pub struct ReviseFeatureInput {
     pub id: String,
     pub name: String,
     pub geometry: Value,
+    #[serde(default = "empty_properties")]
+    pub properties: Value,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteFeatureInput {
     pub id: String,
+}
+
+fn empty_properties() -> Value {
+    Value::Object(serde_json::Map::new())
 }

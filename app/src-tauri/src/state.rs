@@ -24,6 +24,25 @@ pub(crate) struct CellEditChange {
 pub(crate) struct FeatureState {
     pub(crate) name: String,
     pub(crate) geometry_json: String,
+    pub(crate) properties_json: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct AssetState {
+    pub(crate) sha256: String,
+    pub(crate) mime: String,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) metadata_json: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct FeatureEdit {
+    pub(crate) feature_id: String,
+    pub(crate) feature_type: FeatureType,
+    pub(crate) before: Option<FeatureState>,
+    pub(crate) after: Option<FeatureState>,
 }
 
 #[derive(Debug, Clone)]
@@ -32,11 +51,23 @@ pub(crate) enum EditOperation {
         before: String,
         after: String,
     },
+    Settings {
+        before: String,
+        after: String,
+    },
     Feature {
         feature_id: String,
         feature_type: FeatureType,
         before: Option<FeatureState>,
         after: Option<FeatureState>,
+    },
+    FeatureBatch {
+        changes: Vec<FeatureEdit>,
+    },
+    Asset {
+        asset_id: String,
+        before: Option<AssetState>,
+        after: Option<AssetState>,
     },
     CellAttributes {
         changes: Vec<CellEditChange>,

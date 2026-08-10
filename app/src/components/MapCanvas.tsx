@@ -9,8 +9,9 @@ import { Crosshair } from "@phosphor-icons/react/dist/csr/Crosshair";
 import { Hand } from "@phosphor-icons/react/dist/csr/Hand";
 import { Minus } from "@phosphor-icons/react/dist/csr/Minus";
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
-import type { CellAttributeSnapshot, GeoJsonGeometry, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, FeatureType, GeoJsonGeometry, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
+import { DEFAULT_MAP_THEME_ID, type MapThemeId } from "../map/themes";
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;
@@ -21,12 +22,18 @@ type MapCanvasProps = {
   selectedCellIds?: readonly string[];
   cellAttributes?: readonly CellAttributeSnapshot[];
   cellBrushRadius?: number;
+  themeId?: MapThemeId;
+  showGrid?: boolean;
+  assetUrls?: Readonly<Record<string, string>>;
+  layerVisibility?: Partial<Record<FeatureType, boolean>>;
   onDraw?: (geometry: GeoJsonGeometry) => void;
   onSelect?: (featureId: string | null) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
   onModify?: (featureId: string, geometry: GeoJsonGeometry) => void;
+  onErase?: (featureId: string) => void;
+  onError?: (message: string) => void;
   createRenderer?: RealmMapRendererFactory;
-  onExporterReady?: (exporter: ((mimeType: "image/png" | "image/jpeg") => Promise<MapRaster>) | null) => void;
+  onExporterReady?: (exporter: ((mimeType: "image/png" | "image/jpeg", scale?: number, extent?: "viewport" | "world") => Promise<MapRaster>) | null) => void;
 };
 
 export function MapCanvas({
@@ -38,10 +45,16 @@ export function MapCanvas({
   selectedCellIds = [],
   cellAttributes = [],
   cellBrushRadius = 2,
+  themeId = DEFAULT_MAP_THEME_ID,
+  showGrid = true,
+  assetUrls = {},
+  layerVisibility = {},
   onDraw,
   onSelect,
   onCellSelect,
   onModify,
+  onErase,
+  onError,
   createRenderer = createRealmMapRenderer,
   onExporterReady,
 }: MapCanvasProps) {
@@ -52,14 +65,18 @@ export function MapCanvas({
   const onSelectRef = useRef(onSelect);
   const onCellSelectRef = useRef(onCellSelect);
   const onModifyRef = useRef(onModify);
+  const onEraseRef = useRef(onErase);
+  const onErrorRef = useRef(onError);
   const onExporterReadyRef = useRef(onExporterReady);
   const mapHelp = mode === "pan"
     ? "ドラッグまたは矢印キーで移動し、ホイールまたはプラス・マイナスキーで拡大縮小できます。"
+    : mode === "erase"
+      ? "消したい地物をクリックします。削除した地物は元に戻す操作で復元できます。"
     : mode === "cell-select"
       ? "地図上で押したまま筆のように塗り、通過したセルへ属性を付けます。クリックでも円形に塗れます。Escapeで選択を解除できます。"
-      : mode === "city" || mode === "town"
+      : mode === "city" || mode === "town" || mode === "mountain" || mode === "tree" || mode === "symbol" || mode === "label" || mode === "scale"
       ? "地図上をクリックして点を配置します。"
-      : "地図上でマウスまたはトラックパッドを押したままドラッグし、線または領域を描きます。";
+      : "地図上で押したまま線または領域を描きます。続けて複数の地物を描けます。Escapeで描画中の線を取り消せます。";
 
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;
@@ -69,6 +86,8 @@ export function MapCanvas({
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
   useEffect(() => { onCellSelectRef.current = onCellSelect; }, [onCellSelect]);
   useEffect(() => { onModifyRef.current = onModify; }, [onModify]);
+  useEffect(() => { onEraseRef.current = onErase; }, [onErase]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
   useEffect(() => { onExporterReadyRef.current = onExporterReady; }, [onExporterReady]);
 
   useEffect(() => {
@@ -77,6 +96,14 @@ export function MapCanvas({
   }, [zoom]);
 
   useEffect(() => { adapterRef.current?.setFeatures(features); }, [features]);
+  useEffect(() => { adapterRef.current?.setTheme(themeId); }, [themeId]);
+  useEffect(() => { adapterRef.current?.setGridVisible(showGrid); }, [showGrid]);
+  useEffect(() => { adapterRef.current?.setAssets(assetUrls); }, [assetUrls]);
+  useEffect(() => {
+    for (const [featureType, visible] of Object.entries(layerVisibility)) {
+      adapterRef.current?.setLayerVisibility(featureType as FeatureType, visible !== false);
+    }
+  }, [layerVisibility]);
   useEffect(() => { adapterRef.current?.setMode(mode); }, [mode]);
   useEffect(() => { adapterRef.current?.setSelected(selectedFeatureId); }, [selectedFeatureId]);
   useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [selectedCellIds]);
@@ -88,14 +115,20 @@ export function MapCanvas({
     if (!host) return undefined;
     const adapter = createRenderer({ target: host });
     adapterRef.current = adapter;
-    onExporterReadyRef.current?.((mimeType) => adapter.exportRaster(mimeType));
+    onExporterReadyRef.current?.((mimeType, scale, extent) => adapter.exportRaster(mimeType, scale, extent));
     if (zoom !== undefined && Math.abs(adapter.getZoom() - zoom) > 0.01) adapter.setZoom(zoom);
     const stopZoomListener = adapter.onZoomChange((nextZoom) => onZoomChangeRef.current(nextZoom));
     const stopDrawListener = adapter.onDraw((geometry) => onDrawRef.current?.(geometry));
     const stopSelectListener = adapter.onSelect((featureId) => onSelectRef.current?.(featureId));
     const stopCellSelectListener = adapter.onCellSelect((cellIds) => onCellSelectRef.current?.(cellIds));
     const stopModifyListener = adapter.onModify((featureId, geometry) => onModifyRef.current?.(featureId, geometry));
+    const stopEraseListener = adapter.onErase((featureId) => onEraseRef.current?.(featureId));
+    const stopErrorListener = adapter.onError((message) => onErrorRef.current?.(message));
     adapter.setFeatures(features);
+    adapter.setTheme(themeId);
+    adapter.setGridVisible(showGrid);
+    adapter.setAssets(assetUrls);
+    for (const [featureType, visible] of Object.entries(layerVisibility)) adapter.setLayerVisibility(featureType as FeatureType, visible !== false);
     adapter.setMode(mode);
     adapter.setSelected(selectedFeatureId);
     adapter.setSelectedCells(selectedCellIds);
@@ -113,6 +146,8 @@ export function MapCanvas({
       stopSelectListener();
       stopCellSelectListener();
       stopModifyListener();
+      stopEraseListener();
+      stopErrorListener();
       adapter.dispose();
       adapterRef.current = null;
       onExporterReadyRef.current?.(null);

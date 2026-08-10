@@ -3,12 +3,18 @@ import { chooseTauriArtifactPath, chooseTauriTransferPath, tauriRealmBackend } f
 
 export type {
   ApplyCellAttributesInput,
+  AssetManifest,
+  AssetRead,
   CellAttribute,
   CellAttributeSnapshot,
   CellViewportInput,
   CreateFeatureInput,
+  CreateFeaturesBatchInput,
   FeatureType,
   GeoJsonGeometry,
+  ImportAssetInput,
+  Position,
+  ProjectSettings,
   RealmBackend,
   RealmFeature,
   RealmSnapshot,
@@ -31,7 +37,7 @@ export const defaultBackend = isTauriRuntime() ? tauriRealmBackend : memoryBacke
 export const chooseTransferPath = async (mode: "import" | "export", suggestedName?: string): Promise<string | null> =>
   isTauriRuntime() ? chooseTauriTransferPath(mode, suggestedName) : null;
 
-export const chooseArtifactPath = async (format: "png" | "pdf", suggestedName: string): Promise<string | null> =>
+export const chooseArtifactPath = async (format: "png" | "jpg" | "pdf", suggestedName: string): Promise<string | null> =>
   isTauriRuntime() ? chooseTauriArtifactPath(format, suggestedName) : null;
 
 export const errorMessage = (cause: unknown, fallback: string): string => {

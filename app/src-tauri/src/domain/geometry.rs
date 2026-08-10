@@ -2,6 +2,8 @@ use crate::contract::FeatureType;
 use crate::error::AppError;
 use serde_json::Value;
 
+pub(crate) const MAX_FEATURE_PROPERTIES_BYTES: usize = 32 * 1024;
+
 pub(crate) fn validate_name(name: &str) -> Result<(), AppError> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
@@ -81,4 +83,16 @@ pub(crate) fn validate_geometry(
     }
     serde_json::to_string(geometry)
         .map_err(|_| AppError::invalid("Geometry could not be encoded as GeoJSON."))
+}
+
+pub(crate) fn validate_properties(properties: &Value) -> Result<String, AppError> {
+    if !properties.is_object() {
+        return Err(AppError::invalid("Feature properties must be an object."));
+    }
+    let encoded = serde_json::to_string(properties)
+        .map_err(|_| AppError::invalid("Feature properties could not be encoded."))?;
+    if encoded.len() > MAX_FEATURE_PROPERTIES_BYTES {
+        return Err(AppError::invalid("Feature properties are too large."));
+    }
+    Ok(encoded)
 }

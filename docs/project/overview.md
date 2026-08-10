@@ -4,15 +4,15 @@
 
 Realm is a local editor for drawing a fictional world map. The user manually creates and edits the current geography and political features without configuring a chronology or terrain variants.
 
-## 0.1 series scope
+## Current 0.x scope
 
-The first release targets macOS on Apple Silicon and an app-managed local library. Each world remains one SQLite database and covers terrain, forests, rivers, coastlines, countries, regions, boundaries, cities, and towns. A terrain feature is a single polygon class without land, mountain, or other terrain-kind values.
+The first release targets macOS on Apple Silicon and an app-managed local library. Each world remains one SQLite database. Its editable objects cover terrain, forests, rivers, lakes, coastlines, roads, countries, regions, boundaries, cities, towns, mountains, trees, general symbols, labels, overlays, frames, and scale marks. A terrain feature remains a single polygon class without land, mountain, or other terrain-kind values; mountain marks are independent point symbols rather than terrain variants.
 
-The editor creates and opens worlds from that library and automatically saves valid edits. It moves and zooms the bounded world canvas and edits the world name. Its map tools manually draw, select, rename, reshape, and delete every initial feature class. Terrain is drawn as a polygon. A cell brush paints forest, country, or region attributes across a continuous area of fine map cells; brush size and erase mode are explicit controls. Undo and redo restore the previous or next current state while a project remains open.
+The editor creates and opens worlds from that library and automatically saves valid edits. It moves and zooms the bounded world canvas and edits the world name. Its map tools manually draw, select, rename, reshape, move, duplicate, rotate, mirror, order, lock, and delete map objects. Freehand lines and areas are simplified and validated before they become saved geometry. A cell brush paints forest, country, or region attributes across a continuous area of fine map cells; brush size and erase mode are explicit controls. A selected polygon can receive a seeded, spacing-aware batch of individually editable tree, mountain, or symbol points. Undo and redo restore the previous or next current state while a project remains open.
 
-PNG and PDF are presentation artifacts and cannot be reopened for editing. Moving editable work to another Mac uses the dedicated `.realmmap` transfer export and import actions; normal editing never asks the user to choose a database path.
+PNG, JPEG, and PDF are presentation artifacts and cannot be reopened for editing. Raster export supports bounded 1x, 2x, and 4x output for either the full world or the current view. Moving editable work to another Mac uses the dedicated `.realmmap` transfer export and import actions; normal editing never asks the user to choose a database path.
 
-There is no required account, hosted backend, cloud synchronization, procedural generation, or image import. Geography is entered and edited manually.
+There is no required account, hosted backend, cloud synchronization, or procedural geography generation. Geography is entered and edited manually. User-owned PNG, JPEG, and WebP symbol images may be embedded into the project; they are presentation assets and are not converted into geography.
 
 ## Terminology
 
@@ -20,10 +20,11 @@ There is no required account, hosted backend, cloud synchronization, procedural 
 | --- | --- |
 | World | One app-managed SQLite database and its current editable map content. |
 | Transfer data | A `.realmmap` copy used only to move or back up editable data outside the app library. |
-| Feature | A manually edited map object such as a river, boundary, or city. |
+| Feature | A manually edited map object with a class, geometry, name, and bounded style properties. |
 | Cell | One stable element of the fixed 512 by 256 world grid, identified by its column and row. |
 | Cell attribute | A current forest, country, or region value; different attribute layers may overlap on one cell. |
 | Brush stroke | One pointer press, drag, and release that paints or erases every cell reached by the selected brush radius. |
+| Embedded asset | A validated image copied into the same `.realmmap` and referenced by editable symbol features without an external path. |
 
 ## Product boundaries
 
@@ -31,9 +32,13 @@ The map is an authoring tool, not a GIS data exchange service. External network 
 
 ## Functional acceptance
 
-- The terrain rail entry draws one terrain polygon class without a terrain-kind selector. The forest rail entry activates its cell-brush preset. Rivers, coastlines, boundaries, countries, and regions use manual line or polygon gestures; cities and towns use points.
+- The terrain and forest rail entries draw polygons without a terrain-kind selector. Rivers, coastlines, roads, and boundaries use lines; lakes, countries, regions, overlays, and frames use polygons; cities, towns, mountains, trees, symbols, labels, and scale marks use points. The separate cell brush paints forest, country, or region cell attributes.
+- Freehand lines and polygons are simplified at the current view resolution, remain inside the bounded world, and reject degenerate or self-intersecting results before saving. The active drawing tool remains selected for consecutive strokes; Escape cancels an unfinished stroke.
 - Country and region polygons can be drawn over terrain to express political and administrative divisions. They remain independent of terrain geometry.
 - The cell brush has visible small, medium, large, and extra-large radii. A click paints a round stamp; a drag paints the complete thick path without gaps. Releasing the pointer saves that stroke as one undoable batch. Erasing one attribute layer does not remove other layers on the same cells.
-- Valid edits are automatically saved, and reopening a world from the app library preserves the current world metadata, features, and cell attributes.
-- A world exports as a PNG or single-page PDF map artifact, and a transfer export can be imported as an independently editable library world on another Mac.
+- Valid edits are automatically saved, and reopening a world from the app library preserves the current world metadata, project presentation settings, features, embedded assets, and cell attributes.
+- The map has selectable renderer themes, grid visibility, export scale and export extent settings that survive reopening. Per-class visibility controls remain transient together with viewport, zoom, selection, and the active tool.
+- Feature properties preserve supported line color, casing, dash, width, symbol scale/rotation, label appearance, embedded asset reference, visibility, lock, and relative drawing order. Embedded asset bytes remain inside the `.realmmap`; referenced assets cannot be deleted.
+- A seeded scatter inside a selected polygon creates ordinary point features in one transaction and one undo step. Distance and area inspectors explicitly report the editor's flat longitude/latitude approximation.
+- A world exports as a PNG, JPEG, or single-page PDF map artifact at a bounded output scale, and a transfer export can be imported as an independently editable library world on another Mac.
 - A failed validation or transaction leaves the prior project state intact. Undo and redo restore complete edit operations during the open session.

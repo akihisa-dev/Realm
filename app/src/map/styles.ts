@@ -1,45 +1,327 @@
 import type { FeatureLike } from "ol/Feature";
 import Fill from "ol/style/Fill";
 import CircleStyle from "ol/style/Circle";
+import RegularShape from "ol/style/RegularShape";
+import Icon from "ol/style/Icon";
 import Stroke from "ol/style/Stroke";
 import Style from "ol/style/Style";
 import Text from "ol/style/Text";
 import type { CellAttributeSnapshot, FeatureType } from "../backend";
+import { DEFAULT_MAP_THEME_ID, mapTheme, type MapThemeId } from "./themes";
 
 export const MAP_LABEL_FONT = '12px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif';
 
-export const createFeatureStyle = (): ((feature: FeatureLike) => Style) => {
-  const featureStyles = new Map<string, Style>();
-  return (feature: FeatureLike): Style => {
+const stringProperty = (feature: FeatureLike, names: readonly string[], fallback: string): string => {
+  const properties = feature.get("properties") as Record<string, unknown> | undefined;
+  for (const name of names) {
+    const value = properties?.[name];
+    if (typeof value === "string" && value.trim().length > 0 && value.length <= 128) return value;
+  }
+  return fallback;
+};
+
+const labelNumber = (feature: FeatureLike, names: readonly string[], fallback: number, minimum: number, maximum: number): number => {
+  const properties = feature.get("properties") as Record<string, unknown> | undefined;
+  for (const name of names) {
+    const value = properties?.[name];
+    if (typeof value === "number" && Number.isFinite(value)) return Math.max(minimum, Math.min(maximum, value));
+  }
+  return fallback;
+};
+
+type LabelOptions = {
+  fontSize: number;
+  color: string;
+  haloColor: string;
+  haloWidth: number;
+  rotation: number;
+  placement: "point" | "line";
+  offsetX: number;
+  offsetY: number;
+};
+
+const labelOptions = (feature: FeatureLike, type: FeatureType | undefined, themeId: MapThemeId): LabelOptions => {
+  const theme = mapTheme(themeId);
+  const area = type === "country" || type === "region";
+  const properties = feature.get("properties") as Record<string, unknown> | undefined;
+  const placementValue = properties?.labelPlacement;
+  const placement = placementValue === "line" || placementValue === "point"
+    ? placementValue
+    : type === "river" || type === "road" ? "line" : "point";
+  return {
+    fontSize: labelNumber(feature, ["fontSize", "labelFontSize"], area ? (type === "country" ? 14 : 12) : 12, 6, 96),
+    color: stringProperty(feature, ["labelColor", "textColor", "color"], theme.label),
+    haloColor: stringProperty(feature, ["labelHaloColor", "haloColor"], theme.labelHalo),
+    haloWidth: labelNumber(feature, ["labelHaloWidth", "haloWidth"], area ? 4 : 3, 0, 16),
+    rotation: labelNumber(feature, ["labelRotation", "rotation"], 0, -Math.PI * 2, Math.PI * 2),
+    placement,
+    offsetX: labelNumber(feature, ["labelOffsetX", "offsetX"], 0, -256, 256),
+    offsetY: labelNumber(feature, ["labelOffsetY", "offsetY"], type === "city" ? -13 : type === "town" ? -11 : 0, -256, 256),
+  };
+};
+
+const featureLabel = (feature: FeatureLike, type: FeatureType | undefined, value: unknown, themeId: MapThemeId, opacity = 1): Text | undefined => {
+  if (typeof value !== "string" || !value.trim() || type === "terrain" || type === "forest" || type === "coastline" || type === "boundary") return undefined;
+  const options = labelOptions(feature, type, themeId);
+  return new Text({
+    text: value,
+    font: `${type === "country" || type === "region" ? "600 " : ""}${options.fontSize}px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif`,
+    placement: options.placement,
+    overflow: true,
+    offsetX: options.offsetX,
+    offsetY: options.offsetY,
+    rotation: options.rotation,
+    rotateWithView: false,
+    fill: new Fill({ color: colorWithOpacity(options.color, opacity) }),
+    stroke: new Stroke({ color: colorWithOpacity(options.haloColor, opacity), width: options.haloWidth }),
+  });
+};
+
+const numericProperty = (feature: FeatureLike, name: string, fallback: number, minimum: number, maximum: number): number => {
+  const properties = feature.get("properties") as Record<string, unknown> | undefined;
+  const value = properties?.[name];
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(minimum, Math.min(maximum, value)) : fallback;
+};
+
+const featureOpacity = (feature: FeatureLike): number => numericProperty(feature, "opacity", 1, 0, 1);
+
+/**
+ * Keep asset resolution local-only.  The resolver is still the sole source of
+ * URLs; this guard prevents a malformed/project property from turning into a
+ * network request during map rendering.
+ */
+const localImageUrl = (value: string | undefined): string | undefined => {
+  if (!value) return undefined;
+  return value.startsWith("blob:") || value.startsWith("data:image/") ? value : undefined;
+};
+
+const colorWithOpacity = (color: string, opacity: number): string => {
+  const alpha = Math.max(0, Math.min(1, opacity));
+  if (alpha >= 1) return color;
+  if (alpha <= 0) return "rgba(0, 0, 0, 0)";
+  const hex = color.match(/^#([\da-f]{3,8})$/i)?.[1];
+  if (hex) {
+    const expanded = hex.length === 3 || hex.length === 4 ? [...hex].map((part) => `${part}${part}`).join("") : hex;
+    if (expanded.length === 6 || expanded.length === 8) {
+      const red = Number.parseInt(expanded.slice(0, 2), 16);
+      const green = Number.parseInt(expanded.slice(2, 4), 16);
+      const blue = Number.parseInt(expanded.slice(4, 6), 16);
+      const sourceAlpha = expanded.length === 8 ? Number.parseInt(expanded.slice(6, 8), 16) / 255 : 1;
+      return `rgba(${red}, ${green}, ${blue}, ${sourceAlpha * alpha})`;
+    }
+  }
+  const rgb = color.match(/^rgba?\(\s*([\d.]+)[, ]+\s*([\d.]+)[, ]+\s*([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i);
+  if (rgb) {
+    const sourceAlpha = rgb[4] ? (rgb[4].endsWith("%") ? Number.parseFloat(rgb[4]) / 100 : Number.parseFloat(rgb[4])) : 1;
+    return `rgba(${rgb[1]}, ${rgb[2]}, ${rgb[3]}, ${sourceAlpha * alpha})`;
+  }
+  // Unknown CSS names cannot be parsed without a browser; retain the color
+  // rather than injecting a network-dependent lookup or invalid CSS.
+  return color;
+};
+
+const pixelBounds = (coordinates: unknown): [number, number, number, number] | undefined => {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const visit = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (typeof value[0] === "number" && typeof value[1] === "number") {
+      const x = value[0];
+      const y = value[1];
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+      }
+      return;
+    }
+    for (const child of value) visit(child);
+  };
+  visit(coordinates);
+  return Number.isFinite(minX) && Number.isFinite(minY) && Number.isFinite(maxX) && Number.isFinite(maxY)
+    ? [minX, minY, maxX, maxY]
+    : undefined;
+};
+
+const overlayImageRenderer = (image: Icon, opacity: number, rotation: number, placeholder: string) => (coordinates: unknown, state: { context: CanvasRenderingContext2D; pixelRatio: number }): void => {
+  const bounds = pixelBounds(coordinates);
+  if (!bounds) return;
+  const [minX, minY, maxX, maxY] = bounds;
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+  const context = state.context;
+  context.save();
+  context.globalAlpha *= opacity;
+  context.translate(minX + width / 2, minY + height / 2);
+  context.rotate(rotation);
+  let drawn = false;
+  try {
+    const size = image.getImageSize();
+    const imageElement = image.getImage(state.pixelRatio);
+    if ((size?.[0] ?? 0) > 0 && (size?.[1] ?? 0) > 0 && imageElement) {
+      context.drawImage(imageElement, -width / 2, -height / 2, width, height);
+      drawn = true;
+    }
+  } catch {
+    // Image decoding is asynchronous and can fail in a worker/test context.
+  }
+  if (!drawn) {
+    context.fillStyle = colorWithOpacity(placeholder, 0.28);
+    context.fillRect(-width / 2, -height / 2, width, height);
+    context.strokeStyle = colorWithOpacity(placeholder, 0.8);
+    context.lineWidth = 1;
+    context.setLineDash([5, 4]);
+    context.strokeRect(-width / 2, -height / 2, width, height);
+  }
+  context.restore();
+};
+
+const applyFeatureOpacity = (styles: Style | Style[], opacity: number): void => {
+  if (opacity >= 1) return;
+  for (const style of Array.isArray(styles) ? styles : [styles]) {
+    const fill = style.getFill();
+    const fillColor = fill?.getColor();
+    if (fill && typeof fillColor === "string") fill.setColor(colorWithOpacity(fillColor, opacity));
+    const stroke = style.getStroke();
+    const strokeColor = stroke?.getColor();
+    if (stroke && typeof strokeColor === "string") stroke.setColor(colorWithOpacity(strokeColor, opacity));
+    const image = style.getImage();
+    if (image) image.setOpacity(image.getOpacity() * opacity);
+  }
+};
+
+const lineDashProperty = (feature: FeatureLike): number[] | undefined => {
+  const style = (feature.get("properties") as Record<string, unknown> | undefined)?.lineStyle;
+  return style === "dashed" ? [9, 6] : style === "dotted" ? [2, 5] : undefined;
+};
+
+const presentationPropertiesKey = (feature: FeatureLike, type: FeatureType | undefined, themeId: MapThemeId): string => {
+  const options = labelOptions(feature, type, themeId);
+  return JSON.stringify({
+    width: numericProperty(feature, "width", type === "road" ? 2.2 : 2.4, 0.5, 24),
+    scale: numericProperty(feature, "scale", 1, 0.25, 8),
+    rotation: numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2),
+    strokeColor: stringProperty(feature, ["strokeColor"], ""),
+    casingColor: stringProperty(feature, ["casingColor"], ""),
+    lineDash: lineDashProperty(feature),
+    zIndex: numericProperty(feature, "zIndex", 0, -1000, 1000),
+    visible: (feature.get("properties") as Record<string, unknown> | undefined)?.visible !== false,
+    opacity: featureOpacity(feature),
+    label: options,
+  });
+};
+
+export const createFeatureStyle = (
+  getThemeId: () => MapThemeId = () => DEFAULT_MAP_THEME_ID,
+  isVisible: (featureType: FeatureType | undefined) => boolean = () => true,
+  getAssetUrl: (assetId: string) => string | undefined = () => undefined,
+): ((feature: FeatureLike) => Style | Style[] | undefined) => {
+  const featureStyles = new Map<string, Style | Style[]>();
+  return (feature: FeatureLike): Style | Style[] | undefined => {
     const type = feature.get("featureType") as FeatureType | undefined;
-    const areaName = type === "country" || type === "region" ? feature.get("name") : null;
-    const name = typeof areaName === "string" ? areaName : "";
-    const key = `${type ?? "unknown"}\u0000${name}`;
+    if (!isVisible(type)) return undefined;
+    if ((feature.get("properties") as Record<string, unknown> | undefined)?.visible === false) return undefined;
+    const rawName = feature.get("name");
+    const name = typeof rawName === "string" ? rawName : "";
+    const themeId = getThemeId();
+    const assetId = stringProperty(feature, ["assetId"], "");
+    const assetUrl = assetId ? localImageUrl(getAssetUrl(assetId)) : undefined;
+    const key = `${themeId}\u0000${type ?? "unknown"}\u0000${name}\u0000${presentationPropertiesKey(feature, type, themeId)}\u0000${assetId}\u0000${assetUrl ?? ""}`;
     const cached = featureStyles.get(key);
     if (cached) return cached;
-    const presentation = type === "terrain" ? { color: "#8b7754", fillAlpha: "28", zIndex: 10 }
-      : type === "forest" ? { color: "#3f7c55", fillAlpha: "28", zIndex: 20 }
-        : type === "country" ? { color: "#315f7d", fillAlpha: "24", zIndex: 30 }
-          : type === "region" ? { color: "#76568c", fillAlpha: "1c", zIndex: 40 }
-            : type === "river" || type === "coastline" ? { color: "#2e78a6", fillAlpha: "28", zIndex: 50 }
-              : type === "boundary" ? { color: "#915f3d", fillAlpha: "28", zIndex: 60 }
-                : { color: "#8a3f58", fillAlpha: "28", zIndex: 70 };
-    const style = new Style({
-      fill: new Fill({ color: `${presentation.color}${presentation.fillAlpha}` }),
-      stroke: new Stroke({ color: presentation.color, width: type === "region" ? 1.75 : type === "boundary" ? 2 : 2.5, lineDash: type === "region" ? [5, 4] : undefined }),
-      image: new CircleStyle({ radius: type === "city" ? 6 : 4.5, fill: new Fill({ color: presentation.color }), stroke: new Stroke({ color: "#fff", width: 1.5 }) }),
-      text: name ? new Text({ text: name, font: type === "country" ? `600 ${MAP_LABEL_FONT}` : MAP_LABEL_FONT, overflow: true, fill: new Fill({ color: "#26323b" }), stroke: new Stroke({ color: "rgba(255, 255, 255, 0.92)", width: 3 }) }) : undefined,
-      zIndex: presentation.zIndex,
-    });
-    featureStyles.set(key, style);
-    return style;
+    const theme = mapTheme(themeId);
+    const opacity = featureOpacity(feature);
+    const label = featureLabel(feature, type, name, themeId, opacity);
+    let styles: Style | Style[];
+    if (type === "terrain") {
+      styles = [new Style({ fill: new Fill({ color: theme.land }), stroke: new Stroke({ color: theme.coastGlow, width: 7 }), zIndex: 10 }), new Style({ stroke: new Stroke({ color: theme.landInk, width: 1.6 }), zIndex: 11 })];
+    } else if (type === "forest") {
+      styles = new Style({ fill: new Fill({ color: `${theme.forest}26` }), stroke: new Stroke({ color: theme.forest, width: 1.2 }), zIndex: 20 });
+    } else if (type === "river") {
+      const width = numericProperty(feature, "width", 2.4, 0.5, 24);
+      const dash = lineDashProperty(feature);
+      styles = [new Style({ stroke: new Stroke({ color: stringProperty(feature, ["casingColor"], theme.labelHalo), width: width + 2.6, lineCap: "round", lineJoin: "round", lineDash: dash }), zIndex: 51 }), new Style({ stroke: new Stroke({ color: stringProperty(feature, ["strokeColor"], theme.river), width, lineCap: "round", lineJoin: "round", lineDash: dash }), text: label, zIndex: 52 })];
+    } else if (type === "coastline") {
+      styles = [new Style({ stroke: new Stroke({ color: theme.coastGlow, width: 6, lineCap: "round", lineJoin: "round" }), zIndex: 49 }), new Style({ stroke: new Stroke({ color: theme.landInk, width: 1.5, lineCap: "round", lineJoin: "round" }), zIndex: 50 })];
+    } else if (type === "road") {
+      const width = numericProperty(feature, "width", 2.2, 0.5, 24);
+      const dash = lineDashProperty(feature);
+      styles = [new Style({ stroke: new Stroke({ color: stringProperty(feature, ["casingColor"], theme.labelHalo), width: width + 3, lineCap: "round", lineJoin: "round", lineDash: dash }), zIndex: 53 }), new Style({ stroke: new Stroke({ color: stringProperty(feature, ["strokeColor"], theme.boundary), width, lineCap: "round", lineJoin: "round", lineDash: dash }), text: label, zIndex: 54 })];
+    } else if (type === "lake") {
+      styles = [new Style({ fill: new Fill({ color: theme.canvas }), stroke: new Stroke({ color: theme.coastGlow, width: 5 }), zIndex: 21 }), new Style({ stroke: new Stroke({ color: theme.river, width: 1.5 }), text: label, zIndex: 22 })];
+    } else if (type === "mountain" || type === "tree" || type === "symbol" || type === "scale" || type === "label") {
+      const scale = numericProperty(feature, "scale", 1, 0.25, 8);
+      const rotation = numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2);
+      const image = assetUrl && (type === "mountain" || type === "tree" || type === "symbol")
+        ? new Icon({ src: assetUrl, scale, rotation })
+        : type === "mountain"
+        ? new RegularShape({ points: 3, radius: 9 * scale, angle: rotation, fill: new Fill({ color: theme.land }), stroke: new Stroke({ color: theme.landInk, width: 1.6 }) })
+        : type === "tree"
+          ? new RegularShape({ points: 3, radius: 6 * scale, angle: rotation, fill: new Fill({ color: theme.forest }), stroke: new Stroke({ color: theme.labelHalo, width: 0.8 }) })
+          : type === "symbol"
+            ? new RegularShape({ points: 5, radius: 6 * scale, radius2: 2.8 * scale, angle: rotation, fill: new Fill({ color: theme.settlement }), stroke: new Stroke({ color: theme.labelHalo, width: 1 }) })
+            : type === "scale"
+              ? new RegularShape({ points: 4, radius: 5 * scale, angle: rotation + Math.PI / 4, fill: new Fill({ color: theme.landInk }) })
+              : new CircleStyle({ radius: 1, fill: new Fill({ color: "rgba(0,0,0,0)" }) });
+      styles = new Style({ image, text: type === "label" ? featureLabel(feature, "label", name, themeId, opacity) : label, zIndex: type === "label" ? 82 : 75 });
+    } else if (type === "overlay") {
+      const overlayStroke = theme.country;
+      const overlayFill = `${theme.country}12`;
+      if (assetUrl) {
+        // Keep the polygon as the source geometry while the custom renderer
+        // paints the embedded image into its pixel-space bounding rectangle.
+        // The Icon is intentionally retained on the style so OpenLayers owns
+        // image loading and schedules a redraw when decoding completes.
+        const image = new Icon({ src: assetUrl, opacity: 1 });
+        styles = new Style({
+          image,
+          renderer: overlayImageRenderer(image, opacity, numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2), theme.country),
+          hitDetectionRenderer: overlayImageRenderer(image, opacity, numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2), theme.country),
+          zIndex: 24,
+        });
+      } else {
+        // Missing or non-local assets never become a blank/remote request;
+        // retain a visible bounded placeholder instead.
+        styles = new Style({ fill: new Fill({ color: overlayFill }), stroke: new Stroke({ color: overlayStroke, width: 1.5, lineDash: [6, 4] }), zIndex: 24 });
+      }
+    } else if (type === "frame") {
+      styles = new Style({ stroke: new Stroke({ color: theme.landInk, width: 3 }), zIndex: 90 });
+    } else {
+      const area = type === "country" || type === "region";
+      const color = type === "country" ? theme.country : type === "region" ? theme.region : type === "boundary" ? theme.boundary : theme.settlement;
+      const zIndex = type === "country" ? 30 : type === "region" ? 40 : type === "boundary" ? 60 : 70;
+      styles = new Style({
+        fill: area ? new Fill({ color: `${color}${type === "country" ? "22" : "16"}` }) : undefined,
+        stroke: new Stroke({ color, width: type === "region" ? 1.5 : type === "boundary" ? 2 : 2.2, lineDash: type === "region" ? [5, 4] : type === "boundary" ? [8, 4] : undefined }),
+        image: new CircleStyle({ radius: type === "city" ? 6 : 4.5, fill: new Fill({ color }), stroke: new Stroke({ color: theme.labelHalo, width: 1.5 }) }),
+        text: label,
+        zIndex,
+      });
+    }
+    applyFeatureOpacity(styles, opacity);
+    const zOffset = numericProperty(feature, "zIndex", 0, -1000, 1000);
+    for (const style of Array.isArray(styles) ? styles : [styles]) style.setZIndex((style.getZIndex() ?? 0) + zOffset);
+    featureStyles.set(key, styles);
+    return styles;
   };
 };
 
 export const featureStyle = createFeatureStyle();
 
-export const createCellStyle = (): ((feature: FeatureLike) => Style | Style[] | undefined) => {
-  const cellStyles = new Map<number, Style | Style[]>();
+const stableVariant = (value: string): number => {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return hash >>> 0;
+};
+
+export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP_THEME_ID): ((feature: FeatureLike) => Style | Style[] | undefined) => {
+  const cellStyles = new Map<string, Style | Style[]>();
   return (feature: FeatureLike): Style | Style[] | undefined => {
     const attributes = feature.get("attributes") as CellAttributeSnapshot[] | undefined;
     const has = (attribute: CellAttributeSnapshot["attribute"]): boolean => attributes?.some((item) => item.attribute === attribute) ?? false;
@@ -49,12 +331,18 @@ export const createCellStyle = (): ((feature: FeatureLike) => Style | Style[] | 
     const hasCountry = has("country");
     const hasRegion = has("region");
     if (!showGrid && !hasPhysical && !hasCountry && !hasRegion && !selected) return undefined;
-    const key = (showGrid ? 1 : 0) | (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0);
+    const themeId = getThemeId();
+    const theme = mapTheme(themeId);
+    const variant = stableVariant(String(feature.getId() ?? "")) % 7;
+    const flags = (showGrid ? 1 : 0) | (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0);
+    const key = `${themeId}:${flags}:${hasPhysical ? variant : 0}`;
     const cached = cellStyles.get(key);
     if (cached) return cached;
-    const styles: Style[] = [new Style({ image: new CircleStyle({ radius: hasPhysical ? 2 : 1.25, fill: new Fill({ color: hasPhysical ? "#3f7c55" : "rgba(74, 87, 98, 0.24)" }) }), zIndex: 5 })];
-    if (hasCountry) styles.push(new Style({ image: new CircleStyle({ radius: 3.4, fill: new Fill({ color: "rgba(49, 95, 125, 0.08)" }), stroke: new Stroke({ color: "#315f7d", width: 1.1 }) }), zIndex: 6 }));
-    if (hasRegion) styles.push(new Style({ image: new CircleStyle({ radius: 4.4, fill: new Fill({ color: "rgba(118, 86, 140, 0.05)" }), stroke: new Stroke({ color: "#76568c", width: 1.1, lineDash: [3, 2] }) }), zIndex: 7 }));
+    const styles: Style[] = [];
+    if (showGrid && !hasPhysical) styles.push(new Style({ image: new CircleStyle({ radius: 1.25, fill: new Fill({ color: theme.grid }) }), zIndex: 5 }));
+    if (hasPhysical) styles.push(new Style({ image: new RegularShape({ points: 3, radius: 3.8 + variant * 0.12, angle: (variant - 3) * 0.025, fill: new Fill({ color: theme.forest }), stroke: new Stroke({ color: theme.labelHalo, width: 0.55 }) }), zIndex: 8 }));
+    if (hasCountry) styles.push(new Style({ image: new CircleStyle({ radius: 3.4, fill: new Fill({ color: `${theme.country}14` }), stroke: new Stroke({ color: theme.country, width: 1.1 }) }), zIndex: 6 }));
+    if (hasRegion) styles.push(new Style({ image: new CircleStyle({ radius: 4.4, fill: new Fill({ color: `${theme.region}0d` }), stroke: new Stroke({ color: theme.region, width: 1.1, lineDash: [3, 2] }) }), zIndex: 7 }));
     if (selected) styles.push(new Style({ image: new CircleStyle({ radius: 5.3, fill: new Fill({ color: "rgba(7, 140, 152, 0.08)" }), stroke: new Stroke({ color: "#078c98", width: 1.2 }) }), zIndex: 85 }));
     cellStyles.set(key, styles);
     return styles;

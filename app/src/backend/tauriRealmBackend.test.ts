@@ -14,10 +14,12 @@ import { chooseTauriArtifactPath, chooseTauriTransferPath, tauriRealmBackend } f
 import type { RealmSnapshot } from "./types";
 
 const snapshot: RealmSnapshot = {
-  formatVersion: 3,
+  formatVersion: 6,
   path: "/tmp/test.realmmap",
   world: { id: "world-test", name: "Test" },
   features: [],
+  assets: [],
+  settings: { themeId: "ink", showGrid: true, exportScale: 2, exportExtent: "world" },
   featureCount: 0,
   canUndo: false,
   canRedo: false,
@@ -40,6 +42,7 @@ describe("Tauri Realm backend", () => {
     await tauriRealmBackend.writeArtifact({ path: "/tmp/map.png", bytes: [1, 2] });
     await tauriRealmBackend.saveProject({ name: "Saved" });
     await tauriRealmBackend.createFeature({ featureType: "city", name: "City", geometry: { type: "Point", coordinates: [1, 2] } });
+    await tauriRealmBackend.createFeaturesBatch({ features: [{ featureType: "tree", name: "Tree", geometry: { type: "Point", coordinates: [2, 3] } }] });
     await tauriRealmBackend.reviseFeature({ id: "feature-id", name: "New City", geometry: { type: "Point", coordinates: [2, 3] } });
     await tauriRealmBackend.deleteFeature({ id: "feature-id" });
     await tauriRealmBackend.undoProject();
@@ -57,14 +60,15 @@ describe("Tauri Realm backend", () => {
     expect(mocks.invoke).toHaveBeenNthCalledWith(8, "create_feature", {
       input: { featureType: "city", name: "City", geometry: { type: "Point", coordinates: [1, 2] } },
     });
-    expect(mocks.invoke).toHaveBeenNthCalledWith(9, "revise_feature", {
+    expect(mocks.invoke).toHaveBeenNthCalledWith(9, "create_features_batch", { input: { features: [{ featureType: "tree", name: "Tree", geometry: { type: "Point", coordinates: [2, 3] } }] } });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(10, "revise_feature", {
       input: { id: "feature-id", name: "New City", geometry: { type: "Point", coordinates: [2, 3] } },
     });
-    expect(mocks.invoke).toHaveBeenNthCalledWith(10, "delete_feature", { input: { id: "feature-id" } });
-    expect(mocks.invoke).toHaveBeenNthCalledWith(11, "undo_project");
-    expect(mocks.invoke).toHaveBeenNthCalledWith(12, "redo_project");
-    expect(mocks.invoke).toHaveBeenNthCalledWith(13, "close_project");
-    expect(mocks.invoke).toHaveBeenNthCalledWith(14, "get_open_project");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(11, "delete_feature", { input: { id: "feature-id" } });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(12, "undo_project");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(13, "redo_project");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(14, "close_project");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(15, "get_open_project");
   });
 
   it("normalizes transfer export paths and preserves valid extension casing", async () => {
@@ -92,6 +96,22 @@ describe("Tauri Realm backend", () => {
     });
   });
 
+  it("uses bounded embedded-asset commands", async () => {
+    const input = { mime: "image/png", bytes: [137, 80, 78, 71], width: 16, height: 16, metadata: { pack: "own" } };
+    await tauriRealmBackend.importAsset(input);
+    await tauriRealmBackend.readAsset({ id: "asset-id" });
+    await tauriRealmBackend.deleteAsset({ id: "asset-id" });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(1, "import_asset", { input });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(2, "read_asset", { input: { id: "asset-id" } });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(3, "delete_asset", { input: { id: "asset-id" } });
+  });
+
+  it("persists only typed project view settings through one command", async () => {
+    const input = { settings: { themeId: "atlas" as const, showGrid: false, exportScale: 4 as const, exportExtent: "world" as const } };
+    await tauriRealmBackend.updateProjectSettings(input);
+    expect(mocks.invoke).toHaveBeenCalledWith("update_project_settings", { input });
+  });
+
   it("returns null for cancelled or non-file dialog results", async () => {
     mocks.saveDialog.mockResolvedValue(null);
     mocks.openDialog.mockResolvedValueOnce("/tmp/World.realmmap").mockResolvedValueOnce(null).mockResolvedValueOnce(["/tmp/World.realmmap"]);
@@ -104,8 +124,9 @@ describe("Tauri Realm backend", () => {
   });
 
   it("chooses image and PDF destinations with explicit extensions", async () => {
-    mocks.saveDialog.mockResolvedValueOnce("/tmp/map").mockResolvedValueOnce("/tmp/map.PDF");
+    mocks.saveDialog.mockResolvedValueOnce("/tmp/map").mockResolvedValueOnce("/tmp/map").mockResolvedValueOnce("/tmp/map.PDF");
     await expect(chooseTauriArtifactPath("png", "World")).resolves.toBe("/tmp/map.png");
+    await expect(chooseTauriArtifactPath("jpg", "World")).resolves.toBe("/tmp/map.jpg");
     await expect(chooseTauriArtifactPath("pdf", "World")).resolves.toBe("/tmp/map.PDF");
   });
 });

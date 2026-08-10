@@ -43,7 +43,7 @@ export default function App({
     if (path) await backend.exportProject({ path });
   }, [backend, chooseTransfer, snapshot]);
 
-  const exportArtifact = useCallback(async (format: "png" | "pdf", bytes: number[]) => {
+  const exportArtifact = useCallback(async (format: "png" | "jpg" | "pdf", bytes: number[]) => {
     if (!snapshot) return;
     const path = await chooseArtifact(format, snapshot.world.name);
     if (path) await backend.writeArtifact({ path, bytes });

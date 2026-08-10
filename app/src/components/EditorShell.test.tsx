@@ -27,6 +27,8 @@ it("renders single-state editor without chronology controls", async () => {
   expect(screen.getByRole("combobox", { name: "筆の属性" })).toHaveValue("country");
   fireEvent.change(screen.getByRole("textbox", { name: "世界の名前" }), { target: { value: "Renamed" } });
   await waitFor(() => expect(backend.getOpenProject()).resolves.toMatchObject({ world: { name: "Renamed" } }), { timeout: 1000 });
+  fireEvent.change(screen.getByRole("combobox", { name: "地図の表現" }), { target: { value: "atlas" } });
+  await waitFor(() => expect(backend.getOpenProject()).resolves.toMatchObject({ settings: { themeId: "atlas", showGrid: true, exportScale: 2, exportExtent: "world" } }));
 });
 
 it("runs feature, cell, history, and export actions", async () => {
@@ -35,13 +37,13 @@ it("runs feature, cell, history, and export actions", async () => {
   render(<EditorShell snapshot={initial} backend={backend} busy={false} onClose={onClose} onSaved={vi.fn()} onExportTransfer={onTransfer} onExportArtifact={onArtifact} />);
   fireEvent.click(screen.getByRole("button", { name: "都市" })); fireEvent.click(screen.getByRole("button", { name: "テスト描画" }));
   await waitFor(() => expect(screen.getByText("地物 1件")).toBeInTheDocument());
-  fireEvent.click(screen.getByRole("button", { name: "テスト選択" })); fireEvent.change(screen.getByRole("textbox", { name: "地物名" }), { target: { value: "王都" } }); fireEvent.click(screen.getByRole("button", { name: "名前を保存" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト選択" })); fireEvent.change(screen.getByRole("textbox", { name: "地物名" }), { target: { value: "王都" } }); fireEvent.click(screen.getByRole("button", { name: "変更を保存" }));
   await waitFor(() => expect(screen.getByRole("button", { name: /王都/ })).toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: "テスト変形" }));
   const confirm = vi.spyOn(window, "confirm").mockReturnValue(true); fireEvent.click(screen.getByRole("button", { name: "削除" })); await waitFor(() => expect(screen.getByText("地物はまだありません")).toBeInTheDocument()); confirm.mockRestore();
   fireEvent.click(screen.getByRole("button", { name: "元に戻す" })); await waitFor(() => expect(screen.getByText("地物 1件")).toBeInTheDocument()); fireEvent.click(screen.getByRole("button", { name: "やり直す" }));
   fireEvent.click(screen.getByRole("button", { name: "テストセル" })); await waitFor(() => expect(backend.viewCellAttributes({})).resolves.toEqual([]));
-  fireEvent.click(screen.getByRole("button", { name: "テストexport準備" })); fireEvent.click(screen.getByRole("button", { name: "PNG" })); await waitFor(() => expect(onArtifact).toHaveBeenCalledWith("png", [1, 2, 3])); fireEvent.click(screen.getByRole("button", { name: "移行データ" })); await waitFor(() => expect(onTransfer).toHaveBeenCalled()); fireEvent.click(screen.getByRole("button", { name: "ライブラリ" })); await waitFor(() => expect(onClose).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole("button", { name: "テストexport準備" })); fireEvent.click(screen.getByRole("button", { name: "PNG" })); await waitFor(() => expect(onArtifact).toHaveBeenCalledWith("png", [1, 2, 3])); fireEvent.click(screen.getByRole("button", { name: "JPEG" })); await waitFor(() => expect(onArtifact).toHaveBeenCalledWith("jpg", [1, 2, 3])); fireEvent.click(screen.getByRole("button", { name: "移行データ" })); await waitFor(() => expect(onTransfer).toHaveBeenCalled()); fireEvent.click(screen.getByRole("button", { name: "ライブラリ" })); await waitFor(() => expect(onClose).toHaveBeenCalled());
 });
 
 it("refreshes cell attributes only for cell-affecting operations", async () => {
@@ -69,9 +71,92 @@ it("keeps a selected feature when the parent receives a same-project snapshot", 
   await waitFor(() => expect(screen.getByText("地物 1件")).toBeInTheDocument());
   fireEvent.click(screen.getByRole("button", { name: "テスト選択" }));
   expect(screen.getByRole("button", { name: "削除" })).toBeInTheDocument();
-  fireEvent.change(screen.getByRole("textbox", { name: "地物名" }), { target: { value: "王都" } }); fireEvent.click(screen.getByRole("button", { name: "名前を保存" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "地物名" }), { target: { value: "王都" } }); fireEvent.click(screen.getByRole("button", { name: "変更を保存" }));
   await waitFor(() => expect(screen.getByRole("button", { name: /王都/ })).toBeInTheDocument());
   expect(screen.getByRole("button", { name: "削除" })).toBeInTheDocument();
+});
+
+it("stores editable label appearance as feature properties", async () => {
+  const backend = new MemoryRealmBackend();
+  const initial = await backend.createProject({ path: "browser://label.realmmap", name: "Labels" });
+  render(<EditorShell snapshot={initial} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "ラベル" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト描画" }));
+  await waitFor(() => expect(screen.getByText("地物 1件")).toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: "テスト選択" }));
+  fireEvent.change(screen.getByRole("slider", { name: /^文字サイズ/ }), { target: { value: "32" } });
+  fireEvent.change(screen.getByLabelText("文字色"), { target: { value: "#123456" } });
+  fireEvent.change(screen.getByRole("slider", { name: /^回転/ }), { target: { value: "15" } });
+  fireEvent.click(screen.getByRole("button", { name: "変更を保存" }));
+  await waitFor(async () => {
+    const snapshot = await backend.getOpenProject();
+    expect(snapshot?.features[0]?.properties).toMatchObject({ fontSize: 32, textColor: "#123456", rotation: Math.PI / 12 });
+  });
+});
+
+it("persists map presentation settings and supports keyboard history", async () => {
+  const backend = new MemoryRealmBackend();
+  const initial = await backend.createProject({ path: "browser://presentation.realmmap", name: "Presentation" });
+  render(<EditorShell snapshot={initial} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+
+  fireEvent.change(screen.getByRole("combobox", { name: "書き出し範囲" }), { target: { value: "viewport" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "書き出し解像度" }), { target: { value: "4" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: "経緯線を表示・出力" }));
+  await waitFor(() => expect(backend.getOpenProject()).resolves.toMatchObject({
+    settings: { themeId: "ink", showGrid: false, exportScale: 4, exportExtent: "viewport" },
+  }));
+
+  fireEvent.keyDown(window, { key: "z", metaKey: true });
+  await waitFor(() => expect(backend.getOpenProject()).resolves.toMatchObject({ settings: { showGrid: true } }));
+  fireEvent.keyDown(window, { key: "Z", metaKey: true, shiftKey: true });
+  await waitFor(() => expect(backend.getOpenProject()).resolves.toMatchObject({ settings: { showGrid: false } }));
+
+  const terrainLayer = screen.getByRole("checkbox", { name: "地形" });
+  expect(terrainLayer).toBeChecked();
+  fireEvent.click(terrainLayer);
+  expect(terrainLayer).not.toBeChecked();
+});
+
+it("edits layer properties and applies geometry transforms", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://transform.realmmap", name: "Transforms" });
+  const initial = await backend.createFeature({
+    featureType: "terrain",
+    name: "Island",
+    geometry: { type: "Polygon", coordinates: [[[0, 0], [8, 0], [8, 6], [0, 6], [0, 0]]] },
+  });
+  render(<EditorShell snapshot={initial} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "テスト選択" }));
+
+  fireEvent.click(screen.getByRole("button", { name: "前面へ" }));
+  fireEvent.click(screen.getByRole("button", { name: "背面へ" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "表示" }));
+  fireEvent.change(screen.getByRole("slider", { name: /^不透明度/ }), { target: { value: "0.5" } });
+  fireEvent.click(screen.getByRole("button", { name: "変更を保存" }));
+  await waitFor(() => expect(backend.getOpenProject()).resolves.toMatchObject({ features: [{ properties: { visible: false, opacity: 0.5, zIndex: 0 } }] }));
+
+  fireEvent.click(screen.getByRole("button", { name: "90°回転" }));
+  await waitFor(async () => expect((await backend.getOpenProject())?.features[0]?.geometry).not.toEqual(initial.features[0]?.geometry));
+  fireEvent.click(screen.getByRole("button", { name: "左右反転" }));
+  fireEvent.click(screen.getByRole("button", { name: "上下反転" }));
+  fireEvent.click(screen.getByRole("button", { name: "複製" }));
+  await waitFor(async () => expect((await backend.getOpenProject())?.features).toHaveLength(2));
+
+  fireEvent.change(screen.getByRole("searchbox", { name: "地物を検索" }), { target: { value: "Island" } });
+  expect(screen.getAllByRole("button", { name: /Island/ })).toHaveLength(2);
+});
+
+it("sprays editable symbols inside a selected polygon as one undoable batch", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://spray.realmmap", name: "Spray" });
+  const initial = await backend.createFeature({ featureType: "terrain", name: "Island", geometry: { type: "Polygon", coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] } });
+  render(<EditorShell snapshot={initial} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "テスト選択" }));
+  fireEvent.change(screen.getByRole("spinbutton", { name: "個数" }), { target: { value: "6" } });
+  fireEvent.change(screen.getByRole("spinbutton", { name: "最小間隔" }), { target: { value: "1" } });
+  fireEvent.click(screen.getByRole("button", { name: "この領域へ散布" }));
+  await waitFor(async () => expect((await backend.getOpenProject())?.features).toHaveLength(7));
+  expect((await backend.undoProject()).features).toHaveLength(1);
 });
 
 it("keeps newer name input when an older automatic save finishes", async () => {

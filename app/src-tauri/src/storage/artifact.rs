@@ -20,10 +20,15 @@ pub(crate) fn validated_artifact_path(raw: &str) -> Result<PathBuf, AppError> {
     if !path
         .extension()
         .and_then(|value| value.to_str())
-        .is_some_and(|value| value.eq_ignore_ascii_case("png") || value.eq_ignore_ascii_case("pdf"))
+        .is_some_and(|value| {
+            value.eq_ignore_ascii_case("png")
+                || value.eq_ignore_ascii_case("jpg")
+                || value.eq_ignore_ascii_case("jpeg")
+                || value.eq_ignore_ascii_case("pdf")
+        })
     {
         return Err(AppError::invalid(
-            "Artifacts must use the .png or .pdf extension.",
+            "Artifacts must use the .png, .jpg, .jpeg, or .pdf extension.",
         ));
     }
     let parent = path
@@ -64,6 +69,8 @@ pub(crate) fn write_artifact(path: String, bytes: Vec<u8>) -> Result<(), AppErro
         .unwrap_or_default();
     let valid_bytes = if extension.eq_ignore_ascii_case("png") {
         bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+    } else if extension.eq_ignore_ascii_case("jpg") || extension.eq_ignore_ascii_case("jpeg") {
+        bytes.starts_with(b"\xff\xd8\xff")
     } else {
         bytes.starts_with(b"%PDF-")
     };

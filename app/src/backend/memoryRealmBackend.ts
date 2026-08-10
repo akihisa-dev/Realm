@@ -1,16 +1,18 @@
 import type {
   CellAttribute, CellAttributeSnapshot, CellViewportInput, CreateFeatureInput,
-  ProjectSummary, RealmBackend, RealmFeature, RealmSnapshot,
+  AssetRead, ImportAssetInput, ProjectSummary, RealmBackend, RealmFeature, RealmSnapshot,
   ReviseFeatureInput, SaveProjectInput,
 } from "./types";
 
 type MemoryProject = {
   snapshot: RealmSnapshot;
   cells: CellAttributeSnapshot[];
+  assetBytes: Record<string, number[]>;
 };
 
 const makeSnapshot = (path: string, name: string): RealmSnapshot => ({
-  formatVersion: 3, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, features: [], featureCount: 0,
+  formatVersion: 6, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, features: [], assets: [],
+  settings: { themeId: "ink", showGrid: true, exportScale: 2, exportExtent: "world" }, featureCount: 0,
   canUndo: false, canRedo: false,
 });
 
@@ -26,8 +28,8 @@ const validPosition = (position: readonly number[]): position is [number, number
   position.length === 2 && position.every((value, index) => Number.isFinite(value) && (index === 0 ? value >= -180 && value <= 180 : value >= -90 && value <= 90));
 
 const validateGeometry = (input: CreateFeatureInput): void => {
-  const expected = input.featureType === "city" || input.featureType === "town" ? "Point"
-    : input.featureType === "river" || input.featureType === "coastline" || input.featureType === "boundary" ? "LineString" : "Polygon";
+  const expected = input.featureType === "city" || input.featureType === "town" || input.featureType === "mountain" || input.featureType === "tree" || input.featureType === "symbol" || input.featureType === "label" || input.featureType === "scale" ? "Point"
+    : input.featureType === "river" || input.featureType === "coastline" || input.featureType === "boundary" || input.featureType === "road" ? "LineString" : "Polygon";
   if (input.geometry.type !== expected) throw new Error("地物の形状が種類と一致しません。");
   if (input.geometry.type === "Point") {
     if (!validPosition(input.geometry.coordinates)) throw new Error("地物の座標が不正です。");
@@ -56,7 +58,7 @@ export class MemoryRealmBackend implements RealmBackend {
   private openPath: string | null = null;
 
   constructor(initialProjects: RealmSnapshot[] = []) {
-    for (const snapshot of initialProjects) this.projects.set(snapshot.path, { snapshot: clone(snapshot), cells: [] });
+    for (const snapshot of initialProjects) this.projects.set(snapshot.path, { snapshot: clone(snapshot), cells: [], assetBytes: {} });
   }
 
   private current(): MemoryProject {
@@ -86,7 +88,7 @@ export class MemoryRealmBackend implements RealmBackend {
   async createProject(input: { name: string; path?: string }): Promise<RealmSnapshot> {
     const path = input.path ?? `browser://${crypto.randomUUID()}.realmmap`;
     if (this.projects.has(path)) throw new Error("同じ場所に世界がすでにあります。");
-    const project = { snapshot: makeSnapshot(path, input.name), cells: [] };
+    const project = { snapshot: makeSnapshot(path, input.name), cells: [], assetBytes: {} };
     this.projects.set(path, project); this.openPath = path; return this.result(project);
   }
   async openProject(input: { libraryId?: string; path?: string }): Promise<RealmSnapshot> {
@@ -106,16 +108,69 @@ export class MemoryRealmBackend implements RealmBackend {
     if (project.snapshot.world.name !== name) { this.checkpoint(project); project.snapshot.world.name = name; }
     return this.result(project);
   }
+  async updateProjectSettings(input: { settings: RealmSnapshot["settings"] }): Promise<RealmSnapshot> {
+    const keys = Object.keys(input.settings);
+    if (keys.length !== 4 || keys.some((key) => !["themeId", "showGrid", "exportScale", "exportExtent"].includes(key))) throw new Error("プロジェクト設定が不正です。");
+    if (!input.settings.themeId || !["ink", "atlas", "midnight"].includes(input.settings.themeId)) throw new Error("描画テーマが不正です。");
+    if (typeof input.settings.showGrid !== "boolean") throw new Error("グリッド表示設定が不正です。");
+    if (!input.settings.exportScale || ![1, 2, 4].includes(input.settings.exportScale)) throw new Error("書き出し倍率が不正です。");
+    if (!input.settings.exportExtent || !["viewport", "world"].includes(input.settings.exportExtent)) throw new Error("書き出し範囲が不正です。");
+    const project = this.current();
+    if (JSON.stringify(project.snapshot.settings) !== JSON.stringify(input.settings)) { this.checkpoint(project); project.snapshot.settings = clone(input.settings); }
+    return this.result(project);
+  }
   async createFeature(input: CreateFeatureInput): Promise<RealmSnapshot> {
     const project = this.current(); const name = normalizeName(input.name); validateGeometry(input); this.checkpoint(project);
-    const feature: RealmFeature = { id: crypto.randomUUID(), featureType: input.featureType, name, geometry: clone(input.geometry) };
+    const feature: RealmFeature = { id: crypto.randomUUID(), featureType: input.featureType, name, geometry: clone(input.geometry), properties: clone(input.properties ?? {}) };
     project.snapshot.features.push(feature); return this.result(project);
+  }
+  async createFeaturesBatch(input: { features: CreateFeatureInput[] }): Promise<RealmSnapshot> {
+    if (input.features.length === 0 || input.features.length > 2048) throw new Error("一度に作成できる地物数が不正です。");
+    const prepared = input.features.map((feature) => {
+      const name = normalizeName(feature.name);
+      validateGeometry(feature);
+      return { id: crypto.randomUUID(), featureType: feature.featureType, name, geometry: clone(feature.geometry), properties: clone(feature.properties ?? {}) } satisfies RealmFeature;
+    });
+    const project = this.current();
+    this.checkpoint(project);
+    project.snapshot.features.push(...prepared);
+    return this.result(project);
+  }
+  async importAsset(input: ImportAssetInput): Promise<RealmSnapshot> {
+    if (!["image/png", "image/jpeg", "image/webp"].includes(input.mime) || input.bytes.length === 0 || input.bytes.length > 8 * 1024 * 1024) throw new Error("素材の形式またはサイズが不正です。");
+    if (!Number.isSafeInteger(input.width) || !Number.isSafeInteger(input.height) || input.width < 1 || input.height < 1 || input.width > 32768 || input.height > 32768) throw new Error("素材の画像寸法が不正です。");
+    const digest = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(input.bytes)))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    if (input.sha256 && input.sha256.toLowerCase() !== digest) throw new Error("素材のハッシュが一致しません。");
+    const project = this.current();
+    if (project.snapshot.assets.some((asset) => asset.sha256 === digest)) return this.result(project);
+    this.checkpoint(project);
+    const id = crypto.randomUUID();
+    project.snapshot.assets.push({ id, sha256: digest, mime: input.mime, byteLength: input.bytes.length, width: input.width, height: input.height, metadata: clone(input.metadata ?? {}) });
+    project.assetBytes[id] = [...input.bytes];
+    return this.result(project);
+  }
+  async readAsset(input: { id: string }): Promise<AssetRead> {
+    const project = this.current();
+    const manifest = project.snapshot.assets.find((asset) => asset.id === input.id);
+    const bytes = project.assetBytes[input.id];
+    if (!manifest || !bytes) throw new Error("素材が見つかりません。");
+    return { manifest: clone(manifest), bytes: [...bytes] };
+  }
+  async deleteAsset(input: { id: string }): Promise<RealmSnapshot> {
+    const project = this.current();
+    const index = project.snapshot.assets.findIndex((asset) => asset.id === input.id);
+    if (index < 0) throw new Error("素材が見つかりません。");
+    if (project.snapshot.features.some((feature) => feature.properties?.assetId === input.id)) throw new Error("使用中の素材は削除できません。");
+    this.checkpoint(project);
+    project.snapshot.assets.splice(index, 1);
+    delete project.assetBytes[input.id];
+    return this.result(project);
   }
   async reviseFeature(input: ReviseFeatureInput): Promise<RealmSnapshot> {
     const project = this.current(); const feature = project.snapshot.features.find((item) => item.id === input.id);
     if (!feature) throw new Error("地物が見つかりません。"); const name = normalizeName(input.name);
     validateGeometry({ featureType: feature.featureType, name, geometry: input.geometry }); this.checkpoint(project);
-    feature.name = name; feature.geometry = clone(input.geometry); return this.result(project);
+    feature.name = name; feature.geometry = clone(input.geometry); feature.properties = clone(input.properties ?? feature.properties ?? {}); return this.result(project);
   }
   async deleteFeature(input: { id: string }): Promise<RealmSnapshot> {
     const project = this.current(); const index = project.snapshot.features.findIndex((item) => item.id === input.id);

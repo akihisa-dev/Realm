@@ -19,15 +19,15 @@ Rust command boundary ── validation ── current-state service
 
 ## State ownership
 
-- Rust owns the app-data library path, opened database, SQLite transactions, schema state, stable identifiers, current persisted map data, and session undo/redo stacks.
-- React owns transient selection, viewport, tool mode, and form drafts awaiting the short automatic-save debounce.
+- Rust owns the app-data library path, opened database, SQLite transactions, schema state, stable identifiers, current persisted map data, project presentation settings, and session undo/redo stacks.
+- React owns transient selection, viewport, tool mode, per-class visibility, and form drafts awaiting the short automatic-save debounce.
 - OpenLayers owns only rendering and interaction objects derived from the current snapshot; map objects are not an additional source of truth. Completed feature draw and modify gestures cross the renderer boundary as GeoJSON geometry. A completed brush stroke crosses as stable cell IDs, while its pointer path and preview remain transient React/OpenLayers state.
 
-The coarse IPC surface lists, creates, opens, saves, closes, imports, and exports library worlds; writes validated PNG/PDF artifact bytes; reads the current project snapshot; creates, revises, and deletes one feature; applies one cell-attribute batch; reads current cell attributes for an optional grid viewport; and performs undo or redo. Automatic save replaces the editable world name in one Rust transaction. Feature commands accept complete validated GeoJSON geometry, while cell commands accept bounded stable IDs rather than SQL-shaped or per-coordinate calls.
+The coarse IPC surface lists, creates, opens, saves, closes, imports, and exports library worlds; writes validated PNG/JPEG/PDF artifact bytes; reads the current project snapshot; updates bounded project presentation settings; creates, revises, deletes, or batch-creates validated features; imports, reads, and deletes project-embedded image assets; applies one cell-attribute batch; reads current cell attributes for an optional grid viewport; and performs undo or redo. Automatic save replaces the editable world name in one Rust transaction. Feature commands accept complete validated GeoJSON geometry, while cell commands accept bounded stable IDs rather than SQL-shaped or per-coordinate calls. Project snapshots contain asset manifests only; one explicit read command returns one bounded asset's bytes.
 
 Tauri imports are isolated in `app/src/backend/tauriRealmBackend.ts`. The browser-only memory backend implements the same interface for deterministic UI tests without pretending to be a second persistence format.
 
-OpenLayers imports are isolated below `app/src/map/`. `contracts.ts` is the UI-facing renderer contract, while grid geometry and world-bound checks remain pure modules. `MapAdapter.ts` owns the OpenLayers map, layers, interactions, and lifecycle; its factory is injected into the canvas, so a later viewing style can be selected without moving project state out of Rust. Cell features are created only for persisted or selected cells until brush mode needs the complete fixed grid.
+OpenLayers imports are isolated below `app/src/map/`. `contracts.ts` is the UI-facing renderer contract, while drawing refinement, seeded symbol scatter, measurement, geometry transforms, grid geometry, and world-bound checks remain pure modules. `MapAdapter.ts` owns the OpenLayers map, layers, interactions, and lifecycle; its factory is injected into the canvas. Theme definitions remain renderer-owned, while the selected theme identifier and grid/export preferences are persisted as bounded project settings. Cell features are created lazily only for persisted, touched, or selected cells; selecting brush mode does not instantiate the complete fixed grid.
 
 React coordinates library operations through `app/src/state/useRealmOperations.ts`. Operation generations reject stale project and library responses. The editor serializes automatic save, mutations, exports, and close so a delayed response cannot replace a newer draft or snapshot.
 
@@ -38,8 +38,8 @@ Rust keeps `lib.rs` as the composition root and command registry. IPC data contr
 - Resolve the app-data directory in Rust, address library entries by validated UUID, and validate user-selected import/export paths; never concatenate user input into SQL or filesystem paths.
 - Use parameterized queries and transactions for current-state writes.
 - Never write half a database or export: create schema and initial world data in one SQLite transaction, synchronize hidden sibling staging files, and publish them with macOS's atomic no-replace rename. Later writes remain transactional and preserve the journal semantics selected by the storage implementation.
-- PNG/PDF bytes originate from the current OpenLayers rendering and are size- and extension-bounded at the Rust write boundary. Transfer imports are inspected read-only before being copied into the library; the selected source is never modified.
-- Do not send database contents or telemetry over the network; image import is not a product capability.
+- PNG/JPEG/PDF bytes originate from the current OpenLayers rendering and are size- and extension-bounded at the Rust write boundary. Transfer imports are inspected read-only before being copied into the library; the selected source is never modified.
+- Do not send database contents, embedded assets, or telemetry over the network. Imported symbol images are validated and copied into the current database; they are never geography input and never remain external file references.
 - Existing files are inspected through a read-only connection before any read/write connection is opened. Retired, future, mismatched, incomplete, and failed-integrity schemas leave the original file and its journal mode untouched.
 
 ## Decision records

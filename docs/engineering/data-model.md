@@ -4,15 +4,18 @@
 
 Each library world is one SQLite database stored below Realm's macOS application-data directory under a UUID filename. The internal path is implementation state, not a user document. SQLite journal sidecars may exist while the world is open and are not separate artifacts.
 
-The same single-database representation is copied to a `.realmmap` file only for explicit transfer export. Import validates the selected source read-only, publishes a new UUID-named copy inside the library, and opens that copy. PNG and PDF exports are derived presentation artifacts and contain no editable Realm database.
+The same single-database representation is copied to a `.realmmap` file only for explicit transfer export. Import validates the selected source read-only, publishes a new UUID-named copy inside the library, and opens that copy. PNG, JPEG, and PDF exports are derived presentation artifacts and contain no editable Realm database.
 
-Schema version 3 is the first single-state format. It records the same value in `PRAGMA user_version` and `schema_migrations`; disagreement is corruption. Formats from the retired chronology model are rejected without opening a read/write connection or changing the source. Realm does not silently discard chronology data or choose one historical snapshot on the user's behalf. A newer version, partial SQLite file, integrity failure, or schema whose columns, declared types, nullability, keys, indexes, foreign keys, or checks do not preserve the declared version is also rejected during read-only preflight.
+Schema version 6 is the current single-state format. It records the same value in `PRAGMA user_version` and `schema_migrations`; disagreement is corruption. Exact version 3, 4, and 5 databases are accepted by read-only preflight and upgraded transactionally. The version 3 path performs the version 4 feature-properties rebuild, the version 5 asset addition, and the version 6 project-settings addition in one transaction, so a later-stage failure cannot leave a partially upgraded source. Existing rows are preserved, version markers are recorded last, and every failure rolls back completely. Formats from the retired chronology model are rejected without opening a read/write connection or changing the source. Realm does not silently discard chronology data or choose one historical snapshot on the user's behalf. A newer version, partial SQLite file, integrity failure, or schema whose columns, declared types, nullability, keys, indexes, foreign keys, or checks do not preserve its declared version is also rejected during read-only preflight.
 
 ## Identity and current state
 
-- A world has one stable identifier and a current name.
-- A feature has one stable identifier, one feature class, one current name, and one current geometry.
+- A world has one stable identifier, one current name, and one bounded project-settings object.
+- A feature has one stable identifier, one feature class, one current name, one current geometry, and one current JSON properties object.
 - Creating, revising, or deleting a feature changes its current row transactionally.
+- A bounded multi-feature create validates every feature first and commits the complete batch as one undoable transaction. It is used for explicit symbol scatter; generated candidates do not remain an implicit renderer layer.
+- Feature properties hold bounded renderer-independent values such as line width, symbol scale, or rotation. The command boundary accepts only JSON objects of at most 32 KiB; OpenLayers objects, viewport state, and external paths are never stored there.
+- Project settings preserve only the selected renderer theme, grid visibility, raster export scale, and raster export extent. The command boundary accepts only the documented keys and values. Viewport, zoom, active tool, selection, and per-class visibility remain transient.
 - Undo and redo are session state, not persisted map history. They restore the complete before or after state of one edit operation while the project remains open.
 - Reopening a project clears the undo and redo stacks without changing the saved map.
 
@@ -20,9 +23,23 @@ Realm does not persist years, named eras, timeline events, feature revisions, de
 
 ## Feature classes
 
-The initial classes are `terrain`, `forest`, `river`, `coastline`, `country`, `region`, `boundary`, `city`, and `town`. Cities and towns require GeoJSON `Point`; rivers, coastlines, and boundaries require `LineString`; terrain, forests, countries, and regions require `Polygon`. Coordinates are EPSG:4326 longitude/latitude pairs within the bounded world, lines contain at least two positions, and polygon rings contain at least four positions with equal first and last positions. The Rust command boundary validates these requirements. No class is populated by a generator.
+The feature classes and their required GeoJSON geometry are:
 
-Terrain is a single polygon class. Realm does not store flat-land, mountain, or another terrain-kind value. Country and region polygons are independent political overlays on the same world plane as terrain polygons. They do not store a parent terrain identifier and are not clipped to one terrain feature.
+| Geometry | Feature classes |
+| --- | --- |
+| `Point` | `city`, `town`, `mountain`, `tree`, `symbol`, `label`, `scale` |
+| `LineString` | `river`, `coastline`, `boundary`, `road` |
+| `Polygon` | `terrain`, `forest`, `country`, `region`, `lake`, `overlay`, `frame` |
+
+Coordinates are EPSG:4326 longitude/latitude pairs within the bounded world, lines contain at least two positions, and polygon rings contain at least four positions with equal first and last positions. The Rust command boundary validates these requirements. No class is populated by a generator.
+
+Terrain is a single polygon class. Realm does not store flat-land, mountain, or another terrain-kind value. A `mountain` is a separately placed point feature whose appearance is derived by the renderer. Country and region polygons are independent political overlays on the same world plane as terrain polygons. They do not store a parent terrain identifier and are not clipped to one terrain feature.
+
+## Embedded assets
+
+Version 5 introduced validated image assets in an `assets` table inside the same database. Each row has a stable identifier, unique SHA-256 digest, MIME type, byte length, dimensions, metadata JSON object, and bytes. Import accepts PNG, JPEG, or WebP only, with an 8 MiB byte limit and a 32768-pixel limit per dimension. SVG is not accepted because safe offline rendering would require complete active-content and external-reference sanitization.
+
+Project snapshots expose only bounded asset manifests. Bytes cross the command boundary only through an explicit single-asset read. Identical bytes deduplicate by SHA-256. A feature refers to an asset by identifier in its validated properties; deletion and undo refuse to remove an asset while any feature still references it. Absolute paths and network locations are never persisted.
 
 ## Cell grid and attributes
 

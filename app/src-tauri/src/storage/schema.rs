@@ -1,7 +1,13 @@
 use crate::error::AppError;
 use rusqlite::{Connection, Error as SqlError, Transaction, params};
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i32 = 3;
+pub(crate) const CURRENT_SCHEMA_VERSION: i32 = 6;
+pub(crate) const PREVIOUS_SCHEMA_VERSION: i32 = 5;
+pub(crate) const SCHEMA_VERSION_V3: i32 = 3;
+pub(crate) const SCHEMA_VERSION_V4: i32 = 4;
+pub(crate) const SETTINGS_MAX_BYTES: usize = 32 * 1024;
+pub(crate) const DEFAULT_SETTINGS_JSON: &str =
+    r#"{"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world"}"#;
 pub(crate) const GRID_VERSION: i32 = 1;
 pub(crate) const GRID_COLUMNS: i32 = 512;
 pub(crate) const GRID_ROWS: i32 = 256;
@@ -30,15 +36,27 @@ const SCHEMA_MIGRATION_COLUMNS: &[ColumnExpectation] = &[
     column("version", "INTEGER", false, true),
     column("applied_at", "TEXT", true, false),
 ];
+const WORLD_COLUMNS_V5: &[ColumnExpectation] = &[
+    column("id", "TEXT", true, true),
+    column("name", "TEXT", true, false),
+];
 const WORLD_COLUMNS: &[ColumnExpectation] = &[
     column("id", "TEXT", true, true),
     column("name", "TEXT", true, false),
+    column("settings_json", "TEXT", true, false),
+];
+const FEATURE_COLUMNS_V3: &[ColumnExpectation] = &[
+    column("id", "TEXT", true, true),
+    column("feature_type", "TEXT", true, false),
+    column("name", "TEXT", true, false),
+    column("geometry_json", "TEXT", true, false),
 ];
 const FEATURE_COLUMNS: &[ColumnExpectation] = &[
     column("id", "TEXT", true, true),
     column("feature_type", "TEXT", true, false),
     column("name", "TEXT", true, false),
     column("geometry_json", "TEXT", true, false),
+    column("properties_json", "TEXT", true, false),
 ];
 const CELL_GRID_COLUMNS: &[ColumnExpectation] = &[
     column("id", "INTEGER", true, true),
@@ -53,6 +71,15 @@ const CELL_ATTRIBUTE_COLUMNS: &[ColumnExpectation] = &[
     column("cell_y", "INTEGER", true, false),
     column("layer", "TEXT", true, false),
     column("value", "TEXT", true, false),
+];
+const ASSET_COLUMNS: &[ColumnExpectation] = &[
+    column("id", "TEXT", true, true),
+    column("sha256", "TEXT", true, false),
+    column("mime", "TEXT", true, false),
+    column("bytes", "BLOB", true, false),
+    column("width", "INTEGER", true, false),
+    column("height", "INTEGER", true, false),
+    column("metadata_json", "TEXT", true, false),
 ];
 
 pub(crate) fn configure_connection(connection: &Connection) -> Result<(), AppError> {
@@ -91,22 +118,29 @@ pub(crate) fn configure_new_connection(connection: &Connection) -> Result<(), Ap
 }
 
 pub(crate) fn schema_sql(transaction: &Transaction<'_>) -> Result<(), AppError> {
-    transaction.execute_batch(
-        "
+    transaction
+        .execute_batch(
+            "
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version INTEGER PRIMARY KEY,
             applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS world (
             id TEXT PRIMARY KEY NOT NULL,
-            name TEXT NOT NULL
+            name TEXT NOT NULL,
+            settings_json TEXT NOT NULL CHECK (json_valid(settings_json)
+                AND json_type(settings_json) = 'object'
+                AND length(settings_json) <= 32768
+            )
         );
         CREATE TABLE IF NOT EXISTS features (
             id TEXT PRIMARY KEY NOT NULL,
             feature_type TEXT NOT NULL CHECK (feature_type IN
-                ('terrain','forest','river','coastline','country','region','boundary','city','town')),
+                ('terrain','forest','river','coastline','country','region','boundary','city','town',
+                 'road','lake','mountain','tree','symbol','label','overlay','frame','scale')),
             name TEXT NOT NULL,
-            geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json))
+            geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json)),
+            properties_json TEXT NOT NULL CHECK (json_valid(properties_json) AND json_type(properties_json) = 'object')
         );
         CREATE TABLE IF NOT EXISTS cell_grid (
             id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
@@ -125,10 +159,21 @@ pub(crate) fn schema_sql(transaction: &Transaction<'_>) -> Result<(), AppError> 
         );
         CREATE INDEX IF NOT EXISTS cell_attributes_lookup
             ON cell_attributes(grid_version, cell_x, cell_y, layer);
+        CREATE TABLE IF NOT EXISTS assets (
+            id TEXT PRIMARY KEY NOT NULL,
+            sha256 TEXT NOT NULL UNIQUE CHECK (length(sha256) = 64),
+            mime TEXT NOT NULL,
+            bytes BLOB NOT NULL,
+            width INTEGER NOT NULL CHECK (width > 0 AND width <= 32768),
+            height INTEGER NOT NULL CHECK (height > 0 AND height <= 32768),
+            metadata_json TEXT NOT NULL CHECK (json_valid(metadata_json) AND json_type(metadata_json) = 'object')
+        );
+        CREATE INDEX IF NOT EXISTS assets_sha256_lookup ON assets(sha256);
         INSERT OR IGNORE INTO cell_grid(id, grid_version, grid_columns, grid_rows)
             VALUES (1, 1, 512, 256);
         ",
-    ).map_err(AppError::from)
+        )
+        .map_err(AppError::from)
 }
 
 pub(crate) fn initialize_schema_transaction(
@@ -164,8 +209,8 @@ pub(crate) fn initialize_schema_transaction(
         .map_err(AppError::from)?;
     transaction
         .execute(
-            "INSERT INTO world(id, name) VALUES (?1, ?2)",
-            params![world_id, world_name.trim()],
+            "INSERT INTO world(id, name, settings_json) VALUES (?1, ?2, ?3)",
+            params![world_id, world_name.trim(), DEFAULT_SETTINGS_JSON],
         )
         .map_err(AppError::from)?;
     verify_schema(transaction)?;
@@ -266,28 +311,15 @@ pub(crate) fn verify_table(
     Ok(())
 }
 
-pub(crate) fn verify_schema(connection: &Connection) -> Result<(), AppError> {
-    for (table, expected) in [
-        ("schema_migrations", SCHEMA_MIGRATION_COLUMNS),
-        ("world", WORLD_COLUMNS),
-        ("features", FEATURE_COLUMNS),
-        ("cell_grid", CELL_GRID_COLUMNS),
-        ("cell_attributes", CELL_ATTRIBUTE_COLUMNS),
-    ] {
-        verify_table(connection, table, expected)?;
-    }
+fn verify_feature_schema(
+    connection: &Connection,
+    expected_columns: &[ColumnExpectation],
+    feature_types: &[&str],
+    has_properties: bool,
+) -> Result<(), AppError> {
+    verify_table(connection, "features", expected_columns)?;
     let feature_sql = normalized_object_sql(connection, "table", "features")?;
-    for feature_type in [
-        "'terrain'",
-        "'forest'",
-        "'river'",
-        "'coastline'",
-        "'country'",
-        "'region'",
-        "'boundary'",
-        "'city'",
-        "'town'",
-    ] {
+    for feature_type in feature_types {
         if !feature_sql.contains(feature_type) {
             return Err(corrupt_schema());
         }
@@ -295,6 +327,31 @@ pub(crate) fn verify_schema(connection: &Connection) -> Result<(), AppError> {
     if !feature_sql.contains("check (json_valid(geometry_json))") {
         return Err(corrupt_schema());
     }
+    if has_properties
+        && (!feature_sql.contains("check (json_valid(properties_json)")
+            || !feature_sql.contains("json_type(properties_json) = 'object'"))
+    {
+        return Err(corrupt_schema());
+    }
+    Ok(())
+}
+
+fn verify_common_schema(
+    connection: &Connection,
+    world_columns: &[ColumnExpectation],
+    feature_columns: &[ColumnExpectation],
+    feature_types: &[&str],
+    has_properties: bool,
+) -> Result<(), AppError> {
+    for (table, expected) in [
+        ("schema_migrations", SCHEMA_MIGRATION_COLUMNS),
+        ("cell_grid", CELL_GRID_COLUMNS),
+        ("cell_attributes", CELL_ATTRIBUTE_COLUMNS),
+    ] {
+        verify_table(connection, table, expected)?;
+    }
+    verify_table(connection, "world", world_columns)?;
+    verify_feature_schema(connection, feature_columns, feature_types, has_properties)?;
     let cell_sql = normalized_object_sql(connection, "table", "cell_attributes")?;
     if !cell_sql.contains("check (layer in ('forest','country','region'))")
         || !cell_sql.contains("unique (grid_version, cell_x, cell_y, layer)")
@@ -356,7 +413,138 @@ pub(crate) fn verify_schema(connection: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
-pub(crate) fn validate_existing_schema(connection: &Connection) -> Result<(), AppError> {
+pub(crate) fn verify_schema_v3(connection: &Connection) -> Result<(), AppError> {
+    verify_common_schema(
+        connection,
+        WORLD_COLUMNS_V5,
+        FEATURE_COLUMNS_V3,
+        &[
+            "'terrain'",
+            "'forest'",
+            "'river'",
+            "'coastline'",
+            "'country'",
+            "'region'",
+            "'boundary'",
+            "'city'",
+            "'town'",
+        ],
+        false,
+    )
+}
+
+fn verify_schema_shape(connection: &Connection) -> Result<(), AppError> {
+    verify_common_schema(
+        connection,
+        WORLD_COLUMNS_V5,
+        FEATURE_COLUMNS,
+        &[
+            "'terrain'",
+            "'forest'",
+            "'river'",
+            "'coastline'",
+            "'country'",
+            "'region'",
+            "'boundary'",
+            "'city'",
+            "'town'",
+            "'road'",
+            "'lake'",
+            "'mountain'",
+            "'tree'",
+            "'symbol'",
+            "'label'",
+            "'overlay'",
+            "'frame'",
+            "'scale'",
+        ],
+        true,
+    )?;
+    Ok(())
+}
+
+fn verify_schema_shape_current(connection: &Connection) -> Result<(), AppError> {
+    verify_common_schema(
+        connection,
+        WORLD_COLUMNS,
+        FEATURE_COLUMNS,
+        &[
+            "'terrain'",
+            "'forest'",
+            "'river'",
+            "'coastline'",
+            "'country'",
+            "'region'",
+            "'boundary'",
+            "'city'",
+            "'town'",
+            "'road'",
+            "'lake'",
+            "'mountain'",
+            "'tree'",
+            "'symbol'",
+            "'label'",
+            "'overlay'",
+            "'frame'",
+            "'scale'",
+        ],
+        true,
+    )
+}
+
+pub(crate) fn verify_schema_v4(connection: &Connection) -> Result<(), AppError> {
+    verify_schema_shape(connection)?;
+    if object_exists(connection, "table", "assets")?
+        || object_exists(connection, "index", "assets_sha256_lookup")?
+        || object_exists(connection, "trigger", "assets_sha256_lookup")?
+    {
+        return Err(corrupt_schema());
+    }
+    Ok(())
+}
+
+fn verify_assets_schema(connection: &Connection) -> Result<(), AppError> {
+    verify_table(connection, "assets", ASSET_COLUMNS)?;
+    let asset_sql = normalized_object_sql(connection, "table", "assets")?;
+    for invariant in [
+        "unique",
+        "check (length(sha256) = 64)",
+        "check (width > 0",
+        "check (height > 0",
+        "check (json_valid(metadata_json)",
+        "json_type(metadata_json) = 'object'",
+    ] {
+        if !asset_sql.contains(invariant) {
+            return Err(corrupt_schema());
+        }
+    }
+    if index_columns(connection, "assets_sha256_lookup")? != ["sha256"] {
+        return Err(corrupt_schema());
+    }
+    Ok(())
+}
+
+fn verify_schema_v5(connection: &Connection) -> Result<(), AppError> {
+    verify_schema_shape(connection)?;
+    verify_assets_schema(connection)
+}
+
+pub(crate) fn verify_schema(connection: &Connection) -> Result<(), AppError> {
+    verify_schema_shape_current(connection)?;
+    let world_sql = normalized_object_sql(connection, "table", "world")?;
+    for invariant in [
+        "check (json_valid(settings_json)",
+        "json_type(settings_json) = 'object'",
+        "length(settings_json) <= 32768",
+    ] {
+        if !world_sql.contains(invariant) {
+            return Err(corrupt_schema());
+        }
+    }
+    verify_assets_schema(connection)
+}
+
+fn read_schema_version(connection: &Connection) -> Result<i32, AppError> {
     let integrity: String = connection
         .query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
         .map_err(AppError::from)?;
@@ -398,13 +586,10 @@ pub(crate) fn validate_existing_schema(connection: &Connection) -> Result<(), Ap
             "The project schema versions do not agree.",
         ));
     }
-    if user_version != CURRENT_SCHEMA_VERSION {
-        return Err(AppError::new(
-            "unsupported_schema",
-            "This project uses a legacy Realm format that is no longer supported.",
-        ));
-    }
-    verify_schema(connection)?;
+    Ok(user_version)
+}
+
+fn verify_world(connection: &Connection) -> Result<(), AppError> {
     let world_count: i64 = connection
         .query_row("SELECT COUNT(*) FROM world", [], |row| row.get(0))
         .map_err(AppError::from)?;
@@ -415,4 +600,287 @@ pub(crate) fn validate_existing_schema(connection: &Connection) -> Result<(), Ap
         ));
     }
     Ok(())
+}
+
+pub(crate) fn validate_existing_schema_for_preflight(
+    connection: &Connection,
+) -> Result<i32, AppError> {
+    let version = read_schema_version(connection)?;
+    match version {
+        SCHEMA_VERSION_V3 => verify_schema_v3(connection)?,
+        SCHEMA_VERSION_V4 => verify_schema_v4(connection)?,
+        PREVIOUS_SCHEMA_VERSION => verify_schema_v5(connection)?,
+        CURRENT_SCHEMA_VERSION => verify_schema(connection)?,
+        _ => {
+            return Err(AppError::new(
+                "unsupported_schema",
+                "This project uses a legacy Realm format that is no longer supported.",
+            ));
+        }
+    }
+    verify_world(connection)?;
+    Ok(version)
+}
+
+pub(crate) fn validate_existing_schema(connection: &Connection) -> Result<(), AppError> {
+    let version = read_schema_version(connection)?;
+    if version != CURRENT_SCHEMA_VERSION {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses a legacy Realm format that is no longer supported.",
+        ));
+    }
+    verify_schema(connection)?;
+    verify_world(connection)
+}
+
+pub(crate) fn migrate_v3_to_v4(connection: &mut Connection) -> Result<(), AppError> {
+    if read_schema_version(connection)? != SCHEMA_VERSION_V3 {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses a legacy Realm format that is no longer supported.",
+        ));
+    }
+    verify_schema_v3(connection)?;
+    verify_world(connection)?;
+    let transaction = connection.transaction().map_err(AppError::from)?;
+    transaction
+        .execute_batch(
+            "
+            ALTER TABLE features RENAME TO features_v3;
+            CREATE TABLE features (
+                id TEXT PRIMARY KEY NOT NULL,
+                feature_type TEXT NOT NULL CHECK (feature_type IN
+                    ('terrain','forest','river','coastline','country','region','boundary','city','town',
+                     'road','lake','mountain','tree','symbol','label','overlay','frame','scale')),
+                name TEXT NOT NULL,
+                geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json)),
+                properties_json TEXT NOT NULL CHECK (json_valid(properties_json) AND json_type(properties_json) = 'object')
+            );
+            INSERT INTO features(id, feature_type, name, geometry_json, properties_json)
+                SELECT id, feature_type, name, geometry_json, '{}' FROM features_v3;
+            DROP TABLE features_v3;
+            INSERT INTO schema_migrations(version) VALUES (4);
+            PRAGMA user_version = 4;
+            ",
+        )
+        .map_err(AppError::from)?;
+    verify_schema_v4(&transaction)?;
+    verify_world(&transaction)?;
+    transaction.commit().map_err(AppError::from)
+}
+
+pub(crate) fn migrate_v3_to_v5(connection: &mut Connection) -> Result<(), AppError> {
+    if read_schema_version(connection)? != SCHEMA_VERSION_V3 {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses a legacy Realm format that is no longer supported.",
+        ));
+    }
+    verify_schema_v3(connection)?;
+    verify_world(connection)?;
+    let transaction = connection.transaction().map_err(AppError::from)?;
+    transaction
+        .execute_batch(
+            "
+            ALTER TABLE features RENAME TO features_v3;
+            CREATE TABLE features (
+                id TEXT PRIMARY KEY NOT NULL,
+                feature_type TEXT NOT NULL CHECK (feature_type IN
+                    ('terrain','forest','river','coastline','country','region','boundary','city','town',
+                     'road','lake','mountain','tree','symbol','label','overlay','frame','scale')),
+                name TEXT NOT NULL,
+                geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json)),
+                properties_json TEXT NOT NULL CHECK (json_valid(properties_json) AND json_type(properties_json) = 'object')
+            );
+            INSERT INTO features(id, feature_type, name, geometry_json, properties_json)
+                SELECT id, feature_type, name, geometry_json, '{}' FROM features_v3;
+            DROP TABLE features_v3;
+            INSERT INTO schema_migrations(version) VALUES (4);
+            PRAGMA user_version = 4;
+            ",
+        )
+        .map_err(AppError::from)?;
+    verify_schema_v4(&transaction)?;
+    verify_world(&transaction)?;
+    transaction
+        .execute_batch(
+            "
+            CREATE TABLE assets (
+                id TEXT PRIMARY KEY NOT NULL,
+                sha256 TEXT NOT NULL UNIQUE CHECK (length(sha256) = 64),
+                mime TEXT NOT NULL,
+                bytes BLOB NOT NULL,
+                width INTEGER NOT NULL CHECK (width > 0 AND width <= 32768),
+                height INTEGER NOT NULL CHECK (height > 0 AND height <= 32768),
+                metadata_json TEXT NOT NULL CHECK (json_valid(metadata_json) AND json_type(metadata_json) = 'object')
+            );
+            CREATE INDEX assets_sha256_lookup ON assets(sha256);
+            INSERT INTO schema_migrations(version) VALUES (5);
+            PRAGMA user_version = 5;
+            ",
+        )
+        .map_err(AppError::from)?;
+    verify_schema_v5(&transaction)?;
+    verify_world(&transaction)?;
+    transaction.commit().map_err(AppError::from)
+}
+
+pub(crate) fn migrate_v4_to_v5(connection: &mut Connection) -> Result<(), AppError> {
+    if read_schema_version(connection)? != SCHEMA_VERSION_V4 {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses a legacy Realm format that is no longer supported.",
+        ));
+    }
+    verify_schema_v4(connection)?;
+    verify_world(connection)?;
+    let transaction = connection.transaction().map_err(AppError::from)?;
+    transaction
+        .execute_batch(
+            "
+            CREATE TABLE assets (
+                id TEXT PRIMARY KEY NOT NULL,
+                sha256 TEXT NOT NULL UNIQUE CHECK (length(sha256) = 64),
+                mime TEXT NOT NULL,
+                bytes BLOB NOT NULL,
+                width INTEGER NOT NULL CHECK (width > 0 AND width <= 32768),
+                height INTEGER NOT NULL CHECK (height > 0 AND height <= 32768),
+                metadata_json TEXT NOT NULL CHECK (json_valid(metadata_json) AND json_type(metadata_json) = 'object')
+            );
+            CREATE INDEX assets_sha256_lookup ON assets(sha256);
+            INSERT INTO schema_migrations(version) VALUES (5);
+            PRAGMA user_version = 5;
+            ",
+        )
+        .map_err(AppError::from)?;
+    verify_schema_v5(&transaction)?;
+    verify_world(&transaction)?;
+    transaction.commit().map_err(AppError::from)
+}
+
+fn rebuild_world_for_v6(transaction: &Transaction<'_>) -> Result<(), AppError> {
+    transaction
+        .execute_batch(&format!(
+            "ALTER TABLE world RENAME TO world_v5;
+             CREATE TABLE world (
+                 id TEXT PRIMARY KEY NOT NULL,
+                 name TEXT NOT NULL,
+                 settings_json TEXT NOT NULL CHECK (json_valid(settings_json)
+                     AND json_type(settings_json) = 'object'
+                     AND length(settings_json) <= {SETTINGS_MAX_BYTES}
+                 )
+             );
+             INSERT INTO world(id, name, settings_json)
+                 SELECT id, name, '{DEFAULT_SETTINGS_JSON}';
+             DROP TABLE world_v5;
+             INSERT INTO schema_migrations(version) VALUES (6);
+             PRAGMA user_version = 6;"
+        ))
+        .map_err(AppError::from)
+}
+
+pub(crate) fn migrate_v5_to_v6(connection: &mut Connection) -> Result<(), AppError> {
+    if read_schema_version(connection)? != PREVIOUS_SCHEMA_VERSION {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses a legacy Realm format that is no longer supported.",
+        ));
+    }
+    verify_schema_v5(connection)?;
+    verify_world(connection)?;
+    let transaction = connection.transaction().map_err(AppError::from)?;
+    rebuild_world_for_v6(&transaction)?;
+    verify_schema(&transaction)?;
+    verify_world(&transaction)?;
+    transaction.commit().map_err(AppError::from)
+}
+
+pub(crate) fn migrate_v4_to_v6(connection: &mut Connection) -> Result<(), AppError> {
+    if read_schema_version(connection)? != SCHEMA_VERSION_V4 {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses a legacy Realm format that is no longer supported.",
+        ));
+    }
+    verify_schema_v4(connection)?;
+    verify_world(connection)?;
+    let transaction = connection.transaction().map_err(AppError::from)?;
+    transaction
+        .execute_batch(
+            "CREATE TABLE assets (
+                id TEXT PRIMARY KEY NOT NULL,
+                sha256 TEXT NOT NULL UNIQUE CHECK (length(sha256) = 64),
+                mime TEXT NOT NULL,
+                bytes BLOB NOT NULL,
+                width INTEGER NOT NULL CHECK (width > 0 AND width <= 32768),
+                height INTEGER NOT NULL CHECK (height > 0 AND height <= 32768),
+                metadata_json TEXT NOT NULL CHECK (json_valid(metadata_json) AND json_type(metadata_json) = 'object')
+            );
+            CREATE INDEX assets_sha256_lookup ON assets(sha256);
+            INSERT INTO schema_migrations(version) VALUES (5);
+            PRAGMA user_version = 5;",
+        )
+        .map_err(AppError::from)?;
+    verify_schema_v5(&transaction)?;
+    verify_world(&transaction)?;
+    rebuild_world_for_v6(&transaction)?;
+    verify_schema(&transaction)?;
+    verify_world(&transaction)?;
+    transaction.commit().map_err(AppError::from)
+}
+
+pub(crate) fn migrate_v3_to_v6(connection: &mut Connection) -> Result<(), AppError> {
+    if read_schema_version(connection)? != SCHEMA_VERSION_V3 {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses a legacy Realm format that is no longer supported.",
+        ));
+    }
+    verify_schema_v3(connection)?;
+    verify_world(connection)?;
+    let transaction = connection.transaction().map_err(AppError::from)?;
+    transaction
+        .execute_batch(
+            "ALTER TABLE features RENAME TO features_v3;
+             CREATE TABLE features (
+                 id TEXT PRIMARY KEY NOT NULL,
+                 feature_type TEXT NOT NULL CHECK (feature_type IN
+                     ('terrain','forest','river','coastline','country','region','boundary','city','town',
+                      'road','lake','mountain','tree','symbol','label','overlay','frame','scale')),
+                 name TEXT NOT NULL,
+                 geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json)),
+                 properties_json TEXT NOT NULL CHECK (json_valid(properties_json) AND json_type(properties_json) = 'object')
+             );
+             INSERT INTO features(id, feature_type, name, geometry_json, properties_json)
+                 SELECT id, feature_type, name, geometry_json, '{}' FROM features_v3;
+             DROP TABLE features_v3;
+             INSERT INTO schema_migrations(version) VALUES (4);
+             PRAGMA user_version = 4;",
+        )
+        .map_err(AppError::from)?;
+    verify_schema_v4(&transaction)?;
+    verify_world(&transaction)?;
+    transaction
+        .execute_batch(
+            "CREATE TABLE assets (
+                id TEXT PRIMARY KEY NOT NULL,
+                sha256 TEXT NOT NULL UNIQUE CHECK (length(sha256) = 64),
+                mime TEXT NOT NULL,
+                bytes BLOB NOT NULL,
+                width INTEGER NOT NULL CHECK (width > 0 AND width <= 32768),
+                height INTEGER NOT NULL CHECK (height > 0 AND height <= 32768),
+                metadata_json TEXT NOT NULL CHECK (json_valid(metadata_json) AND json_type(metadata_json) = 'object')
+            );
+            CREATE INDEX assets_sha256_lookup ON assets(sha256);
+            INSERT INTO schema_migrations(version) VALUES (5);
+            PRAGMA user_version = 5;",
+        )
+        .map_err(AppError::from)?;
+    verify_schema_v5(&transaction)?;
+    verify_world(&transaction)?;
+    rebuild_world_for_v6(&transaction)?;
+    verify_schema(&transaction)?;
+    verify_world(&transaction)?;
+    transaction.commit().map_err(AppError::from)
 }

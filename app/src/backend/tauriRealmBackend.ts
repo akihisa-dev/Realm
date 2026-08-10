@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, CellViewportInput, ProjectSummary, RealmBackend, RealmSnapshot } from "./types";
+import type { ApplyCellAttributesInput, AssetRead, CellAttributeSnapshot, CellViewportInput, ProjectSummary, RealmBackend, RealmSnapshot } from "./types";
 
 export const tauriRealmBackend: RealmBackend = {
   listProjects: () => invoke<ProjectSummary[]>("list_projects"),
@@ -10,9 +10,14 @@ export const tauriRealmBackend: RealmBackend = {
   exportProject: (input) => invoke<void>("export_project", { path: input.path }),
   writeArtifact: (input) => invoke<void>("write_artifact", { path: input.path, bytes: input.bytes }),
   saveProject: (input) => invoke<RealmSnapshot>("save_project", { input }),
+  updateProjectSettings: (input) => invoke<RealmSnapshot>("update_project_settings", { input }),
   applyCellAttributes: (input: ApplyCellAttributesInput) => invoke<RealmSnapshot>("apply_cell_attributes", { input }),
   viewCellAttributes: (input: CellViewportInput) => invoke<CellAttributeSnapshot[]>("view_cell_attributes", { input }),
   createFeature: (input) => invoke<RealmSnapshot>("create_feature", { input }),
+  createFeaturesBatch: (input) => invoke<RealmSnapshot>("create_features_batch", { input }),
+  importAsset: (input) => invoke<RealmSnapshot>("import_asset", { input }),
+  readAsset: (input) => invoke<AssetRead>("read_asset", { input }),
+  deleteAsset: (input) => invoke<RealmSnapshot>("delete_asset", { input }),
   reviseFeature: (input) => invoke<RealmSnapshot>("revise_feature", { input }),
   deleteFeature: (input) => invoke<RealmSnapshot>("delete_feature", { input }),
   undoProject: () => invoke<RealmSnapshot>("undo_project"),
@@ -41,10 +46,10 @@ export const chooseTauriTransferPath = async (mode: "import" | "export", suggest
   return typeof selected === "string" ? selected : null;
 };
 
-export const chooseTauriArtifactPath = async (format: "png" | "pdf", suggestedName: string): Promise<string | null> => {
+export const chooseTauriArtifactPath = async (format: "png" | "jpg" | "pdf", suggestedName: string): Promise<string | null> => {
   const selected = await saveDialog({
     defaultPath: `${suggestedName}.${format}`,
-    filters: [{ name: format === "png" ? "PNG画像" : "PDF", extensions: [format] }],
+    filters: [{ name: format === "png" ? "PNG画像" : format === "jpg" ? "JPEG画像" : "PDF", extensions: [format] }],
   });
   if (!selected) return null;
   return selected.toLocaleLowerCase("en-US").endsWith(`.${format}`) ? selected : `${selected}.${format}`;

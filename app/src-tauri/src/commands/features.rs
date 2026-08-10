@@ -1,13 +1,83 @@
 use crate::contract::{
     CreateFeatureInput, DeleteFeatureInput, FeatureType, ProjectSnapshot, ReviseFeatureInput,
 };
-use crate::domain::geometry::{validate_geometry, validate_name};
+use crate::domain::geometry::{validate_geometry, validate_name, validate_properties};
 use crate::edit::{feature_state, upsert_feature_state};
 use crate::error::AppError;
 use crate::read_model::project_snapshot;
-use crate::state::{AppState, EditOperation, FeatureState, lock_project};
+use crate::state::{AppState, EditOperation, FeatureEdit, FeatureState, lock_project};
 use rusqlite::{Error as SqlError, params};
 use uuid::Uuid;
+
+pub(crate) const MAX_FEATURE_BATCH: usize = 2_048;
+
+pub(crate) fn create_features_batch_in_state(
+    state: &AppState,
+    input: crate::contract::CreateFeaturesBatchInput,
+) -> Result<ProjectSnapshot, AppError> {
+    if input.features.is_empty() || input.features.len() > MAX_FEATURE_BATCH {
+        return Err(AppError::invalid("The feature batch size is invalid."));
+    }
+    let validated = input
+        .features
+        .into_iter()
+        .map(|feature| {
+            validate_name(&feature.name)?;
+            let geometry_json = validate_geometry(feature.feature_type, &feature.geometry)?;
+            let properties_json = validate_properties(&feature.properties)?;
+            Ok((
+                feature.feature_type,
+                FeatureState {
+                    name: feature.name.trim().to_owned(),
+                    geometry_json,
+                    properties_json,
+                },
+            ))
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
+    let mut open = lock_project(state)?;
+    let project = open
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
+    let changes = validated
+        .into_iter()
+        .map(|(feature_type, after)| FeatureEdit {
+            feature_id: Uuid::new_v4().to_string(),
+            feature_type,
+            before: None,
+            after: Some(after),
+        })
+        .collect::<Vec<_>>();
+    let transaction = project.connection.transaction().map_err(AppError::from)?;
+    for change in &changes {
+        let Some(after) = change.after.as_ref() else {
+            return Err(AppError::new(
+                "storage_error",
+                "The feature batch could not be prepared.",
+            ));
+        };
+        crate::edit::upsert_feature_state(
+            &transaction,
+            &change.feature_id,
+            change.feature_type,
+            after,
+        )?;
+    }
+    transaction.commit().map_err(AppError::from)?;
+    project
+        .undo_stack
+        .push(EditOperation::FeatureBatch { changes });
+    project.redo_stack.clear();
+    project_snapshot(project)
+}
+
+#[tauri::command]
+pub(crate) fn create_features_batch(
+    state: tauri::State<'_, AppState>,
+    input: crate::contract::CreateFeaturesBatchInput,
+) -> Result<ProjectSnapshot, AppError> {
+    create_features_batch_in_state(state.inner(), input)
+}
 
 pub(crate) fn create_feature_in_state(
     state: &AppState,
@@ -15,6 +85,7 @@ pub(crate) fn create_feature_in_state(
 ) -> Result<ProjectSnapshot, AppError> {
     validate_name(&input.name)?;
     let geometry_json = validate_geometry(input.feature_type, &input.geometry)?;
+    let properties_json = validate_properties(&input.properties)?;
     let mut open = lock_project(state)?;
     let project = open
         .as_mut()
@@ -23,6 +94,7 @@ pub(crate) fn create_feature_in_state(
     let after = FeatureState {
         name: input.name.trim().to_owned(),
         geometry_json,
+        properties_json,
     };
     let transaction = project.connection.transaction().map_err(AppError::from)?;
     upsert_feature_state(&transaction, &feature_id, input.feature_type, &after)?;
@@ -74,15 +146,22 @@ pub(crate) fn revise_feature_in_state(
     let before = feature_state(&project.connection, &feature_id)?
         .ok_or_else(|| AppError::new("not_found", "The feature was not found."))?;
     let geometry_json = validate_geometry(feature_type, &input.geometry)?;
+    let properties_json = validate_properties(&input.properties)?;
     let after = FeatureState {
         name: input.name.trim().to_owned(),
         geometry_json,
+        properties_json,
     };
     let transaction = project.connection.transaction().map_err(AppError::from)?;
     transaction
         .execute(
-            "UPDATE features SET name = ?1, geometry_json = ?2 WHERE id = ?3",
-            params![after.name, after.geometry_json, feature_id],
+            "UPDATE features SET name = ?1, geometry_json = ?2, properties_json = ?3 WHERE id = ?4",
+            params![
+                after.name,
+                after.geometry_json,
+                after.properties_json,
+                feature_id
+            ],
         )
         .map_err(AppError::from)?;
     transaction.commit().map_err(AppError::from)?;

@@ -8,12 +8,13 @@ Realm is a local, editable world-map application for macOS on Apple Silicon. It 
 
 Realm uses one SQLite database per world inside its app-managed library. Each database contains the map's editable source data, including:
 
-- terrain, forests, rivers, coastlines, countries, regions, boundaries, cities, and towns;
-- hand-edited geometry and metadata for every feature;
+- terrain, forests, rivers, lakes, coastlines, roads, political areas, settlements, symbols, labels, overlays, frames, and scale marks;
+- hand-edited geometry and bounded appearance metadata for every feature;
 - the current geometry and metadata for each feature;
 - current cell attributes for forests, countries, and regions.
+- validated PNG, JPEG, or WebP symbol assets embedded without external paths.
 
-The database remains local. Normal editing is automatically saved without asking the user to manage a project file. A map can be exported as PNG or PDF, while a dedicated `.realmmap` transfer export carries editable data to another Mac. Realm does not generate map content, import images, synchronize to a cloud service, or require a hosted account.
+The database remains local. Normal editing is automatically saved without asking the user to manage a project file. A map can be exported as PNG, JPEG, or PDF, while a dedicated `.realmmap` transfer export carries editable data to another Mac. Realm does not generate geography, synchronize to a cloud service, or require a hosted account. Imported symbol images remain presentation assets and are never converted into geography.
 
 ## Platform and stack
 
@@ -54,6 +55,6 @@ Security reports must not contain secrets or exploit details in a public issue. 
 
 ## Japanese
 
-Realmは、Apple Silicon搭載macOS向けのローカル世界地図アプリです。地形、森林、河川、海岸線、国、地域、境界、都市、町を手動で編集し、現在の地図状態を管理します。編集データはアプリ内ライブラリへ自動保存し、成果物はPNG・PDF、別Macへの移行は専用`.realmmap`データとして書き出します。生成、画像取込、クラウド同期は行いません。
+Realmは、Apple Silicon搭載macOS向けのローカル世界地図アプリです。地形、森林、水系、道路、政治領域、集落、記号、ラベルを手動で編集し、現在の地図状態を管理します。編集データと検証済みの埋め込み記号素材はアプリ内ライブラリへ自動保存し、成果物はPNG・JPEG・PDF、別Macへの移行は専用`.realmmap`データとして書き出します。地理の自動生成やクラウド同期は行いません。
 
 詳細な正本は[文書索引](docs/INDEX.md)から参照してください。Realmはowner-ledで運用し、AGPL-3.0-or-laterで公開します。
