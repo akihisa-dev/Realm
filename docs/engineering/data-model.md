@@ -27,11 +27,11 @@ Timeline-event storage is part of schema version 1 because chronology is confirm
 
 ## Cell grid and attributes
 
-Schema version 2 adds a fixed EPSG:4326 grid of 512 columns by 256 rows. A cell has no stored GeoJSON: its stable `x:y` identifier and grid version derive its center coordinate and bounds. A freehand lasso selects every cell whose center lies inside the completed polygon, so the result is deterministic and independent of display zoom.
+Schema version 2 adds a fixed EPSG:4326 grid of 512 columns by 256 rows. A cell has no stored GeoJSON: its stable `x:y` identifier and grid version derive its center coordinate and bounds. The brush converts pointer coordinates into grid coordinates and includes every cell center within the selected radius of each stroke segment. This produces a zoom-independent round stamp for a click and a continuous thick path for a drag.
 
 Cell attributes are independent layers. `terrain_kind`, `forest`, `country`, and `region` may coexist on one cell; changing or clearing one layer does not replace the others. `mountain` is a `terrain_kind` value rather than a tenth feature class. Country and region values are local labels and remain independent from legacy country and region polygons.
 
-Each lasso application writes one cell edit operation and a revision for every affected cell in one transaction. Revisions use the same inclusive view-year and deterministic same-year ordering rules as features. Clearing an attribute appends a deleted state. Undo and redo compensate the complete batch rather than updating or deleting prior rows.
+Each completed brush stroke writes one cell edit operation and a revision for every affected cell in one transaction. Revisions use the same inclusive view-year and deterministic same-year ordering rules as features. Erasing an attribute appends a deleted state. Undo and redo compensate the complete stroke rather than updating or deleting prior rows.
 
 ## Edit behavior
 

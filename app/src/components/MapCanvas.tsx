@@ -20,6 +20,7 @@ type MapCanvasProps = {
   selectedFeatureId?: string | null;
   selectedCellIds?: readonly string[];
   cellAttributes?: readonly CellAttributeSnapshot[];
+  cellBrushRadius?: number;
   onDraw?: (geometry: GeoJsonGeometry) => void;
   onSelect?: (featureId: string | null) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
@@ -36,6 +37,7 @@ export function MapCanvas({
   selectedFeatureId = null,
   selectedCellIds = [],
   cellAttributes = [],
+  cellBrushRadius = 2,
   onDraw,
   onSelect,
   onCellSelect,
@@ -54,7 +56,7 @@ export function MapCanvas({
   const mapHelp = mode === "pan"
     ? "ドラッグまたは矢印キーで移動し、ホイールまたはプラス・マイナスキーで拡大縮小できます。"
     : mode === "cell-select"
-      ? "地図上で押したまま自由に囲むと、囲ったセルを選択します。Escapeで選択を解除できます。"
+      ? "地図上で押したまま筆のように塗り、通過したセルへ属性を付けます。クリックでも円形に塗れます。Escapeで選択を解除できます。"
       : mode === "city" || mode === "town"
       ? "地図上をクリックして点を配置します。"
       : "地図上でマウスまたはトラックパッドを押したままドラッグし、線または領域を描きます。";
@@ -79,6 +81,7 @@ export function MapCanvas({
   useEffect(() => { adapterRef.current?.setSelected(selectedFeatureId); }, [selectedFeatureId]);
   useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [selectedCellIds]);
   useEffect(() => { adapterRef.current?.setCellAttributes(cellAttributes); }, [cellAttributes]);
+  useEffect(() => { adapterRef.current?.setCellBrushRadius(cellBrushRadius); }, [cellBrushRadius]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -97,6 +100,7 @@ export function MapCanvas({
     adapter.setSelected(selectedFeatureId);
     adapter.setSelectedCells(selectedCellIds);
     adapter.setCellAttributes(cellAttributes);
+    adapter.setCellBrushRadius(cellBrushRadius);
     onZoomChangeRef.current(adapter.getZoom());
 
     const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => adapter.updateSize());

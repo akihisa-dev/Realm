@@ -146,7 +146,9 @@ export function EditorShell({ snapshot, backend, busy, onClose, onSaved, onExpor
   const [cellAttributes, setCellAttributes] = useState<CellAttributeSnapshot[]>([]);
   const [activeTool, setActiveTool] = useState<"pan" | "cell-select" | FeatureType>("pan");
   const [cellAttribute, setCellAttribute] = useState<CellAttribute>("terrain_kind");
-  const [cellAttributeValue, setCellAttributeValue] = useState("mountain");
+  const [cellAttributeValue, setCellAttributeValue] = useState("land");
+  const [cellPaintMode, setCellPaintMode] = useState<"paint" | "erase">("paint");
+  const [cellBrushRadius, setCellBrushRadius] = useState(2);
   const [featureName, setFeatureName] = useState("新しい地物");
   const [zoom, setZoom] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -394,20 +396,30 @@ export function EditorShell({ snapshot, backend, busy, onClose, onSaved, onExpor
     }, "地物を作成できませんでした。");
   };
 
-  const updateCellAttributeValue = (attribute: CellAttribute) => {
+  const updateCellPaint = (paint: string) => {
+    const [attribute, value] = paint.split(":", 2) as [CellAttribute, string];
     setCellAttribute(attribute);
-    setCellAttributeValue(attribute === "terrain_kind" ? "mountain" : attribute === "forest" ? "forest" : attribute === "country" ? "新しい国" : "新しい地域");
+    setCellAttributeValue(value === "fixed-land" ? "land" : value === "fixed-mountain" ? "mountain" : value === "fixed-forest" ? "forest" : value === "country" ? "新しい国" : value === "region" ? "新しい地域" : value);
   };
 
-  const effectiveCellAttributeValue = cellAttribute === "terrain_kind" ? "mountain" : cellAttribute === "forest" ? "forest" : cellAttributeValue.trim();
+  const activateBrushPreset = (attribute: CellAttribute, value: string) => {
+    setActiveTool("cell-select");
+    setSelectedCellIds([]);
+    setSelectedFeatureId(null);
+    setCellPaintMode("paint");
+    setCellAttribute(attribute);
+    setCellAttributeValue(value);
+  };
 
-  const applyCellAttribute = (value: string | null) => {
-    if (selectedCellIds.length === 0 || parsedCurrentYear === null) {
+  const effectiveCellAttributeValue = cellPaintMode === "erase" ? null : cellAttribute === "terrain_kind" || cellAttribute === "forest" ? cellAttributeValue : cellAttributeValue.trim();
+
+  const applyCellAttribute = (value: string | null, cellIds = selectedCellIds) => {
+    if (cellIds.length === 0 || parsedCurrentYear === null) {
       setSaveError("先に地図上でセルを選択してください。");
       return;
     }
     void runMutation(
-      () => backend.applyCellAttributes({ year: parsedCurrentYear, cellIds: [...selectedCellIds], attribute: cellAttribute, value }),
+      () => backend.applyCellAttributes({ year: parsedCurrentYear, cellIds: [...cellIds], attribute: cellAttribute, value }),
       "セル属性を変更できませんでした。",
     );
   };
@@ -505,9 +517,9 @@ export function EditorShell({ snapshot, backend, busy, onClose, onSaved, onExpor
       <div className="editor-body">
         <aside className="left-rail" aria-label="主要ナビゲーション">
           <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => { setActiveTool("pan"); setSelectedCellIds([]); }} disabled={locked}><GlobeHemisphereWest aria-hidden="true" size={25} weight="regular" /><span>移動</span></button>
-          <button className={activeTool === "cell-select" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "cell-select"} onClick={() => { setActiveTool("cell-select"); setSelectedCellIds([]); setSelectedFeatureId(null); }} disabled={locked}><span className="feature-tool-mark" aria-hidden="true" /><span>セル選択</span></button>
+          <button className={activeTool === "cell-select" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "cell-select"} onClick={() => { setActiveTool("cell-select"); setSelectedCellIds([]); setSelectedFeatureId(null); }} disabled={locked}><span className="feature-tool-mark" aria-hidden="true" /><span>ブラシ</span></button>
           {FEATURE_TYPES.map(({ type, label }) => (
-            <button key={type} className={activeTool === type ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === type} onClick={() => { setActiveTool(type); setSelectedCellIds([]); setFeatureName(`新しい${label}`); setSelectedFeatureId(null); }} disabled={locked}><span className="feature-tool-mark" aria-hidden="true" /> <span>{label}</span></button>
+            <button key={type} className={(type === "terrain" || type === "forest" ? activeTool === "cell-select" && ((type === "terrain" && cellAttribute === "terrain_kind" && cellAttributeValue === "land") || (type === "forest" && cellAttribute === "forest")) : activeTool === type) ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={type === "terrain" || type === "forest" ? activeTool === "cell-select" && ((type === "terrain" && cellAttribute === "terrain_kind" && cellAttributeValue === "land") || (type === "forest" && cellAttribute === "forest")) : activeTool === type} onClick={() => { if (type === "terrain") activateBrushPreset("terrain_kind", "land"); else if (type === "forest") activateBrushPreset("forest", "forest"); else { setActiveTool(type); setSelectedCellIds([]); setFeatureName(`新しい${label}`); setSelectedFeatureId(null); } }} disabled={locked || dirty}><span className="feature-tool-mark" aria-hidden="true" /> <span>{label}</span></button>
           ))}
         </aside>
         <aside className="world-sidebar" aria-label="世界の構成">
@@ -529,23 +541,37 @@ export function EditorShell({ snapshot, backend, busy, onClose, onSaved, onExpor
                 ? `地図上をクリックして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を配置してください。`
                 : activeTool === "country" || activeTool === "region"
                   ? `地形の上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}の領域を描いてください。`
-                : `地図上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を描いてください。`}</p>
+                : activeTool === "cell-select"
+                  ? "筆の属性とサイズを選び、地図をドラッグして直接塗ります。クリックでも塗れます。"
+                  : `地図上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を描いてください。`}</p>
             ) : null}
             {selectedFeature ? <div className="feature-editor-actions"><button type="button" onClick={() => reviseFeature(selectedFeature)} disabled={locked}>名前を保存</button><button type="button" className="danger-action" onClick={() => { if (parsedCurrentYear !== null && window.confirm("この年以降から地物を削除しますか？")) void runMutation(() => backend.deleteFeature({ id: selectedFeature.id, validFromYear: parsedCurrentYear }), "地物を削除できませんでした。"); }} disabled={locked}>削除</button></div> : null}
           </section>
-          <section className="cell-inspector" aria-label="選択セルの属性編集">
-            <h3>選択セル</h3>
-            <p aria-live="polite">{selectedCellIds.length}件</p>
-            <label>属性<CellAttributeSelect value={cellAttribute} onChange={(event) => updateCellAttributeValue(event.target.value as CellAttribute)} disabled={locked}>
-              <option value="terrain_kind">地形: 山地</option>
-              <option value="forest">森林</option>
-              <option value="country">国</option>
-              <option value="region">地域</option>
+          <section className="cell-inspector" aria-label="ブラシ設定">
+            <h3>ブラシ</h3>
+            <p aria-live="polite">直前のストローク: {selectedCellIds.length}セル</p>
+            <label>操作<CellAttributeSelect value={cellPaintMode} onChange={(event) => setCellPaintMode(event.target.value as "paint" | "erase")} disabled={locked}>
+              <option value="paint">塗る</option>
+              <option value="erase">消す</option>
             </CellAttributeSelect></label>
-            <label>値<input value={cellAttributeValue} onChange={(event) => setCellAttributeValue(event.target.value)} disabled={locked || cellAttribute === "terrain_kind" || cellAttribute === "forest"} maxLength={200} /></label>
+            <label>筆の属性<CellAttributeSelect value={cellAttribute === "terrain_kind" ? `terrain_kind:fixed-${cellAttributeValue}` : cellAttribute === "forest" ? "forest:fixed-forest" : `${cellAttribute}:${cellAttribute}`} onChange={(event) => updateCellPaint(event.target.value)} disabled={locked}>
+              <option value="terrain_kind:fixed-land">地形: 平地</option>
+              <option value="terrain_kind:fixed-mountain">地形: 山地</option>
+              <option value="forest:fixed-forest">森林</option>
+              <option value="country:country">国</option>
+              <option value="region:region">地域</option>
+            </CellAttributeSelect></label>
+            <label>値<input value={cellAttributeValue} onChange={(event) => setCellAttributeValue(event.target.value)} disabled={locked || cellPaintMode === "erase" || cellAttribute === "terrain_kind" || cellAttribute === "forest"} maxLength={200} /></label>
+            <label>筆サイズ<CellAttributeSelect value={String(cellBrushRadius)} onChange={(event) => setCellBrushRadius(Number(event.target.value))} disabled={locked}>
+              <option value="1">小（半径1セル）</option>
+              <option value="2">中（半径2セル）</option>
+              <option value="4">大（半径4セル）</option>
+              <option value="8">特大（半径8セル）</option>
+            </CellAttributeSelect></label>
+            <p className="cell-inspector-hint">指を離すと自動保存されます。</p>
             <div className="feature-editor-actions">
-              <button type="button" onClick={() => applyCellAttribute(effectiveCellAttributeValue || null)} disabled={locked || selectedCellIds.length === 0 || !effectiveCellAttributeValue}>適用</button>
-              <button type="button" className="danger-action" onClick={() => applyCellAttribute(null)} disabled={locked || selectedCellIds.length === 0}>解除</button>
+              <button type="button" onClick={() => applyCellAttribute(effectiveCellAttributeValue, selectedCellIds)} disabled={locked || selectedCellIds.length === 0 || (effectiveCellAttributeValue === "")}>選択範囲に再適用</button>
+              <button type="button" className="danger-action" onClick={() => applyCellAttribute(null, selectedCellIds)} disabled={locked || selectedCellIds.length === 0}>選択範囲を解除</button>
             </div>
           </section>
           <section className="era-list" aria-labelledby="era-list-title">
@@ -596,9 +622,15 @@ export function EditorShell({ snapshot, backend, busy, onClose, onSaved, onExpor
             selectedFeatureId={selectedFeatureId}
             selectedCellIds={selectedCellIds}
             cellAttributes={cellAttributes}
+            cellBrushRadius={cellBrushRadius}
             onDraw={createDrawnFeature}
             onSelect={selectFeature}
-            onCellSelect={(cellIds) => { setSelectedCellIds([...cellIds]); setSelectedFeatureId(null); }}
+            onCellSelect={(cellIds) => {
+              const strokeCells = [...cellIds];
+              setSelectedCellIds(strokeCells);
+              setSelectedFeatureId(null);
+              if (strokeCells.length > 0) void applyCellAttribute(effectiveCellAttributeValue, strokeCells);
+            }}
             onModify={(featureId, geometry) => {
               const feature = viewedSnapshot.features.find((candidate) => candidate.id === featureId);
               if (feature) reviseFeature(feature, geometry);

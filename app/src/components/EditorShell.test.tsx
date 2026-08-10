@@ -99,24 +99,29 @@ describe("EditorShell feature workflow", () => {
     const cellBackend = Object.assign(backend, { applyCellAttributes });
     render(<Harness backend={cellBackend} initial={initial} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "セル選択" }));
+    fireEvent.click(screen.getByRole("button", { name: "地形" }));
     fireEvent.click(screen.getByRole("button", { name: "テストセル選択" }));
-    expect(screen.getByText("2件")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "適用" }));
     await waitFor(() => expect(applyCellAttributes).toHaveBeenCalledWith({
       year: 0,
       cellIds: ["256:128", "257:128"],
       attribute: "terrain_kind",
-      value: "mountain",
+      value: "land",
     }));
-    expect(screen.getByText("2件")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "解除" })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: "解除" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "操作" }), { target: { value: "erase" } });
+    fireEvent.click(screen.getByRole("button", { name: "テストセル選択" }));
     await waitFor(() => expect(applyCellAttributes).toHaveBeenLastCalledWith({
       year: 0,
       cellIds: ["256:128", "257:128"],
       attribute: "terrain_kind",
       value: null,
+    }));
+    fireEvent.click(screen.getByRole("button", { name: "森林" }));
+    fireEvent.click(screen.getByRole("button", { name: "テストセル選択" }));
+    await waitFor(() => expect(applyCellAttributes).toHaveBeenLastCalledWith({
+      year: 0,
+      cellIds: ["256:128", "257:128"],
+      attribute: "forest",
+      value: "forest",
     }));
   });
 
@@ -128,7 +133,7 @@ describe("EditorShell feature workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "河川" }));
     expect(screen.getByText("地図上で押したままドラッグして河川を描いてください。")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "地形" }));
-    expect(screen.getByText("地図上で押したままドラッグして地形を描いてください。")).toBeInTheDocument();
+    expect(screen.getByText("筆の属性とサイズを選び、地図をドラッグして直接塗ります。クリックでも塗れます。")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "国" }));
     expect(screen.getByText("地形の上で押したままドラッグして国の領域を描いてください。")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "地域" }));

@@ -7,9 +7,9 @@ Realm's editing surface stays quiet so the map remains the dominant object. The 
 ## Initial states
 
 - [Startup concept](concepts/initial-startup.png): no world is open; the app-managed library, create action, and transfer-data import are available.
-- [Editor concept](concepts/initial-editor.png): a world is open; pan, zoom, year selection, era and event editing, feature drawing and selection, undo, redo, library return, PNG/PDF export, and transfer export are available. Valid edits save automatically.
+- [Editor concept](concepts/initial-editor.png): a world is open; pan, zoom, year selection, era and event editing, feature drawing and selection, cell-brush painting, undo, redo, library return, PNG/PDF export, and transfer export are available. Valid edits save automatically.
 
-The concept images define composition and density. Visible controls remain code-native. The primary rail exposes the nine manual feature classes; the sidebar lists visible features and edits the selected feature, named eras, and timeline events.
+The concept images define composition and density. Visible controls remain code-native. The primary rail exposes the cell brush and nine manual feature classes; the sidebar lists visible features, configures brush attribute, paint/erase mode and size, and edits the selected feature, named eras, and timeline events.
 
 ## Visual system
 

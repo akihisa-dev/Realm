@@ -28,6 +28,7 @@ describe("MapZoomControls", () => {
       resetView: vi.fn(),
       setFeatures: vi.fn(),
       setMode: vi.fn(),
+      setCellBrushRadius: vi.fn(),
       setSelected: vi.fn(),
       setSelectedCells: vi.fn(),
       setCellAttributes: vi.fn(),
@@ -69,10 +70,12 @@ describe("MapZoomControls", () => {
     expect(renderer.setMode).toHaveBeenLastCalledWith("river");
 
     rerender(<MapCanvas mode="cell-select" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("地図上で押したまま自由に囲むと、囲ったセルを選択します。Escapeで選択を解除できます。")).toBeInTheDocument();
+    expect(screen.getByText("地図上で押したまま筆のように塗り、通過したセルへ属性を付けます。クリックでも円形に塗れます。Escapeで選択を解除できます。")).toBeInTheDocument();
     expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
     rerender(<MapCanvas mode="cell-select" selectedCellIds={["256:128"]} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setSelectedCells).toHaveBeenLastCalledWith(["256:128"]);
+    rerender(<MapCanvas mode="cell-select" cellBrushRadius={4} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(renderer.setCellBrushRadius).toHaveBeenLastCalledWith(4);
 
     rerender(<MapCanvas mode="city" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("地図上をクリックして点を配置します。")).toBeInTheDocument();

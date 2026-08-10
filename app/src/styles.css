@@ -83,6 +83,7 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .cell-inspector p { margin: -4px 0 0; color: #007c89; font-size: 13px; font-weight: 700; }
 .cell-inspector label { display: grid; gap: 4px; color: #525a61; font-size: 12px; }
 .cell-inspector input, .cell-inspector select { min-width: 0; width: 100%; padding: 6px 7px; border: 1px solid #c5cbd0; border-radius: 4px; background: #fff; color: #20262b; }
+.cell-inspector .cell-inspector-hint { margin: -2px 0 0; color: #656d74; font-size: 11px; line-height: 1.4; }
 .feature-editor p { margin: 0; color: #656d74; font-size: 12px; line-height: 1.45; }
 .feature-editor-actions { display: flex; gap: 8px; }
 .feature-editor-actions button { padding: 6px 8px; border: 1px solid #bcc4c9; border-radius: 4px; background: #fff; font-size: 12px; }

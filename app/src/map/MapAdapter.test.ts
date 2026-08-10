@@ -1,4 +1,4 @@
-import { CELL_GRID_CELL_COUNT, RealmMapAdapter, cellIdsWithinPolygon } from "./MapAdapter";
+import { CELL_GRID_CELL_COUNT, RealmMapAdapter, cellCenter, cellIdsWithinBrushPath } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -6,16 +6,22 @@ import MouseWheelZoom from "ol/interaction/MouseWheelZoom";
 import Graticule from "ol/layer/Graticule";
 import VectorLayer from "ol/layer/Vector";
 import Draw from "ol/interaction/Draw";
+import PointerInteraction from "ol/interaction/Pointer";
 import Style from "ol/style/Style";
 import CircleStyle from "ol/style/Circle";
-import Polygon from "ol/geom/Polygon";
 
 describe("RealmMapAdapter", () => {
-  it("uses stable x:y cell ids and selects grid centers inside a lasso polygon", () => {
-    const polygon = new Polygon([[[-1, -1], [1, -1], [1, 1], [-1, 1], [-1, -1]]]);
-    const ids = cellIdsWithinPolygon(polygon);
-    expect(ids).toContain("256:128");
-    expect(ids.every((id) => /^\d+:\d+$/.test(id))).toBe(true);
+  it("selects a thick brush stroke and expands its footprint with radius", () => {
+    const oneCell = cellCenter(128, 256);
+    const narrow = cellIdsWithinBrushPath([oneCell, [oneCell[0] + 0.7, oneCell[1]]], 0.25);
+    const wide = cellIdsWithinBrushPath([oneCell, [oneCell[0] + 0.7, oneCell[1]]], 2);
+    expect(narrow).toContain("256:128");
+    expect(wide.length).toBeGreaterThan(narrow.length);
+    expect(cellIdsWithinBrushPath([], 1)).toEqual([]);
+    expect(cellIdsWithinBrushPath([oneCell], Number.NaN)).toEqual([]);
+    expect(cellIdsWithinBrushPath([cellCenter(0, 0)], 0)).toEqual(["0:0"]);
+    expect(cellIdsWithinBrushPath([[-180, -90]], 1)).toContain("0:0");
+    expect(cellIdsWithinBrushPath([[180, 90]], 1)).toContain("511:255");
   });
 
   it("creates a bounded world view and disposes its OpenLayers target", () => {
@@ -92,6 +98,7 @@ describe("RealmMapAdapter", () => {
       { cellId: "2:0", attribute: "terrain_kind", value: "mountain", validFromYear: 0 },
       { cellId: "3:0", attribute: "country", value: "A", validFromYear: 0 },
       { cellId: "4:0", attribute: "region", value: "B", validFromYear: 0 },
+      { cellId: "5:0", attribute: "terrain_kind", value: "land", validFromYear: 0 },
     ]);
     const cellStyleFunction = cellLayer.getStyleFunction();
     const forestCell = cellLayer.getSource()?.getFeatureById("1:0");
@@ -99,10 +106,12 @@ describe("RealmMapAdapter", () => {
     expect((forestStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#3f7c55");
     const mountainCell = cellLayer.getSource()?.getFeatureById("2:0");
     const mountainStyle = (cellStyleFunction?.(mountainCell!, 1) as Style[])[0]!;
-    expect((mountainStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#8b7754");
-    const cellDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
-    expect(cellDraw).toBeInstanceOf(Draw);
-    expect((cellDraw as Draw).getFreehand()).toBe(true);
+    expect((mountainStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#5f4a37");
+    const landCell = cellLayer.getSource()?.getFeatureById("5:0");
+    const landStyle = (cellStyleFunction?.(landCell!, 1) as Style[])[0]!;
+    expect((landStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#8b7754");
+    const cellBrush = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof PointerInteraction && !(interaction instanceof DragPan));
+    expect(cellBrush).toBeInstanceOf(PointerInteraction);
     expect(interactions.find((interaction) => interaction instanceof DragPan)?.getActive()).toBe(false);
     expect(interactions.find((interaction) => interaction instanceof KeyboardPan)?.getActive()).toBe(false);
     const onCellSelect = vi.fn();

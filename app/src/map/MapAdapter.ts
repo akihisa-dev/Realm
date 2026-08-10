@@ -6,6 +6,7 @@ import Point from "ol/geom/Point";
 import Polygon from "ol/geom/Polygon";
 import type Geometry from "ol/geom/Geometry";
 import Draw from "ol/interaction/Draw";
+import PointerInteraction from "ol/interaction/Pointer";
 import Modify from "ol/interaction/Modify";
 import * as SelectModule from "ol/interaction/Select";
 import DragPan from "ol/interaction/DragPan";
@@ -32,6 +33,8 @@ export type RealmMapMode = "pan" | "cell-select" | FeatureType;
 export const CELL_GRID_COLUMNS = 512;
 export const CELL_GRID_ROWS = 256;
 export const CELL_GRID_CELL_COUNT = CELL_GRID_COLUMNS * CELL_GRID_ROWS;
+export const CELL_BRUSH_RADII = { small: 1, medium: 2, large: 4 } as const;
+export type CellBrushSize = keyof typeof CELL_BRUSH_RADII;
 
 /** Stable persisted identity: x (column) first, then y (row). */
 export const cellId = (row: number, column: number): string => `${column}:${row}`;
@@ -41,11 +44,39 @@ export const cellCenter = (row: number, column: number): [number, number] => [
   -90 + ((row + 0.5) * 180) / CELL_GRID_ROWS,
 ];
 
-export const cellIdsWithinPolygon = (polygon: Polygon): string[] => {
+const gridCoordinate = (coordinate: [number, number]): [number, number] => [
+  ((coordinate[0] + 180) / 360) * CELL_GRID_COLUMNS - 0.5,
+  ((coordinate[1] + 90) / 180) * CELL_GRID_ROWS - 0.5,
+];
+
+const distanceSquaredToSegment = (point: [number, number], start: [number, number], end: [number, number]): number => {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  if (dx === 0 && dy === 0) return ((point[0] - start[0]) ** 2) + ((point[1] - start[1]) ** 2);
+  const ratio = Math.max(0, Math.min(1, (((point[0] - start[0]) * dx) + ((point[1] - start[1]) * dy)) / ((dx * dx) + (dy * dy))));
+  const closest: [number, number] = [start[0] + ratio * dx, start[1] + ratio * dy];
+  return ((point[0] - closest[0]) ** 2) + ((point[1] - closest[1]) ** 2);
+};
+
+/** Returns cells whose centers fall within the brush radius of every tested stroke segment. */
+export const cellIdsWithinBrushPath = (path: readonly [number, number][], radiusCells: number): string[] => {
+  if (path.length === 0 || !Number.isFinite(radiusCells) || radiusCells < 0) return [];
+  const gridPath = path.map(gridCoordinate);
+  const radiusSquared = radiusCells ** 2;
+  const minColumn = Math.max(0, Math.floor(Math.min(...gridPath.map(([x]) => x)) - radiusCells));
+  const maxColumn = Math.min(CELL_GRID_COLUMNS - 1, Math.ceil(Math.max(...gridPath.map(([x]) => x)) + radiusCells));
+  const minRow = Math.max(0, Math.floor(Math.min(...gridPath.map(([, y]) => y)) - radiusCells));
+  const maxRow = Math.min(CELL_GRID_ROWS - 1, Math.ceil(Math.max(...gridPath.map(([, y]) => y)) + radiusCells));
   const selected: string[] = [];
-  for (let row = 0; row < CELL_GRID_ROWS; row += 1) {
-    for (let column = 0; column < CELL_GRID_COLUMNS; column += 1) {
-      if (polygon.intersectsCoordinate(cellCenter(row, column))) selected.push(cellId(row, column));
+  for (let row = minRow; row <= maxRow; row += 1) {
+    for (let column = minColumn; column <= maxColumn; column += 1) {
+      const point: [number, number] = [column, row];
+      let distanceSquared = Number.POSITIVE_INFINITY;
+      for (let index = 1; index < gridPath.length; index += 1) {
+        distanceSquared = Math.min(distanceSquared, distanceSquaredToSegment(point, gridPath[index - 1]!, gridPath[index]!));
+      }
+      if (gridPath.length === 1) distanceSquared = distanceSquaredToSegment(point, gridPath[0]!, gridPath[0]!);
+      if (distanceSquared <= radiusSquared) selected.push(cellId(row, column));
     }
   }
   return selected;
@@ -57,6 +88,7 @@ export interface RealmMapRenderer {
   resetView(): void;
   setFeatures(features: RealmFeature[]): void;
   setMode(mode: RealmMapMode): void;
+  setCellBrushRadius(radiusCells: number): void;
   setSelected(featureId: string | null): void;
   setSelectedCells(cellIds: readonly string[]): void;
   setCellAttributes(attributes: readonly CellAttributeSnapshot[]): void;
@@ -121,11 +153,13 @@ const cellStyle = (feature: FeatureLike): Style | Style[] | undefined => {
   const selected = feature.get("selected") === true;
   const showGrid = feature.get("showGrid") === true;
   const hasPhysical = has("forest") || has("terrain_kind");
+  const terrainValue = attributes?.find((item) => item.attribute === "terrain_kind")?.value;
+  const mountain = terrainValue === "mountain";
   if (!showGrid && !hasPhysical && !has("country") && !has("region") && !selected) return undefined;
   const styles: Style[] = [new Style({
     image: new CircleStyle({
-      radius: hasPhysical ? 2 : 1.25,
-      fill: new Fill({ color: has("forest") ? "#3f7c55" : has("terrain_kind") ? "#8b7754" : "rgba(74, 87, 98, 0.24)" }),
+      radius: mountain ? 2.8 : hasPhysical ? 2 : 1.25,
+      fill: new Fill({ color: has("forest") ? "#3f7c55" : mountain ? "#5f4a37" : terrainValue === "land" ? "#8b7754" : "rgba(74, 87, 98, 0.24)" }),
     }),
     zIndex: 5,
   })];
@@ -158,6 +192,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly target: HTMLElement;
   private draw: Draw | null = null;
   private activeMode: RealmMapMode = "pan";
+  private cellBrushRadius: number = CELL_BRUSH_RADII.medium;
+  private brush: PointerInteraction | null = null;
+  private brushLastPoint: [number, number] | null = null;
+  private brushStrokeSelection = new Set<string>();
+  private brushSelectionBeforeStroke: string[] = [];
   private cellsReady = false;
   private selectedCellIds = new Set<string>();
   private readonly drawListeners = new Set<(geometry: GeoJsonGeometry) => void>();
@@ -237,6 +276,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.map.addInteraction(this.modify);
     this.target.addEventListener("keydown", this.handleKeyDown);
     this.map.getViewport().addEventListener("pointercancel", this.handlePointerCancel);
+    this.map.getViewport().addEventListener("lostpointercapture", this.handlePointerCancel);
     this.selection.on("select", () => {
       const selected = this.selection.getFeatures().item(0);
       const id = selected?.getId();
@@ -293,6 +333,14 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.draw.dispose();
       this.draw = null;
     }
+    if (this.brush) {
+      this.map.removeInteraction(this.brush);
+      this.brush.dispose();
+      this.brush = null;
+      this.brushLastPoint = null;
+      this.brushStrokeSelection.clear();
+      this.brushSelectionBeforeStroke = [];
+    }
     if (mode !== "cell-select" && this.activeMode === "cell-select") this.setSelectedCells([]);
     this.activeMode = mode;
     this.modify.setActive(mode === "pan");
@@ -304,16 +352,37 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.setNavigationActive(mode === "pan");
     if (mode === "cell-select") {
       this.setSelected(null);
-      this.draw = new Draw({ type: "Polygon", freehand: true, stopClick: true });
-      // OpenLayers keeps the active freehand flag separate from its condition.
-      this.draw.setFreehand(true);
-      this.draw.on("drawend", (event) => {
-        const geometry = event.feature.getGeometry();
-        if (!(geometry instanceof Polygon)) return;
-        this.setSelectedCells(cellIdsWithinPolygon(geometry));
-        for (const listener of this.cellSelectListeners) listener([...this.selectedCellIds]);
+      this.brush = new PointerInteraction({
+        handleDownEvent: (event) => {
+          const pointer = event.originalEvent as PointerEvent;
+          if (!pointer.isPrimary || pointer.button !== 0) return false;
+          this.brushSelectionBeforeStroke = [...this.selectedCellIds];
+          this.brushLastPoint = event.coordinate as [number, number];
+          this.brushStrokeSelection = new Set(cellIdsWithinBrushPath([this.brushLastPoint], this.cellBrushRadius));
+          this.setSelectedCells([...this.brushStrokeSelection]);
+          return true;
+        },
+        handleDragEvent: (event) => {
+          const nextPoint = event.coordinate as [number, number];
+          if (!this.brushLastPoint) this.brushLastPoint = nextPoint;
+          for (const id of cellIdsWithinBrushPath([this.brushLastPoint, nextPoint], this.cellBrushRadius)) this.brushStrokeSelection.add(id);
+          this.brushLastPoint = nextPoint;
+          this.setSelectedCells([...this.brushStrokeSelection]);
+        },
+        handleUpEvent: (event) => {
+          const nextPoint = event.coordinate as [number, number];
+          if (!this.brushLastPoint) this.brushLastPoint = nextPoint;
+          for (const id of cellIdsWithinBrushPath([this.brushLastPoint, nextPoint], this.cellBrushRadius)) this.brushStrokeSelection.add(id);
+          const selected = [...this.brushStrokeSelection];
+          this.setSelectedCells(selected);
+          for (const listener of this.cellSelectListeners) listener([...selected]);
+          this.brushLastPoint = null;
+          this.brushStrokeSelection.clear();
+          this.brushSelectionBeforeStroke = [];
+          return false;
+        },
       });
-      this.map.addInteraction(this.draw);
+      this.map.addInteraction(this.brush);
       return;
     }
     if (mode === "pan") return;
@@ -335,20 +404,31 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     if (event.key !== "Escape" || this.activeMode !== "cell-select") return;
-    this.draw?.abortDrawing();
+    this.brushLastPoint = null;
+    this.brushStrokeSelection.clear();
+    this.brushSelectionBeforeStroke = [];
     this.setSelectedCells([]);
     for (const listener of this.cellSelectListeners) listener([]);
     event.preventDefault();
   };
 
   private readonly handlePointerCancel = (): void => {
-    if (this.activeMode === "cell-select") this.draw?.abortDrawing();
+    if (this.activeMode !== "cell-select" || !this.brushLastPoint) return;
+    this.brushLastPoint = null;
+    this.brushStrokeSelection.clear();
+    this.setSelectedCells(this.brushSelectionBeforeStroke);
+    this.brushSelectionBeforeStroke = [];
   };
 
   private setNavigationActive(active: boolean): void {
     for (const interaction of this.map.getInteractions().getArray()) {
       if (interaction instanceof DragPan || interaction instanceof KeyboardPan) interaction.setActive(active);
     }
+  }
+
+  setCellBrushRadius(radiusCells: number): void {
+    if (!Number.isFinite(radiusCells)) return;
+    this.cellBrushRadius = Math.max(0.25, Math.min(32, radiusCells));
   }
 
   private ensureCells(): void {
@@ -378,10 +458,14 @@ export class RealmMapAdapter implements RealmMapRenderer {
       return;
     }
     this.ensureCells();
-    this.selectedCellIds = new Set(cellIds);
-    for (const feature of this.cellSource.getFeatures()) {
-      feature.set("selected", typeof feature.getId() === "string" && this.selectedCellIds.has(feature.getId() as string), true);
+    const next = new Set(cellIds);
+    for (const id of this.selectedCellIds) {
+      if (!next.has(id)) this.cellSource.getFeatureById(id)?.set("selected", false, true);
     }
+    for (const id of next) {
+      if (!this.selectedCellIds.has(id)) this.cellSource.getFeatureById(id)?.set("selected", true, true);
+    }
+    this.selectedCellIds = next;
     this.cellLayer.changed();
   }
 
@@ -485,6 +569,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellSelectListeners.clear();
     this.target.removeEventListener("keydown", this.handleKeyDown);
     this.map.getViewport().removeEventListener("pointercancel", this.handlePointerCancel);
+    this.map.getViewport().removeEventListener("lostpointercapture", this.handlePointerCancel);
     this.modifyListeners.clear();
     this.map.setTarget(undefined);
     this.map.dispose();
