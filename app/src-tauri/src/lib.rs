@@ -39,15 +39,20 @@ pub fn run() {
             write_artifact,
             update_project_settings,
             import_asset,
+            import_assets_batch,
             read_asset,
             delete_asset,
+            delete_assets_batch,
             save_project,
             apply_cell_attributes,
             view_cell_attributes,
             create_feature,
             create_features_batch,
             revise_feature,
+            revise_features_batch,
             delete_feature,
+            delete_features_batch,
+            set_features_locked,
             undo_project,
             redo_project,
             close_project,
@@ -149,6 +154,31 @@ mod tests {
         create_v4_fixture(path, name);
         let mut connection = Connection::open(path).unwrap();
         migrate_v4_to_v5(&mut connection).unwrap();
+    }
+
+    fn create_v6_fixture(path: &Path, name: &str) {
+        create_v5_fixture(path, name);
+        let mut connection = Connection::open(path).unwrap();
+        let transaction = connection.transaction().unwrap();
+        transaction
+            .execute_batch(
+                "ALTER TABLE world RENAME TO world_v5;
+                 CREATE TABLE world (
+                     id TEXT PRIMARY KEY NOT NULL,
+                     name TEXT NOT NULL,
+                     settings_json TEXT NOT NULL CHECK (json_valid(settings_json)
+                         AND json_type(settings_json) = 'object'
+                         AND length(settings_json) <= 32768)
+                 );
+                 INSERT INTO world(id, name, settings_json)
+                     SELECT id, name, '{\"themeId\":\"atlas\",\"showGrid\":false,\"exportScale\":2,\"exportExtent\":\"viewport\"}'
+                     FROM world_v5;
+                 DROP TABLE world_v5;
+                 INSERT INTO schema_migrations(version) VALUES (6);
+                 PRAGMA user_version = 6;",
+            )
+            .unwrap();
+        transaction.commit().unwrap();
     }
 
     #[test]
@@ -546,7 +576,7 @@ mod tests {
     }
 
     #[test]
-    fn v3_migrates_to_v6_without_changing_existing_features() {
+    fn v3_migrates_to_v7_without_changing_existing_features() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("v3.realmmap");
         create_v3_fixture(&path, "Legacy");
@@ -581,7 +611,7 @@ mod tests {
     }
 
     #[test]
-    fn v4_migrates_to_v6_with_empty_asset_store() {
+    fn v4_migrates_to_v7_with_empty_asset_store() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("v4.realmmap");
         create_v4_fixture(&path, "Legacy v4");
@@ -605,7 +635,7 @@ mod tests {
     }
 
     #[test]
-    fn v5_migrates_to_v6_with_default_settings() {
+    fn v5_migrates_to_v7_with_default_settings() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("v5.realmmap");
         create_v5_fixture(&path, "Legacy v5");
@@ -628,7 +658,71 @@ mod tests {
     }
 
     #[test]
-    fn failed_v5_to_v6_migration_rolls_back_source() {
+    fn v6_migrates_to_v7_preserving_settings_and_adding_canvas_defaults() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("v6.realmmap");
+        create_v6_fixture(&path, "Legacy v6");
+        assert_eq!(
+            preflight_existing_project(&path).unwrap().1,
+            SCHEMA_VERSION_V6
+        );
+        let connection = open_connection(&path).unwrap();
+        validate_existing_schema(&connection).unwrap();
+        assert_eq!(
+            connection
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
+                .unwrap(),
+            CURRENT_SCHEMA_VERSION
+        );
+        let settings: Value = connection
+            .query_row("SELECT settings_json FROM world", [], |row| {
+                row.get::<_, String>(0)
+            })
+            .map(|value| serde_json::from_str(&value).unwrap())
+            .unwrap();
+        assert_eq!(settings["themeId"], "atlas");
+        assert_eq!(settings["showGrid"], false);
+        assert_eq!(settings["exportScale"], 2);
+        assert_eq!(settings["exportExtent"], "viewport");
+        assert_eq!(settings["canvasWidth"], 2048);
+        assert_eq!(settings["canvasHeight"], 1024);
+        assert_eq!(settings["gridKind"], "graticule");
+        assert_eq!(settings["gridColor"], "#687784");
+        assert_eq!(settings["gridWidth"], 1);
+        assert_eq!(settings["gridSpacing"], 10);
+        assert_eq!(settings["themeOverrides"], serde_json::json!({}));
+    }
+
+    #[test]
+    fn failed_v6_to_v7_migration_rolls_back_source() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("failed-v6.realmmap");
+        create_v6_fixture(&path, "Legacy v6");
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER migration_failure_v7 BEFORE INSERT ON schema_migrations
+                 WHEN NEW.version = 7 BEGIN SELECT RAISE(ABORT, 'synthetic migration failure'); END;",
+            )
+            .unwrap();
+        drop(connection);
+        let before = fs::read(&path).unwrap();
+        assert_eq!(
+            open_connection(&path).unwrap_err().code,
+            "storage_constraint"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+        let check = Connection::open(&path).unwrap();
+        assert_eq!(
+            check
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
+                .unwrap(),
+            SCHEMA_VERSION_V6
+        );
+    }
+
+    #[test]
+    fn failed_v5_to_v7_migration_rolls_back_source() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("failed-v5.realmmap");
         create_v5_fixture(&path, "Legacy v5");
@@ -656,7 +750,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_v4_to_v6_migration_rolls_back_source() {
+    fn failed_v4_to_v7_migration_rolls_back_source() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("failed-v4.realmmap");
         create_v4_fixture(&path, "Legacy v4");
@@ -799,6 +893,129 @@ mod tests {
     }
 
     #[test]
+    fn asset_pack_batch_imports_with_one_undo_and_reopens() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("asset-pack.realmmap");
+        let state = direct_state();
+        *state.project.lock().unwrap() =
+            Some(create_project_inner(path.clone(), "Assets").unwrap());
+        let first = b"\x89PNG\r\n\x1a\nfirst".to_vec();
+        let second = b"\x89PNG\r\n\x1a\nsecond".to_vec();
+        let imported = import_assets_batch_in_state(
+            &state,
+            ImportAssetsBatchInput {
+                pack_name: "  Atlas Pack  ".into(),
+                assets: vec![
+                    ImportAssetInput {
+                        sha256: None,
+                        mime: "image/png".into(),
+                        bytes: first,
+                        width: 1,
+                        height: 1,
+                        metadata: serde_json::json!({"role":"first"}),
+                    },
+                    ImportAssetInput {
+                        sha256: None,
+                        mime: "image/png".into(),
+                        bytes: second,
+                        width: 2,
+                        height: 2,
+                        metadata: serde_json::json!({"role":"second"}),
+                    },
+                ],
+            },
+        )
+        .unwrap();
+        assert_eq!(imported.assets.len(), 2);
+        let pack_id = imported.assets[0].metadata["packId"].clone();
+        assert_eq!(imported.assets[1].metadata["packId"], pack_id);
+        assert_eq!(imported.assets[0].metadata["packName"], "Atlas Pack");
+        assert_eq!(imported.assets[0].metadata["packOrdinal"], 0);
+        assert_eq!(imported.assets[1].metadata["packOrdinal"], 1);
+        assert!(imported.can_undo);
+        undo_project_in_state(&state).unwrap();
+        assert!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .assets
+                .is_empty()
+        );
+        redo_project_in_state(&state).unwrap();
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .assets
+                .len(),
+            2
+        );
+        close_project_in_state(&state).unwrap();
+        *state.project.lock().unwrap() = Some(OpenProject {
+            path,
+            connection: open_connection(&directory.path().join("asset-pack.realmmap")).unwrap(),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+        });
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .assets
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn asset_pack_batch_rejects_reserved_keys_and_limits_atomically() {
+        let directory = tempdir().unwrap();
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(
+            create_project_inner(
+                directory.path().join("asset-pack-validation.realmmap"),
+                "Assets",
+            )
+            .unwrap(),
+        );
+        let valid = || ImportAssetInput {
+            sha256: None,
+            mime: "image/png".into(),
+            bytes: b"\x89PNG\r\n\x1a\nasset".to_vec(),
+            width: 1,
+            height: 1,
+            metadata: serde_json::json!({}),
+        };
+        for input in [
+            ImportAssetsBatchInput {
+                pack_name: "".into(),
+                assets: vec![valid()],
+            },
+            ImportAssetsBatchInput {
+                pack_name: "Pack".into(),
+                assets: vec![ImportAssetInput {
+                    metadata: serde_json::json!({"packId":"reserved"}),
+                    ..valid()
+                }],
+            },
+        ] {
+            assert_eq!(
+                import_assets_batch_in_state(&state, input)
+                    .unwrap_err()
+                    .code,
+                "invalid_input"
+            );
+        }
+        assert!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .assets
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn referenced_asset_cannot_be_deleted() {
         let directory = tempdir().unwrap();
         let state = direct_state();
@@ -835,6 +1052,90 @@ mod tests {
                 .unwrap_err()
                 .code,
             "asset_in_use"
+        );
+    }
+
+    #[test]
+    fn referenced_asset_batch_delete_is_atomic_and_undoable() {
+        let directory = tempdir().unwrap();
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(
+            create_project_inner(
+                directory.path().join("asset-delete-batch.realmmap"),
+                "Assets",
+            )
+            .unwrap(),
+        );
+        let make = |suffix: &[u8]| ImportAssetInput {
+            sha256: None,
+            mime: "image/png".into(),
+            bytes: [b"\x89PNG\r\n\x1a\n".as_slice(), suffix].concat(),
+            width: 1,
+            height: 1,
+            metadata: serde_json::json!({}),
+        };
+        let imported = import_assets_batch_in_state(
+            &state,
+            ImportAssetsBatchInput {
+                pack_name: "Pack".into(),
+                assets: vec![make(b"one"), make(b"two")],
+            },
+        )
+        .unwrap();
+        let referenced = imported.assets[0].id.clone();
+        let unreferenced = imported.assets[1].id.clone();
+        create_feature_in_state(
+            &state,
+            CreateFeatureInput {
+                feature_type: FeatureType::Mountain,
+                name: "Mountain".into(),
+                geometry: geometry_for(FeatureType::Mountain),
+                properties: serde_json::json!({"assetId": referenced}),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            delete_assets_batch_in_state(
+                &state,
+                DeleteAssetsBatchInput {
+                    ids: vec![referenced.clone(), unreferenced.clone()]
+                },
+            )
+            .unwrap_err()
+            .code,
+            "asset_in_use"
+        );
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .assets
+                .len(),
+            2
+        );
+        delete_assets_batch_in_state(
+            &state,
+            DeleteAssetsBatchInput {
+                ids: vec![unreferenced],
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .assets
+                .len(),
+            1
+        );
+        undo_project_in_state(&state).unwrap();
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .assets
+                .len(),
+            2
         );
     }
 
@@ -1064,6 +1365,589 @@ mod tests {
     }
 
     #[test]
+    fn revise_and_delete_feature_batches_are_one_undoable_operation() {
+        let directory = tempdir().unwrap();
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(
+            create_project_inner(
+                directory.path().join("feature-edit-batch.realmmap"),
+                "Batch",
+            )
+            .unwrap(),
+        );
+        let first = create_feature_in_state(
+            &state,
+            CreateFeatureInput {
+                feature_type: FeatureType::Mountain,
+                name: "First".into(),
+                geometry: geometry_for(FeatureType::Mountain),
+                properties: serde_json::json!({}),
+            },
+        )
+        .unwrap();
+        let first_id = first.features[0].id.clone();
+        let second = create_feature_in_state(
+            &state,
+            CreateFeatureInput {
+                feature_type: FeatureType::Tree,
+                name: "Second".into(),
+                geometry: geometry_for(FeatureType::Tree),
+                properties: serde_json::json!({}),
+            },
+        )
+        .unwrap();
+        let second_id = second
+            .features
+            .iter()
+            .find(|feature| feature.id != first_id)
+            .unwrap()
+            .id
+            .clone();
+
+        revise_features_batch_in_state(
+            &state,
+            ReviseFeaturesBatchInput {
+                features: vec![
+                    ReviseFeatureInput {
+                        id: first_id.clone(),
+                        name: "First revised".into(),
+                        geometry: geometry_for(FeatureType::Mountain),
+                        properties: serde_json::json!({"zIndex": 10}),
+                    },
+                    ReviseFeatureInput {
+                        id: second_id.clone(),
+                        name: "Second revised".into(),
+                        geometry: geometry_for(FeatureType::Tree),
+                        properties: serde_json::json!({"zIndex": 11}),
+                    },
+                ],
+            },
+        )
+        .unwrap();
+        let revised = get_open_project_in_state(&state).unwrap().unwrap();
+        assert!(
+            revised
+                .features
+                .iter()
+                .any(|feature| feature.name == "First revised")
+        );
+        assert!(
+            revised
+                .features
+                .iter()
+                .any(|feature| feature.name == "Second revised")
+        );
+        assert!(revised.can_undo);
+        assert_eq!(
+            undo_project_in_state(&state).unwrap().features[0].name,
+            "First"
+        );
+        assert!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .features
+                .iter()
+                .all(|feature| !feature.name.ends_with("revised"))
+        );
+        redo_project_in_state(&state).unwrap();
+
+        delete_features_batch_in_state(
+            &state,
+            DeleteFeaturesBatchInput {
+                ids: vec![first_id.clone(), second_id.clone()],
+            },
+        )
+        .unwrap();
+        assert!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .features
+                .is_empty()
+        );
+        let restored = undo_project_in_state(&state).unwrap();
+        assert_eq!(restored.features.len(), 2);
+        assert!(
+            restored
+                .features
+                .iter()
+                .all(|feature| feature.name.ends_with("revised"))
+        );
+    }
+
+    #[test]
+    fn feature_edit_batches_preflight_ids_and_locked_rows_without_writing() {
+        let directory = tempdir().unwrap();
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(
+            create_project_inner(
+                directory.path().join("feature-edit-validation.realmmap"),
+                "Batch",
+            )
+            .unwrap(),
+        );
+        let created = create_features_batch_in_state(
+            &state,
+            CreateFeaturesBatchInput {
+                features: vec![
+                    CreateFeatureInput {
+                        feature_type: FeatureType::Mountain,
+                        name: "A".into(),
+                        geometry: geometry_for(FeatureType::Mountain),
+                        properties: serde_json::json!({}),
+                    },
+                    CreateFeatureInput {
+                        feature_type: FeatureType::Tree,
+                        name: "B".into(),
+                        geometry: geometry_for(FeatureType::Tree),
+                        properties: serde_json::json!({"locked": true}),
+                    },
+                ],
+            },
+        )
+        .unwrap();
+        let unlocked_id = created
+            .features
+            .iter()
+            .find(|feature| feature.name == "A")
+            .unwrap()
+            .id
+            .clone();
+        let locked_id = created
+            .features
+            .iter()
+            .find(|feature| feature.name == "B")
+            .unwrap()
+            .id
+            .clone();
+
+        let duplicate = revise_features_batch_in_state(
+            &state,
+            ReviseFeaturesBatchInput {
+                features: vec![
+                    ReviseFeatureInput {
+                        id: unlocked_id.clone(),
+                        name: "changed".into(),
+                        geometry: geometry_for(FeatureType::Mountain),
+                        properties: serde_json::json!({}),
+                    },
+                    ReviseFeatureInput {
+                        id: unlocked_id.clone(),
+                        name: "changed twice".into(),
+                        geometry: geometry_for(FeatureType::Mountain),
+                        properties: serde_json::json!({}),
+                    },
+                ],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(duplicate.code, "invalid_input");
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .features
+                .iter()
+                .find(|feature| feature.id == unlocked_id)
+                .unwrap()
+                .name,
+            "A"
+        );
+        let missing_revision = revise_features_batch_in_state(
+            &state,
+            ReviseFeaturesBatchInput {
+                features: vec![
+                    ReviseFeatureInput {
+                        id: unlocked_id.clone(),
+                        name: "changed".into(),
+                        geometry: geometry_for(FeatureType::Mountain),
+                        properties: serde_json::json!({}),
+                    },
+                    ReviseFeatureInput {
+                        id: Uuid::new_v4().to_string(),
+                        name: "missing".into(),
+                        geometry: geometry_for(FeatureType::Mountain),
+                        properties: serde_json::json!({}),
+                    },
+                ],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(missing_revision.code, "not_found");
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .features
+                .len(),
+            2
+        );
+
+        let locked = delete_features_batch_in_state(
+            &state,
+            DeleteFeaturesBatchInput {
+                ids: vec![unlocked_id.clone(), locked_id.clone()],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(locked.code, "feature_locked");
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .features
+                .len(),
+            2
+        );
+        let missing_delete = delete_features_batch_in_state(
+            &state,
+            DeleteFeaturesBatchInput {
+                ids: vec![unlocked_id.clone(), Uuid::new_v4().to_string()],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(missing_delete.code, "not_found");
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .features
+                .len(),
+            2
+        );
+
+        let invalid_geometry = revise_features_batch_in_state(
+            &state,
+            ReviseFeaturesBatchInput {
+                features: vec![
+                    ReviseFeatureInput {
+                        id: unlocked_id,
+                        name: "changed".into(),
+                        geometry: serde_json::json!({"type": "LineString", "coordinates": [[0, 0], [1, 1]]}),
+                        properties: serde_json::json!({}),
+                    },
+                ],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(invalid_geometry.code, "invalid_input");
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .features
+                .len(),
+            2
+        );
+
+        let single_revision = revise_feature_in_state(
+            &state,
+            ReviseFeatureInput {
+                id: locked_id.clone(),
+                name: "should stay locked".into(),
+                geometry: geometry_for(FeatureType::Tree),
+                properties: serde_json::json!({}),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(single_revision.code, "feature_locked");
+        let single_locked =
+            delete_feature_in_state(&state, DeleteFeatureInput { id: locked_id }).unwrap_err();
+        assert_eq!(single_locked.code, "feature_locked");
+    }
+
+    #[test]
+    fn feature_lock_batch_preserves_properties_and_has_noop_undo() {
+        let directory = tempdir().unwrap();
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(
+            create_project_inner(directory.path().join("feature-locks.realmmap"), "Locks").unwrap(),
+        );
+        let created = create_features_batch_in_state(
+            &state,
+            CreateFeaturesBatchInput {
+                features: vec![
+                    CreateFeatureInput {
+                        feature_type: FeatureType::Mountain,
+                        name: "A".into(),
+                        geometry: geometry_for(FeatureType::Mountain),
+                        properties: serde_json::json!({"description": "keep"}),
+                    },
+                    CreateFeatureInput {
+                        feature_type: FeatureType::Tree,
+                        name: "B".into(),
+                        geometry: geometry_for(FeatureType::Tree),
+                        properties: serde_json::json!({"zIndex": 7, "locked": true}),
+                    },
+                ],
+            },
+        )
+        .unwrap();
+        let ids = created
+            .features
+            .iter()
+            .map(|feature| feature.id.clone())
+            .collect::<Vec<_>>();
+
+        let locked = set_features_locked_in_state(
+            &state,
+            SetFeaturesLockedInput {
+                ids: ids.clone(),
+                locked: true,
+            },
+        )
+        .unwrap();
+        assert!(locked.features.iter().all(|feature| {
+            feature.properties.get("locked").and_then(Value::as_bool) == Some(true)
+        }));
+        assert_eq!(
+            locked
+                .features
+                .iter()
+                .find(|feature| feature.name == "A")
+                .unwrap()
+                .properties["description"],
+            "keep"
+        );
+
+        // Repeating the same request must not add a second undo step. The next undo therefore
+        // removes the original lock operation, rather than merely replaying a no-op.
+        let repeated = set_features_locked_in_state(
+            &state,
+            SetFeaturesLockedInput {
+                ids: ids.clone(),
+                locked: true,
+            },
+        )
+        .unwrap();
+        assert!(repeated.can_undo);
+        let undone = undo_project_in_state(&state).unwrap();
+        assert_eq!(
+            undone
+                .features
+                .iter()
+                .find(|feature| feature.name == "A")
+                .unwrap()
+                .properties
+                .get("locked")
+                .and_then(Value::as_bool),
+            None
+        );
+        assert_eq!(
+            undone
+                .features
+                .iter()
+                .find(|feature| feature.name == "B")
+                .unwrap()
+                .properties
+                .get("locked")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        let redone = redo_project_in_state(&state).unwrap();
+        assert!(redone.features.iter().all(|feature| {
+            feature.properties.get("locked").and_then(Value::as_bool) == Some(true)
+        }));
+
+        let unlocked = set_features_locked_in_state(
+            &state,
+            SetFeaturesLockedInput {
+                ids: ids.clone(),
+                locked: false,
+            },
+        )
+        .unwrap();
+        assert!(unlocked.features.iter().all(|feature| {
+            feature.properties.get("locked").and_then(Value::as_bool) == Some(false)
+        }));
+        assert!(
+            undo_project_in_state(&state)
+                .unwrap()
+                .features
+                .iter()
+                .all(|feature| {
+                    feature.properties.get("locked").and_then(Value::as_bool) == Some(true)
+                })
+        );
+        assert!(
+            redo_project_in_state(&state)
+                .unwrap()
+                .features
+                .iter()
+                .all(|feature| {
+                    feature.properties.get("locked").and_then(Value::as_bool) == Some(false)
+                })
+        );
+    }
+
+    #[test]
+    fn feature_lock_batch_rejects_invalid_ids_without_writing() {
+        let directory = tempdir().unwrap();
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(
+            create_project_inner(
+                directory.path().join("feature-lock-validation.realmmap"),
+                "Locks",
+            )
+            .unwrap(),
+        );
+        let created = create_feature_in_state(
+            &state,
+            CreateFeatureInput {
+                feature_type: FeatureType::Mountain,
+                name: "A".into(),
+                geometry: geometry_for(FeatureType::Mountain),
+                properties: serde_json::json!({}),
+            },
+        )
+        .unwrap();
+        let id = created.features[0].id.clone();
+        let missing = Uuid::new_v4().to_string();
+        let too_many = set_features_locked_in_state(
+            &state,
+            SetFeaturesLockedInput {
+                ids: vec![id.clone(); MAX_FEATURE_BATCH + 1],
+                locked: true,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(too_many.code, "invalid_input");
+        for input in [
+            SetFeaturesLockedInput {
+                ids: Vec::new(),
+                locked: true,
+            },
+            SetFeaturesLockedInput {
+                ids: vec![id.clone(), id.clone()],
+                locked: true,
+            },
+            SetFeaturesLockedInput {
+                ids: vec![id.clone(), missing],
+                locked: true,
+            },
+            SetFeaturesLockedInput {
+                ids: vec!["not-a-uuid".into()],
+                locked: true,
+            },
+        ] {
+            let error = set_features_locked_in_state(&state, input).unwrap_err();
+            assert!(matches!(error.code.as_str(), "invalid_input" | "not_found"));
+            assert_eq!(
+                get_open_project_in_state(&state).unwrap().unwrap().features[0]
+                    .properties
+                    .get("locked")
+                    .and_then(Value::as_bool),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn feature_edit_batch_rolls_back_when_storage_fails() {
+        let directory = tempdir().unwrap();
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(
+            create_project_inner(
+                directory.path().join("feature-edit-rollback.realmmap"),
+                "Batch",
+            )
+            .unwrap(),
+        );
+        let first = create_feature_in_state(
+            &state,
+            CreateFeatureInput {
+                feature_type: FeatureType::Mountain,
+                name: "A".into(),
+                geometry: geometry_for(FeatureType::Mountain),
+                properties: serde_json::json!({}),
+            },
+        )
+        .unwrap();
+        let first_id = first.features[0].id.clone();
+        let second = create_feature_in_state(
+            &state,
+            CreateFeatureInput {
+                feature_type: FeatureType::Tree,
+                name: "B".into(),
+                geometry: geometry_for(FeatureType::Tree),
+                properties: serde_json::json!({}),
+            },
+        )
+        .unwrap();
+        let second_id = second
+            .features
+            .iter()
+            .find(|feature| feature.id != first_id)
+            .unwrap()
+            .id
+            .clone();
+        let project_guard = state.project.lock().unwrap();
+        project_guard
+            .as_ref()
+            .unwrap()
+            .connection
+            .execute_batch(
+                "CREATE TEMP TRIGGER reject_feature_batch_update BEFORE UPDATE ON features
+                 BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END;",
+            )
+            .unwrap();
+        drop(project_guard);
+        let error = revise_features_batch_in_state(
+            &state,
+            ReviseFeaturesBatchInput {
+                features: vec![
+                    ReviseFeatureInput {
+                        id: first_id.clone(),
+                        name: "A revised".into(),
+                        geometry: geometry_for(FeatureType::Mountain),
+                        properties: serde_json::json!({}),
+                    },
+                    ReviseFeatureInput {
+                        id: second_id.clone(),
+                        name: "B revised".into(),
+                        geometry: geometry_for(FeatureType::Tree),
+                        properties: serde_json::json!({}),
+                    },
+                ],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "storage_constraint");
+        let snapshot = get_open_project_in_state(&state).unwrap().unwrap();
+        assert!(snapshot.features.iter().any(|feature| feature.name == "A"));
+        assert!(snapshot.features.iter().any(|feature| feature.name == "B"));
+        let project_guard = state.project.lock().unwrap();
+        project_guard
+            .as_ref()
+            .unwrap()
+            .connection
+            .execute_batch(
+                "DROP TRIGGER reject_feature_batch_update;
+                 CREATE TEMP TRIGGER reject_feature_batch_delete BEFORE DELETE ON features
+                 BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END;",
+            )
+            .unwrap();
+        drop(project_guard);
+        let delete_error = delete_features_batch_in_state(
+            &state,
+            DeleteFeaturesBatchInput {
+                ids: vec![first_id, second_id],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(delete_error.code, "storage_constraint");
+        assert_eq!(
+            get_open_project_in_state(&state)
+                .unwrap()
+                .unwrap()
+                .features
+                .len(),
+            2
+        );
+    }
+
+    #[test]
     fn static_cell_attributes_round_trip_and_undo() {
         let directory = tempdir().unwrap();
         let state = direct_state();
@@ -1234,7 +2118,14 @@ mod tests {
             "themeId": "midnight",
             "showGrid": false,
             "exportScale": 4,
-            "exportExtent": "viewport"
+            "exportExtent": "viewport",
+            "canvasWidth": 4096,
+            "canvasHeight": 2048,
+            "gridKind": "hex",
+            "gridColor": "#112233",
+            "gridWidth": 2.5,
+            "gridSpacing": 15,
+            "themeOverrides": {"land": "#123456", "grid": "#abcdef"}
         });
         let updated = update_project_settings_in_state(
             &state,
@@ -1277,6 +2168,16 @@ mod tests {
             serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","zoom":2}),
             serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":3,"exportExtent":"world"}),
             serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1}),
+            serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":511,"canvasHeight":1024}),
+            serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":8193,"canvasHeight":1024}),
+            serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":"2048","canvasHeight":1024}),
+            serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":2048,"canvasHeight":1024,"gridKind":"dots","gridColor":"#687784","gridWidth":1,"gridSpacing":10}),
+            serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":2048,"canvasHeight":1024,"gridKind":"graticule","gridColor":"687784","gridWidth":1,"gridSpacing":10}),
+            serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":2048,"canvasHeight":1024,"gridKind":"graticule","gridColor":"#687784","gridWidth":0.24,"gridSpacing":10}),
+            serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":2048,"canvasHeight":1024,"gridKind":"graticule","gridColor":"#687784","gridWidth":1,"gridSpacing":46}),
+            serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":2048,"canvasHeight":1024,"gridKind":"graticule","gridColor":"#687784","gridWidth":1,"gridSpacing":10,"themeOverrides":{"unknown":"#112233"}}),
+            serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":2048,"canvasHeight":1024,"gridKind":"graticule","gridColor":"#687784","gridWidth":1,"gridSpacing":10,"themeOverrides":{"land":"123456"}}),
+            serde_json::json!({"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":2048,"canvasHeight":1024,"gridKind":"graticule","gridColor":"#687784","gridWidth":1,"gridSpacing":10,"themeOverrides":[]}),
             serde_json::json!("viewport"),
         ];
         for settings in invalid {

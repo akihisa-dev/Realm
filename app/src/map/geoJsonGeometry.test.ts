@@ -4,6 +4,8 @@ import LineString from "ol/geom/LineString";
 import Point from "ol/geom/Point";
 import Polygon from "ol/geom/Polygon";
 import Icon from "ol/style/Icon";
+import RegularShape from "ol/style/RegularShape";
+import Style from "ol/style/Style";
 import type { GeoJsonGeometry } from "../backend";
 import { drawTypeForMode, featureGeometryIsValid, geometryFromGeoJson, geometryToGeoJson } from "./geoJsonGeometry";
 import { createCellStyle, createFeatureStyle } from "./styles";
@@ -80,10 +82,31 @@ describe("map geometry modules", () => {
     expect(mountainAfter).not.toBe(mountainBefore);
   });
 
+  it("invalidates feature and cell style caches when theme overrides change", () => {
+    let overrides: { river?: string; grid?: string } = { river: "#102030", grid: "#203040" };
+    const featureStyle = createFeatureStyle(() => "ink", () => true, () => undefined, () => overrides);
+    const river = new Feature({ featureType: "river", name: "River" });
+    const before = featureStyle(river);
+    expect((Array.isArray(before) ? before[1] : before)?.getStroke()?.getColor()).toBe("#102030");
+    overrides = { river: "#405060", grid: "#506070" };
+    const after = featureStyle(river);
+    expect(after).not.toBe(before);
+    expect((Array.isArray(after) ? after[1] : after)?.getStroke()?.getColor()).toBe("#405060");
+
+    let cellOverrides: { grid?: string } = { grid: "#102030" };
+    const cellStyle = createCellStyle(() => "ink", () => cellOverrides);
+    const cell = new Feature({ id: "cell", attributes: [], selected: false, showGrid: true });
+    const cellBefore = cellStyle(cell);
+    cellOverrides = { grid: "#405060" };
+    const cellAfter = cellStyle(cell);
+    expect(cellAfter).not.toBe(cellBefore);
+  });
+
   it("applies free-label font, colors, halo, rotation, and line placement", () => {
     const featureStyle = createFeatureStyle();
     const label = new Feature({ featureType: "label", name: "North", properties: {
       fontSize: 20,
+      fontFamily: "serif",
       textColor: "#123456",
       haloColor: "#ffffff",
       haloWidth: 5,
@@ -93,6 +116,7 @@ describe("map geometry modules", () => {
     const labelStyle = featureStyle(label);
     const labelText = (Array.isArray(labelStyle) ? labelStyle[0] : labelStyle)?.getText();
     expect(labelText?.getFont()).toContain("20px");
+    expect(labelText?.getFont()).toContain("Georgia");
     expect(labelText?.getFill()?.getColor()).toBe("#123456");
     expect(labelText?.getStroke()?.getColor()).toBe("#ffffff");
     expect(labelText?.getStroke()?.getWidth()).toBe(5);
@@ -114,10 +138,20 @@ describe("map geometry modules", () => {
     expect((image as Icon).getSrc()).toBe(url);
   });
 
+  it("renders distinct built-in compass and north-arrow symbols", () => {
+    const featureStyle = createFeatureStyle();
+    const compass = new Feature({ featureType: "symbol", name: "Compass", properties: { symbolKind: "compass" } });
+    const north = new Feature({ featureType: "symbol", name: "North", properties: { symbolKind: "north" } });
+    const compassImage = (featureStyle(compass) as Style).getImage() as RegularShape;
+    const northImage = (featureStyle(north) as Style).getImage() as RegularShape;
+    expect(compassImage.getPoints()).toBe(8);
+    expect(northImage.getPoints()).toBe(3);
+  });
+
   it("renders local overlay assets in a bbox renderer and keeps a safe fallback", () => {
     const url = "data:image/png;base64,iVBORw0KGgo=";
     const featureStyle = createFeatureStyle(() => "ink", () => true, (assetId) => assetId === "asset-1" ? url : undefined);
-    const overlay = new Feature({ featureType: "overlay", name: "Trace", properties: { assetId: "asset-1", opacity: 0.6, rotation: 0.25 } });
+    const overlay = new Feature({ featureType: "overlay", name: "Trace", properties: { assetId: "asset-1", opacity: 0.6, rotation: 0.25, blendMode: "multiply" } });
     const rendered = featureStyle(overlay);
     const style = Array.isArray(rendered) ? rendered[0] : rendered;
     expect(style?.getImage()).toBeInstanceOf(Icon);
@@ -125,7 +159,7 @@ describe("map geometry modules", () => {
     expect(style?.getZIndex()).toBe(24);
     expect(style).toBe(featureStyle(overlay));
 
-    overlay.set("properties", { assetId: "asset-1", opacity: 0.35, rotation: 0.25 });
+    overlay.set("properties", { assetId: "asset-1", opacity: 0.35, rotation: 0.25, blendMode: "screen" });
     expect(featureStyle(overlay)).not.toBe(rendered);
 
     const remoteOverlay = new Feature({ featureType: "overlay", name: "Remote", properties: { assetId: "remote", opacity: 0.6 } });
@@ -160,5 +194,55 @@ describe("map geometry modules", () => {
     const raised = new Feature({ featureType: "country", name: "Raised", properties: { zIndex: 20 } });
     const styled = featureStyle(raised);
     expect((Array.isArray(styled) ? styled[0] : styled)?.getZIndex()).toBe(50);
+  });
+
+  it("renders editable frame styles and invalidates the style cache for frame properties", () => {
+    const featureStyle = createFeatureStyle(() => "ink", () => true);
+    const frame = new Feature({ featureType: "frame", name: "Border", properties: { frameWidth: 5, frameColor: "#102030", frameStyle: "double" } });
+    const doubleStyle = featureStyle(frame);
+    expect(Array.isArray(doubleStyle)).toBe(true);
+    expect(doubleStyle).toHaveLength(2);
+    expect((doubleStyle as unknown as Array<Style>)[1]?.getStroke()?.getColor()).toBe("#102030");
+    expect((doubleStyle as unknown as Array<Style>)[1]?.getStroke()?.getWidth()).toBe(5);
+
+    frame.set("properties", { frameWidth: 2, frameColor: "#405060", frameStyle: "dashed" });
+    const dashedStyle = featureStyle(frame);
+    expect(dashedStyle).not.toBe(doubleStyle);
+    const dashedStroke = (Array.isArray(dashedStyle) ? dashedStyle[0] : dashedStyle)?.getStroke();
+    expect(dashedStroke?.getColor()).toBe("#405060");
+    expect(dashedStroke?.getLineDash()).toEqual([12, 8]);
+  });
+
+  it("uses a bounded custom canvas renderer for scale bars", () => {
+    const featureStyle = createFeatureStyle(() => "ink", () => true);
+    const scale = new Feature({ featureType: "scale", name: "Scale", properties: { barLengthPx: 9999, segments: 99, unit: "km", unitsPerDegree: 2.5, opacity: 0.5 } });
+    const styled = featureStyle(scale);
+    const style = Array.isArray(styled) ? styled[0] : styled;
+    const renderer = style?.getRenderer();
+    expect(typeof renderer).toBe("function");
+    const calls: string[] = [];
+    const context = {
+      globalAlpha: 1,
+      strokeStyle: "",
+      fillStyle: "",
+      lineWidth: 0,
+      font: "",
+      textAlign: "",
+      textBaseline: "",
+      save: () => calls.push("save"),
+      restore: () => calls.push("restore"),
+      translate: () => calls.push("translate"),
+      rotate: () => calls.push("rotate"),
+      beginPath: () => calls.push("beginPath"),
+      moveTo: () => calls.push("moveTo"),
+      lineTo: () => calls.push("lineTo"),
+      stroke: () => calls.push("stroke"),
+      fillText: () => calls.push("fillText"),
+    } as unknown as CanvasRenderingContext2D;
+    renderer?.([50, 60], { context, pixelRatio: 1, feature: scale, geometry: new Point([0, 0]), resolution: 1, rotation: 0 });
+    expect(calls[0]).toBe("save");
+    expect(calls).toContain("stroke");
+    expect(calls).toContain("fillText");
+    expect(context.globalAlpha).toBeCloseTo(0.5);
   });
 });

@@ -1,4 +1,4 @@
-import { CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellCenter, cellIdsWithinBrushPath, isGeometryWithinWorld } from "./MapAdapter";
+import { CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellCenter, cellIdsWithinBrushPath, isGeometryWithinWorld, selectFeatureIdsWithinLasso } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -6,11 +6,183 @@ import MouseWheelZoom from "ol/interaction/MouseWheelZoom";
 import Graticule from "ol/layer/Graticule";
 import VectorLayer from "ol/layer/Vector";
 import Draw from "ol/interaction/Draw";
+import Modify from "ol/interaction/Modify";
+import * as SelectModule from "ol/interaction/Select";
 import PointerInteraction from "ol/interaction/Pointer";
+import Feature from "ol/Feature";
+import LineString from "ol/geom/LineString";
+import Polygon from "ol/geom/Polygon";
+import Point from "ol/geom/Point";
 import Style from "ol/style/Style";
 import CircleStyle from "ol/style/Circle";
 
 describe("RealmMapAdapter", () => {
+  it("selects points, crossing lines, and contained polygons with a lasso", () => {
+    const features = [
+      { id: "inside", geometry: { type: "Point", coordinates: [1, 1] as [number, number] } },
+      { id: "crossing", geometry: { type: "LineString", coordinates: [[-2, 0], [2, 0]] as [number, number][] } },
+      { id: "contained", geometry: { type: "Polygon", coordinates: [[[0, 0], [2, 0], [2, 2], [0, 0]]] as [number, number][][] } },
+      { id: "outside", geometry: { type: "Point", coordinates: [4, 4] as [number, number] } },
+    ] as const;
+    expect(selectFeatureIdsWithinLasso(features, [[-1, -1], [3, -1], [3, 3], [-1, 3]])).toEqual(["inside", "crossing", "contained"]);
+    expect(selectFeatureIdsWithinLasso(features, [[0, 0], [0, 1]])).toEqual([]);
+  });
+
+  it("respects polygon holes when deciding whether a lasso intersects", () => {
+    const features = [{
+      id: "donut",
+      geometry: { type: "Polygon", coordinates: [
+        [[-4, -4], [4, -4], [4, 4], [-4, 4], [-4, -4]],
+        [[-2, -2], [2, -2], [2, 2], [-2, 2], [-2, -2]],
+      ] as [number, number][][] },
+    }] as const;
+    expect(selectFeatureIdsWithinLasso(features, [[-1, -1], [1, -1], [1, 1], [-1, 1]])).toEqual([]);
+    expect(selectFeatureIdsWithinLasso(features, [[-3, -1], [-2, -1], [-2, 1], [-3, 1]])).toEqual(["donut"]);
+  });
+
+  it("keeps locked and hidden features out of multi-selection and clears all ids on Escape", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    adapter.setFeatures([
+      { id: "open", featureType: "city", name: "Open", geometry: { type: "Point", coordinates: [0, 0] } },
+      { id: "locked", featureType: "city", name: "Locked", geometry: { type: "Point", coordinates: [1, 1] }, properties: { locked: true } },
+      { id: "hidden", featureType: "town", name: "Hidden", geometry: { type: "Point", coordinates: [2, 2] } },
+    ]);
+    const selected = vi.fn();
+    adapter.onSelectFeatures(selected);
+    adapter.setLayerVisibility("town", false);
+    adapter.setSelectedFeatures(["open", "locked", "hidden"]);
+    const selection = adapter.getMap().getInteractions().getArray().find((item) => item instanceof SelectModule.default) as SelectModule.default | undefined;
+    expect(selection?.getFeatures().getArray().map((feature) => feature.getId())).toEqual(["open"]);
+    expect(selected).not.toHaveBeenCalled();
+    const openFeature = selection?.getFeatures().item(0);
+    expect(openFeature).toBeDefined();
+    selection?.toggleFeature(openFeature!);
+    expect(selection?.getFeatures().getArray()).toHaveLength(0);
+    selection?.toggleFeature(openFeature!);
+    expect(selection?.getFeatures().getArray().map((feature) => feature.getId())).toEqual(["open"]);
+    const selectionCallsBeforeHiddenSync = selected.mock.calls.length;
+    adapter.setLayerVisibility("city", false);
+    expect(selection?.getFeatures().getArray()).toHaveLength(0);
+    expect(selected).toHaveBeenCalledTimes(selectionCallsBeforeHiddenSync);
+    adapter.setLayerVisibility("city", true);
+    adapter.setSelectedFeatures(["open"]);
+    host.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(selected).toHaveBeenLastCalledWith([]);
+    adapter.dispose();
+    host.remove();
+  });
+
+  it("emits one modify batch for a multi-feature gesture", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    adapter.setFeatures([
+      { id: "a", featureType: "city", name: "A", geometry: { type: "Point", coordinates: [0, 0] } },
+      { id: "b", featureType: "city", name: "B", geometry: { type: "Point", coordinates: [1, 1] } },
+    ]);
+    adapter.setSelectedFeatures(["a", "b"]);
+    const batch = vi.fn();
+    adapter.onModifyFeatures(batch);
+    const interaction = adapter.getMap().getInteractions().getArray().find((item) => item instanceof Modify) as Modify | undefined;
+    const source = (adapter.getMap().getLayers().item(2) as VectorLayer).getSource();
+    const features = [source?.getFeatureById("a"), source?.getFeatureById("b")].filter((feature): feature is NonNullable<typeof feature> => Boolean(feature));
+    interaction?.dispatchEvent({ type: "modifyend", features: { getArray: () => features } } as never);
+    expect(batch).toHaveBeenCalledOnce();
+    expect(batch.mock.calls[0]?.[0]).toEqual([
+      { id: "a", geometry: { type: "Point", coordinates: [0, 0] } },
+      { id: "b", geometry: { type: "Point", coordinates: [1, 1] } },
+    ]);
+    adapter.dispose();
+    host.remove();
+  });
+
+  it("emits one erase batch and never routes locked ids to deletion", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    adapter.setFeatures([
+      { id: "a", featureType: "city", name: "A", geometry: { type: "Point", coordinates: [0, 0] } },
+      { id: "b", featureType: "city", name: "B", geometry: { type: "Point", coordinates: [1, 1] } },
+      { id: "locked", featureType: "city", name: "Locked", geometry: { type: "Point", coordinates: [2, 2] }, properties: { locked: true } },
+    ]);
+    adapter.setSelectedFeatures(["a", "b", "locked"]);
+    const batch = vi.fn();
+    adapter.onEraseFeatures(batch);
+    host.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+    expect(batch).toHaveBeenCalledOnce();
+    expect(batch).toHaveBeenCalledWith(["a", "b"]);
+    adapter.dispose();
+    host.remove();
+  });
+
+  it("nudges all selected features in one batch, excludes locked features, and preserves plain Arrow navigation", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    adapter.setFeatures([
+      { id: "a", featureType: "city", name: "A", geometry: { type: "Point", coordinates: [0, 0] } },
+      { id: "b", featureType: "city", name: "B", geometry: { type: "LineString", coordinates: [[1, 1], [2, 2]] }, properties: { locked: true } },
+      { id: "c", featureType: "city", name: "C", geometry: { type: "Point", coordinates: [3, 3] } },
+    ]);
+    adapter.setSelectedFeatures(["a", "b", "c"]);
+    const batch = vi.fn();
+    adapter.onModifyFeatures(batch);
+    const nudge = new KeyboardEvent("keydown", { key: "ArrowRight", shiftKey: true, bubbles: true, cancelable: true });
+    host.dispatchEvent(nudge);
+    expect(nudge.defaultPrevented).toBe(true);
+    expect(batch).toHaveBeenCalledOnce();
+    expect(batch).toHaveBeenCalledWith([
+      { id: "a", geometry: { type: "Point", coordinates: [0.25, 0] } },
+      { id: "c", geometry: { type: "Point", coordinates: [3.25, 3] } },
+    ]);
+    const fineNudge = new KeyboardEvent("keydown", { key: "ArrowUp", shiftKey: true, altKey: true, bubbles: true, cancelable: true });
+    host.dispatchEvent(fineNudge);
+    expect(batch).toHaveBeenCalledTimes(2);
+    expect(batch.mock.calls[1]?.[0]).toEqual([
+      { id: "a", geometry: { type: "Point", coordinates: [0.25, 0.05] } },
+      { id: "c", geometry: { type: "Point", coordinates: [3.25, 3.05] } },
+    ]);
+    const plainArrow = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
+    host.dispatchEvent(plainArrow);
+    expect(plainArrow.defaultPrevented).toBe(false);
+    expect(batch).toHaveBeenCalledTimes(2);
+    adapter.dispose();
+    host.remove();
+  });
+
+  it("rejects a nudge that would leave the world without writing or emitting a batch", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    adapter.setFeatures([{ id: "edge", featureType: "city", name: "Edge", geometry: { type: "Point", coordinates: [180, 0] } }]);
+    adapter.setSelected("edge");
+    const batch = vi.fn();
+    const error = vi.fn();
+    adapter.onModifyFeatures(batch);
+    adapter.onError(error);
+    const event = new KeyboardEvent("keydown", { key: "ArrowRight", shiftKey: true, bubbles: true, cancelable: true });
+    host.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+    expect(batch).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledOnce();
+    const source = (adapter.getMap().getLayers().item(2) as VectorLayer).getSource();
+    expect((source?.getFeatureById("edge")?.getGeometry() as Point).getCoordinates()).toEqual([180, 0]);
+    adapter.dispose();
+    host.remove();
+  });
+
   it("selects a thick brush stroke and expands its footprint with radius", () => {
     const oneCell = cellCenter(128, 256);
     const narrow = cellIdsWithinBrushPath([oneCell, [oneCell[0] + 0.7, oneCell[1]]], 0.25);
@@ -32,6 +204,95 @@ describe("RealmMapAdapter", () => {
     expect(isGeometryWithinWorld({ type: "LineString", coordinates: [[0, 0], [0, 91]] })).toBe(false);
     expect(isGeometryWithinWorld({ type: "Polygon", coordinates: [[[0, 0], [1, 0], [0, 1], [0, 0]]] })).toBe(true);
     expect(() => assertGeometryWithinWorld({ type: "Point", coordinates: [181, 0] })).toThrow("bounded world");
+  });
+
+  it("validates grid options and keeps deterministic hex edges outside semantic selection", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    expect(() => adapter.setGridOptions({ kind: "hex", color: "red", width: 1, spacingDegrees: 10 })).toThrow(/RRGGBB/);
+    expect(() => adapter.setGridOptions({ kind: "square", color: "#102030", width: 0.1, spacingDegrees: 10 })).toThrow(/width/);
+    expect(() => adapter.setGridOptions({ kind: "square", color: "#102030", width: 1, spacingDegrees: 1 })).toThrow(/spacing/);
+    adapter.setFeatures([{ id: "city", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [0, 0] } }]);
+    adapter.setGridOptions({ kind: "hex", color: "#102030", width: 1.25, spacingDegrees: 30 });
+    const hexLayer = adapter.getMap().getLayers().item(4) as VectorLayer;
+    const firstEdges = hexLayer.getSource()?.getFeatures().map((feature) => feature.getId());
+    expect(firstEdges?.length).toBeGreaterThan(0);
+    for (const feature of hexLayer.getSource()?.getFeatures() ?? []) {
+      const coordinates = (feature.getGeometry() as LineString).getCoordinates();
+      expect(coordinates.every(([longitude, latitude]) => typeof longitude === "number" && typeof latitude === "number"
+        && longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90)).toBe(true);
+    }
+    adapter.setGridOptions({ kind: "hex", color: "#102030", width: 1.25, spacingDegrees: 30 });
+    expect(hexLayer.getSource()?.getFeatures().map((feature) => feature.getId())).toEqual(firstEdges);
+    adapter.setSelectedFeatures([firstEdges?.[0] ?? "city", "city"]);
+    const select = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof SelectModule.default) as SelectModule.default;
+    expect(select.getFeatures().getArray().map((feature) => feature.getId())).toEqual(["city"]);
+    adapter.setGridVisible(false);
+    expect(hexLayer.getVisible()).toBe(false);
+    adapter.setGridVisible(true);
+    expect(hexLayer.getVisible()).toBe(true);
+    adapter.setGridOptions({ kind: "graticule", color: "#405060", width: 2, spacingDegrees: 15 });
+    expect(adapter.getMap().getLayers().item(0)).toBeInstanceOf(Graticule);
+    expect((adapter.getMap().getLayers().item(4) as VectorLayer).getVisible()).toBe(false);
+    adapter.dispose();
+    expect(adapter.getMap().getTarget()).toBeNull();
+    host.remove();
+  });
+
+  it("switches freehand and vertex gestures, finishes vertices on context menu, and refines the snapped endpoint", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    adapter.setMode("river");
+    let draw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw) as Draw;
+    expect(draw.getFreehand()).toBe(true);
+
+    adapter.setDrawingOptions({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
+    expect(draw.getFreehand()).toBe(false);
+    const finish = vi.spyOn(draw, "finishDrawing");
+    expect(host.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }))).toBe(false);
+    expect(finish).toHaveBeenCalledOnce();
+
+    const onDraw = vi.fn();
+    adapter.onDraw(onDraw);
+    draw.dispatchEvent({
+      type: "drawend",
+      feature: new Feature({ geometry: new LineString([[0, 0], [1, 0.5], [2, 0.5]]) }),
+    } as never);
+    expect(onDraw).toHaveBeenCalledOnce();
+    const snapped = onDraw.mock.calls[0]?.[0];
+    expect(snapped.type).toBe("LineString");
+    const lineStart = snapped.coordinates.at(-2);
+    const lineEnd = snapped.coordinates.at(-1);
+    expect(lineStart).toBeDefined();
+    expect(lineEnd).toBeDefined();
+    const lineAngle = Math.atan2(lineEnd![1] - lineStart![1], lineEnd![0] - lineStart![0]) * 180 / Math.PI;
+    expect(Math.abs(lineAngle / 45 - Math.round(lineAngle / 45))).toBeLessThan(1e-8);
+
+    adapter.setMode("country");
+    draw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw) as Draw;
+    draw.dispatchEvent({
+      type: "drawend",
+      feature: new Feature({ geometry: new Polygon([[ [0, 0], [2, 0], [2, 2], [0, 0] ]]) }),
+    } as never);
+    const polygon = onDraw.mock.calls[1]?.[0];
+    expect(polygon.type).toBe("Polygon");
+    expect(polygon.coordinates[0]?.at(-1)).toEqual(polygon.coordinates[0]?.[0]);
+
+    adapter.setMode("river");
+    draw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw) as Draw;
+    const abort = vi.spyOn(draw, "abortDrawing");
+    host.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(abort).toHaveBeenCalledOnce();
+    expect(() => adapter.setDrawingOptions({ gesture: "freehand", smoothingPasses: 5, snapAngleDegrees: null })).toThrow(/Smoothing passes/);
+    expect(() => adapter.setDrawingOptions({ gesture: "freehand", smoothingPasses: 0, snapAngleDegrees: 0 })).toThrow(/Angle step/);
+    adapter.dispose();
+    host.remove();
   });
 
   it("creates a bounded world view and disposes its OpenLayers target", () => {
@@ -155,6 +416,10 @@ describe("RealmMapAdapter", () => {
     adapter.setTheme("midnight");
     expect(host.dataset.mapTheme).toBe("midnight");
     expect(host.style.background).not.toBe("");
+    adapter.setThemeOverrides({ canvas: "#010203", river: "#102030", grid: "#304050" });
+    expect(host.style.background).toBe("rgb(1, 2, 3)");
+    expect(() => adapter.setThemeOverrides({ canvas: "rgb(1, 2, 3)" })).toThrow(/RRGGBB/);
+    expect(() => adapter.setThemeOverrides({ unknown: "#010203" } as never)).toThrow(/Unknown theme override/);
     const cellBrush = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof PointerInteraction && !(interaction instanceof DragPan));
     expect(cellBrush).toBeInstanceOf(PointerInteraction);
     expect(interactions.find((interaction) => interaction instanceof DragPan)?.getActive()).toBe(false);
@@ -207,5 +472,55 @@ describe("RealmMapAdapter", () => {
     adapter.dispose();
     expect(adapter.getMap().getTarget()).toBeNull();
     host.remove();
+  });
+
+  it("rejects invalid or unsafe configured export dimensions before rendering", async () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    await expect(adapter.exportRaster("image/png", 1, "world", { width: 511, height: 1024 })).rejects.toThrow("512〜8192px");
+    await expect(adapter.exportRaster("image/png", 2, "world", { width: 8192, height: 8192 })).rejects.toThrow("大きすぎます");
+    await expect(adapter.exportRaster("image/jpeg", 1, "world", { width: 1024, height: 1024, quality: 0.49 })).rejects.toThrow("50〜100%");
+    adapter.dispose();
+    host.remove();
+  });
+
+  it("exports configured pixels without selection chrome and restores map state", async () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    adapter.setFeatures([{ id: "selected", featureType: "city", name: "Selected", geometry: { type: "Point", coordinates: [0, 0] } }]);
+    adapter.setSelectedFeatures(["selected"]);
+    const map = adapter.getMap();
+    map.setSize([640, 480]);
+    const view = map.getView();
+    view.setCenter([12, 8]);
+    const originalResolution = view.getResolution();
+    const renderSpy = vi.spyOn(map, "renderSync").mockImplementation(() => undefined);
+    const fillRect = vi.fn(); const drawImage = vi.fn(); const beginPath = vi.fn(); const arc = vi.fn(); const fill = vi.fn();
+    const context = { fillStyle: "", fillRect, drawImage, beginPath, arc, fill } as unknown as CanvasRenderingContext2D;
+    const contextSpy = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => context);
+    const sourceCanvas = document.createElement("canvas"); sourceCanvas.width = 640; sourceCanvas.height = 480; host.append(sourceCanvas);
+    const toBlobSpy = vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback, mimeType, quality) => {
+      expect(mimeType).toBe("image/png");
+      expect(quality).toBe(0.8);
+      callback({ arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer } as Blob);
+    });
+    const raster = await adapter.exportRaster("image/png", 1, "viewport", { width: 512, height: 512, transparent: true, quality: 0.8 });
+    expect(raster).toMatchObject({ width: 512, height: 512 });
+    expect(fillRect).not.toHaveBeenCalled();
+    expect(drawImage).toHaveBeenCalled();
+    expect(map.getSize()).toEqual([640, 480]);
+    expect(view.getCenter()).toEqual([12, 8]);
+    expect(view.getResolution()).toBe(originalResolution);
+    const selection = map.getInteractions().getArray().find((item) => item instanceof SelectModule.default) as SelectModule.default;
+    expect(selection.getFeatures().getArray().map((feature) => feature.getId())).toEqual(["selected"]);
+    expect(renderSpy).toHaveBeenCalledTimes(2);
+    toBlobSpy.mockRestore(); contextSpy.mockRestore(); renderSpy.mockRestore();
+    adapter.dispose(); host.remove();
   });
 });

@@ -46,6 +46,13 @@ pub(crate) struct FeatureEdit {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct AssetEdit {
+    pub(crate) asset_id: String,
+    pub(crate) before: Option<AssetState>,
+    pub(crate) after: Option<AssetState>,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) enum EditOperation {
     ProjectName {
         before: String,
@@ -68,6 +75,9 @@ pub(crate) enum EditOperation {
         asset_id: String,
         before: Option<AssetState>,
         after: Option<AssetState>,
+    },
+    AssetBatch {
+        changes: Vec<AssetEdit>,
     },
     CellAttributes {
         changes: Vec<CellEditChange>,

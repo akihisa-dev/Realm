@@ -231,6 +231,25 @@ pub struct CreateFeaturesBatchInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ReviseFeaturesBatchInput {
+    pub features: Vec<ReviseFeatureInput>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteFeaturesBatchInput {
+    pub ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetFeaturesLockedInput {
+    pub ids: Vec<String>,
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ImportAssetInput {
     pub sha256: Option<String>,
     pub mime: String,
@@ -243,8 +262,21 @@ pub struct ImportAssetInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ImportAssetsBatchInput {
+    pub pack_name: String,
+    pub assets: Vec<ImportAssetInput>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AssetIdInput {
     pub id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteAssetsBatchInput {
+    pub ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

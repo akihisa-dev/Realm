@@ -34,11 +34,25 @@ export type RealmSnapshot = {
   canRedo: boolean;
 };
 
-export type ProjectSettings = { themeId: "ink" | "atlas" | "midnight"; showGrid: boolean; exportScale: 1 | 2 | 4; exportExtent: "viewport" | "world" };
+export type ProjectSettings = {
+  themeId: "ink" | "atlas" | "midnight";
+  showGrid: boolean;
+  exportScale: 1 | 2 | 4;
+  exportExtent: "viewport" | "world";
+  canvasWidth: number;
+  canvasHeight: number;
+  gridKind: "graticule" | "square" | "hex";
+  gridColor: string;
+  gridWidth: number;
+  gridSpacing: number;
+  themeOverrides: Partial<Record<"canvas" | "land" | "landInk" | "coastGlow" | "river" | "forest" | "country" | "region" | "boundary" | "settlement" | "label" | "labelHalo" | "grid", string>>;
+};
 
 export type AssetManifest = { id: string; sha256: string; mime: string; byteLength: number; width: number; height: number; metadata: FeatureProperties };
 export type AssetRead = { manifest: AssetManifest; bytes: number[] };
 export type ImportAssetInput = { sha256?: string; mime: string; bytes: number[]; width: number; height: number; metadata?: FeatureProperties };
+export type ImportAssetsBatchInput = { packName: string; assets: ImportAssetInput[] };
+export type DeleteAssetsBatchInput = { ids: string[] };
 
 export type ProjectSummary = {
   libraryId: string;
@@ -77,6 +91,9 @@ export type CreateFeatureInput = {
 
 export type ReviseFeatureInput = Omit<CreateFeatureInput, "featureType"> & { id: string };
 export type CreateFeaturesBatchInput = { features: CreateFeatureInput[] };
+export type ReviseFeaturesBatchInput = { features: ReviseFeatureInput[] };
+export type DeleteFeaturesBatchInput = { ids: string[] };
+export type SetFeaturesLockedInput = { ids: string[]; locked: boolean };
 
 export interface RealmBackend {
   listProjects(): Promise<ProjectSummary[]>;
@@ -89,9 +106,14 @@ export interface RealmBackend {
   updateProjectSettings(input: { settings: ProjectSettings }): Promise<RealmSnapshot>;
   createFeature(input: CreateFeatureInput): Promise<RealmSnapshot>;
   createFeaturesBatch(input: CreateFeaturesBatchInput): Promise<RealmSnapshot>;
+  reviseFeaturesBatch(input: ReviseFeaturesBatchInput): Promise<RealmSnapshot>;
+  deleteFeaturesBatch(input: DeleteFeaturesBatchInput): Promise<RealmSnapshot>;
+  setFeaturesLocked(input: SetFeaturesLockedInput): Promise<RealmSnapshot>;
   importAsset(input: ImportAssetInput): Promise<RealmSnapshot>;
+  importAssetsBatch(input: ImportAssetsBatchInput): Promise<RealmSnapshot>;
   readAsset(input: { id: string }): Promise<AssetRead>;
   deleteAsset(input: { id: string }): Promise<RealmSnapshot>;
+  deleteAssetsBatch(input: DeleteAssetsBatchInput): Promise<RealmSnapshot>;
   reviseFeature(input: ReviseFeatureInput): Promise<RealmSnapshot>;
   deleteFeature(input: { id: string }): Promise<RealmSnapshot>;
   undoProject(): Promise<RealmSnapshot>;

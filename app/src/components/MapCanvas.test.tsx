@@ -23,27 +23,34 @@ describe("MapZoomControls", () => {
     let zoom = 1;
     let zoomListener: ((nextZoom: number) => void) | null = null;
     let drawListener: ((geometry: never) => void) | null = null;
-    let selectListener: ((id: string | null) => void) | null = null;
+    let selectFeaturesListener: ((ids: readonly string[]) => void) | null = null;
     let cellListener: ((ids: readonly string[]) => void) | null = null;
-    let modifyListener: ((id: string, geometry: never) => void) | null = null;
+    let modifyFeaturesListener: ((changes: readonly { id: string; geometry: never }[]) => void) | null = null;
     const renderer: RealmMapRenderer = {
       getZoom: vi.fn(() => zoom),
       setZoom: vi.fn((nextZoom) => { zoom = nextZoom; }),
       resetView: vi.fn(),
       setFeatures: vi.fn(),
       setTheme: vi.fn(),
+      setThemeOverrides: vi.fn(),
       setGridVisible: vi.fn(),
+      setGridOptions: vi.fn(),
       setAssets: vi.fn(),
       setLayerVisibility: vi.fn(),
       setMode: vi.fn(),
+      setDrawingOptions: vi.fn(),
       setCellBrushRadius: vi.fn(),
       setSelected: vi.fn(),
+      setSelectedFeatures: vi.fn(),
       setSelectedCells: vi.fn(),
       setCellAttributes: vi.fn(),
       onDraw: vi.fn((listener) => { drawListener = listener as typeof drawListener; return vi.fn(); }),
-      onSelect: vi.fn((listener) => { selectListener = listener; return vi.fn(); }),
+      onSelectFeatures: vi.fn((listener) => { selectFeaturesListener = listener as typeof selectFeaturesListener; return vi.fn(); }),
+      onSelect: vi.fn(() => vi.fn()),
       onCellSelect: vi.fn((listener) => { cellListener = listener; return vi.fn(); }),
-      onModify: vi.fn((listener) => { modifyListener = listener as typeof modifyListener; return vi.fn(); }),
+      onModifyFeatures: vi.fn((listener) => { modifyFeaturesListener = listener as typeof modifyFeaturesListener; return vi.fn(); }),
+      onModify: vi.fn(() => vi.fn()),
+      onEraseFeatures: vi.fn(() => vi.fn()),
       onErase: vi.fn(() => vi.fn()),
       onError: vi.fn(() => vi.fn()),
       onZoomChange: vi.fn((listener) => {
@@ -64,13 +71,16 @@ describe("MapZoomControls", () => {
     expect(renderer.setZoom).toHaveBeenCalledWith(3);
     expect(onZoomChange).toHaveBeenLastCalledWith(3);
     expect(renderer.setGridVisible).toHaveBeenCalledWith(true);
+    expect(renderer.setThemeOverrides).toHaveBeenCalledWith({});
+    expect(renderer.setGridOptions).toHaveBeenCalledWith({ kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 });
+    expect(renderer.setDrawingOptions).toHaveBeenCalledWith({ gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null });
     expect(screen.getByRole("group", { name: "現在の地図操作" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "地図を移動" }));
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveFocus();
     (drawListener as ((geometry: never) => void) | null)?.({} as never);
-    (selectListener as ((id: string | null) => void) | null)?.(null);
+    (selectFeaturesListener as ((ids: readonly string[]) => void) | null)?.([]);
     (cellListener as ((ids: readonly string[]) => void) | null)?.([]);
-    (modifyListener as ((id: string, geometry: never) => void) | null)?.("id", {} as never);
+    (modifyFeaturesListener as ((changes: readonly { id: string; geometry: never }[]) => void) | null)?.([{ id: "id", geometry: {} as never }]);
     fireEvent.click(screen.getByRole("button", { name: "表示を中央に戻す" }));
     expect(renderer.resetView).toHaveBeenCalledOnce();
     act(() => { zoomListener?.(4); });
@@ -80,11 +90,19 @@ describe("MapZoomControls", () => {
     expect(renderer.setZoom).toHaveBeenLastCalledWith(5);
     rerender(<MapCanvas showGrid={false} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setGridVisible).toHaveBeenLastCalledWith(false);
+    rerender(<MapCanvas gridOptions={{ kind: "hex", color: "#102030", width: 1.5, spacingDegrees: 12 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(renderer.setGridOptions).toHaveBeenLastCalledWith({ kind: "hex", color: "#102030", width: 1.5, spacingDegrees: 12 });
+    rerender(<MapCanvas themeOverrides={{ land: "#aabbcc" }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(renderer.setThemeOverrides).toHaveBeenLastCalledWith({ land: "#aabbcc" });
 
     rerender(<MapCanvas mode="river" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("地図上で押したまま線または領域を描きます。続けて複数の地物を描けます。Escapeで描画中の線を取り消せます。")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
     expect(renderer.setMode).toHaveBeenLastCalledWith("river");
+
+    rerender(<MapCanvas mode="river" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(renderer.setDrawingOptions).toHaveBeenLastCalledWith({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
+    expect(screen.getByText("地図上を順にクリックして線または領域を描きます。右クリックまたはダブルクリックで確定し、Escapeで取り消せます。")).toBeInTheDocument();
 
     rerender(<MapCanvas mode="cell-select" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("地図上で押したまま筆のように塗り、通過したセルへ属性を付けます。クリックでも円形に塗れます。Escapeで選択を解除できます。")).toBeInTheDocument();
@@ -93,6 +111,16 @@ describe("MapZoomControls", () => {
     expect(renderer.setSelectedCells).toHaveBeenLastCalledWith(["256:128"]);
     rerender(<MapCanvas mode="cell-select" cellBrushRadius={4} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setCellBrushRadius).toHaveBeenLastCalledWith(4);
+    const canvas = screen.getByRole("region", { name: "世界地図" });
+    Object.defineProperty(canvas, "getBoundingClientRect", { configurable: true, value: () => ({ left: 0, top: 0, width: 512, height: 256, right: 512, bottom: 256, x: 0, y: 0, toJSON: () => ({}) }) });
+    const pointerMove = new Event("pointermove", { bubbles: true });
+    Object.defineProperties(pointerMove, { clientX: { value: 120 }, clientY: { value: 80 }, pointerType: { value: "pen" }, pressure: { value: 0.5 } });
+    fireEvent(canvas, pointerMove);
+    const preview = document.querySelector<HTMLElement>(".brush-preview");
+    expect(preview).not.toBeNull();
+    expect(preview?.style.width).toBe("64px");
+    fireEvent.pointerLeave(canvas);
+    expect(document.querySelector(".brush-preview")).toBeNull();
 
     rerender(<MapCanvas mode="city" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("地図上をクリックして点を配置します。")).toBeInTheDocument();

@@ -19,6 +19,25 @@ export type MapTheme = {
   grid: string;
 };
 
+export type ThemeColorKey = Exclude<keyof MapTheme, "id" | "name">;
+export type ThemeOverrides = Partial<Pick<MapTheme, ThemeColorKey>>;
+export const MAP_THEME_COLOR_KEYS: readonly ThemeColorKey[] = [
+  "canvas", "land", "landInk", "coastGlow", "river", "forest", "country", "region", "boundary", "settlement", "label", "labelHalo", "grid",
+];
+
+const isHexColor = (value: unknown): value is string => typeof value === "string" && /^#[\da-f]{6}$/i.test(value);
+
+export const validateThemeOverrides = (overrides: ThemeOverrides): ThemeOverrides => {
+  if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) throw new Error("Theme overrides must be an object.");
+  const keys = Object.keys(overrides);
+  if (keys.length > MAP_THEME_COLOR_KEYS.length) throw new Error("Theme overrides contain too many color fields.");
+  for (const key of keys) {
+    if (!(MAP_THEME_COLOR_KEYS as readonly string[]).includes(key)) throw new Error(`Unknown theme override: ${key}.`);
+    if (!isHexColor((overrides as Record<string, unknown>)[key])) throw new Error(`Theme override ${key} must be a #RRGGBB value.`);
+  }
+  return { ...overrides };
+};
+
 export const MAP_THEMES: Record<MapThemeId, MapTheme> = {
   ink: { id: "ink", name: "インク地図", canvas: "#93b9ba", land: "#dfd0a8", landInk: "#443a2b", coastGlow: "rgba(245, 239, 216, 0.88)", river: "#4c8d9b", forest: "#426a45", country: "#8a654c", region: "#8e765e", boundary: "#6f4938", settlement: "#50382e", label: "#352d25", labelHalo: "rgba(239, 226, 191, 0.94)", grid: "rgba(61, 69, 66, 0.26)" },
   atlas: { id: "atlas", name: "現代アトラス", canvas: "#dcecf1", land: "#e8ebdf", landInk: "#65715f", coastGlow: "rgba(255, 255, 255, 0.9)", river: "#2e78a6", forest: "#3f7c55", country: "#315f7d", region: "#76568c", boundary: "#915f3d", settlement: "#8a3f58", label: "#26323b", labelHalo: "rgba(255, 255, 255, 0.94)", grid: "rgba(74, 87, 98, 0.24)" },
@@ -26,4 +45,7 @@ export const MAP_THEMES: Record<MapThemeId, MapTheme> = {
 };
 
 export const DEFAULT_MAP_THEME_ID: MapThemeId = "ink";
-export const mapTheme = (id: MapThemeId): MapTheme => MAP_THEMES[id];
+export const mapTheme = (id: MapThemeId, overrides: ThemeOverrides = {}): MapTheme => {
+  const valid = validateThemeOverrides(overrides);
+  return Object.freeze({ ...MAP_THEMES[id], ...valid });
+};

@@ -10,7 +10,19 @@ pub(crate) fn validate_settings(settings: &Value) -> Result<String, AppError> {
     let object = settings
         .as_object()
         .ok_or_else(|| AppError::new("invalid_input", "Project settings must be a JSON object."))?;
-    let allowed = ["themeId", "showGrid", "exportScale", "exportExtent"];
+    let allowed = [
+        "themeId",
+        "showGrid",
+        "exportScale",
+        "exportExtent",
+        "canvasWidth",
+        "canvasHeight",
+        "gridKind",
+        "gridColor",
+        "gridWidth",
+        "gridSpacing",
+        "themeOverrides",
+    ];
     if object.len() != allowed.len() || object.keys().any(|key| !allowed.contains(&key.as_str())) {
         return Err(AppError::new(
             "invalid_input",
@@ -49,6 +61,107 @@ pub(crate) fn validate_settings(settings: &Value) -> Result<String, AppError> {
                 "Project settings exportExtent is invalid.",
             ));
         }
+    }
+    for (key, label) in [
+        ("canvasWidth", "canvasWidth"),
+        ("canvasHeight", "canvasHeight"),
+    ] {
+        match object.get(key).and_then(Value::as_i64) {
+            Some(value) if (512..=8192).contains(&value) => {}
+            _ => {
+                return Err(AppError::new(
+                    "invalid_input",
+                    &format!("Project settings {label} must be an integer between 512 and 8192."),
+                ));
+            }
+        }
+    }
+    match object.get("gridKind") {
+        Some(Value::String(value)) if matches!(value.as_str(), "graticule" | "square" | "hex") => {}
+        _ => {
+            return Err(AppError::new(
+                "invalid_input",
+                "Project settings gridKind is invalid.",
+            ));
+        }
+    }
+    match object.get("gridColor") {
+        Some(Value::String(value))
+            if value.len() == 7
+                && value.as_bytes()[0] == b'#'
+                && value.as_bytes()[1..]
+                    .iter()
+                    .all(|byte| byte.is_ascii_hexdigit()) => {}
+        _ => {
+            return Err(AppError::new(
+                "invalid_input",
+                "Project settings gridColor must be a #RRGGBB color.",
+            ));
+        }
+    }
+    for (key, label, minimum, maximum) in [
+        ("gridWidth", "gridWidth", 0.25, 4.0),
+        ("gridSpacing", "gridSpacing", 2.0, 45.0),
+    ] {
+        match object.get(key).and_then(Value::as_f64) {
+            Some(value) if value.is_finite() && (minimum..=maximum).contains(&value) => {}
+            _ => {
+                return Err(AppError::new(
+                    "invalid_input",
+                    &format!("Project settings {label} is outside its allowed range."),
+                ));
+            }
+        }
+    }
+    let overrides = match object.get("themeOverrides") {
+        Some(Value::Object(value)) => value,
+        _ => {
+            return Err(AppError::new(
+                "invalid_input",
+                "Project settings themeOverrides must be an object.",
+            ));
+        }
+    };
+    const OVERRIDE_KEYS: [&str; 13] = [
+        "canvas",
+        "land",
+        "landInk",
+        "coastGlow",
+        "river",
+        "forest",
+        "country",
+        "region",
+        "boundary",
+        "settlement",
+        "label",
+        "labelHalo",
+        "grid",
+    ];
+    if overrides.len() > OVERRIDE_KEYS.len()
+        || overrides
+            .keys()
+            .any(|key| !OVERRIDE_KEYS.contains(&key.as_str()))
+    {
+        return Err(AppError::new(
+            "invalid_input",
+            "Project settings themeOverrides contain an unknown key or too many entries.",
+        ));
+    }
+    if overrides.values().any(|value| {
+        !matches!(
+            value,
+            Value::String(color)
+                if color.len() == 7
+                    && color.as_bytes()[0] == b'#'
+                    && color.as_bytes()[1..]
+                        .iter()
+                        .all(|byte| byte.is_ascii_hexdigit())
+        )
+    }) {
+        return Err(AppError::new(
+            "invalid_input",
+            "Project settings themeOverrides values must be #RRGGBB colors.",
+        ));
     }
     let canonical = serde_json::to_string(settings)
         .map_err(|_| AppError::new("invalid_input", "Project settings could not be encoded."))?;

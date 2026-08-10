@@ -1,4 +1,5 @@
-import { MAX_DRAW_COORDINATES, MIN_POLYGON_AREA, refineDrawnGeometry } from "./drawingGeometry";
+import { MAX_DRAW_COORDINATES, MAX_SMOOTHING_PASSES, MIN_POLYGON_AREA, refineDrawnGeometry, snapPositionToAngle } from "./drawingGeometry";
+import type { GeoJsonGeometry } from "../backend/types";
 
 describe("refineDrawnGeometry", () => {
   it("keeps valid point features unchanged", () => {
@@ -70,5 +71,59 @@ describe("refineDrawnGeometry", () => {
   it("rejects degenerate lines", () => {
     expect(() => refineDrawnGeometry("river", { type: "LineString", coordinates: [[1, 1], [1, 1]] }, 1)).toThrow(/distinct/);
     expect(() => refineDrawnGeometry("river", { type: "LineString", coordinates: [[1, 1]] }, 1)).toThrow(/two/);
+  });
+
+  it("allows corner-preserving smoothing and keeps the default equivalent", () => {
+    const line: GeoJsonGeometry = { type: "LineString", coordinates: [[0, 0], [1, 1], [2, 0]] };
+    const sharp = refineDrawnGeometry("river", line, 0.000_001, { smoothingPasses: 0 });
+    const defaultResult = refineDrawnGeometry("river", line, 0.000_001);
+    const explicitDefault = refineDrawnGeometry("river", line, 0.000_001, { smoothingPasses: 1 });
+    expect(sharp).toEqual(line);
+    expect(defaultResult).toEqual(explicitDefault);
+    if (defaultResult.type !== "LineString") throw new Error("Expected a line.");
+    expect(defaultResult.coordinates.length).toBeGreaterThan(line.coordinates.length);
+  });
+
+  it("preserves polygon closure and holes with zero smoothing", () => {
+    const polygon: GeoJsonGeometry = {
+      type: "Polygon",
+      coordinates: [
+        [[-2, -2], [2, -2], [2, 2], [-2, 2], [-2, -2]],
+        [[-1, -1], [-1, 1], [1, 1], [1, -1], [-1, -1]],
+      ],
+    };
+    const refined = refineDrawnGeometry("country", polygon, 0.000_001, { smoothingPasses: 0 });
+    expect(refined).toEqual(polygon);
+    if (refined.type !== "Polygon") throw new Error("Expected a polygon.");
+    expect(refined.coordinates).toHaveLength(2);
+    expect(refined.coordinates.every((ring) => ring[0] && ring[0][0] === ring.at(-1)?.[0] && ring[0][1] === ring.at(-1)?.[1])).toBe(true);
+  });
+
+  it("rejects non-integer or unbounded smoothing passes", () => {
+    expect(MAX_SMOOTHING_PASSES).toBeGreaterThan(0);
+    const line: GeoJsonGeometry = { type: "LineString", coordinates: [[0, 0], [1, 1]] };
+    expect(() => refineDrawnGeometry("river", line, 1, { smoothingPasses: -1 })).toThrow(/integer/);
+    expect(() => refineDrawnGeometry("river", line, 1, { smoothingPasses: 1.5 })).toThrow(/integer/);
+    expect(() => refineDrawnGeometry("river", line, 1, { smoothingPasses: MAX_SMOOTHING_PASSES + 1 })).toThrow(/integer/);
+  });
+
+  it("snaps an endpoint to the nearest requested angle without mutating inputs", () => {
+    const previous: [number, number] = [0, 0];
+    const next: [number, number] = [2, 0.5];
+    const original = [...next] as [number, number];
+    const snapped = snapPositionToAngle(previous, next, 45);
+    expect(snapped[0]).toBeCloseTo(Math.hypot(2, 0.5));
+    expect(snapped[1]).toBeCloseTo(0);
+    expect(next).toEqual(original);
+    expect(snapPositionToAngle([1, 1], [1, 2], 90)).toEqual([1, 2]);
+  });
+
+  it("rejects invalid, zero-length, and out-of-world angle snaps", () => {
+    expect(() => snapPositionToAngle([0, 0], [1, 1], 0)).toThrow(/Angle step/);
+    expect(() => snapPositionToAngle([0, 0], [1, 1], Number.NaN)).toThrow(/Angle step/);
+    expect(() => snapPositionToAngle([0, 0], [1, 1], 361)).toThrow(/Angle step/);
+    expect(() => snapPositionToAngle([0, 0], [0, 0], 45)).toThrow(/zero-length/);
+    expect(() => snapPositionToAngle([179, 89], [180, 90], 90)).toThrow(/bounded world/);
+    expect(() => snapPositionToAngle([Number.NaN, 0], [1, 1], 45)).toThrow(/finite/);
   });
 });

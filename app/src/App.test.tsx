@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRealmBackend, type RealmSnapshot } from "./backend";
 import App from "./App";
 
-const emptySnapshot: RealmSnapshot = { formatVersion: 6, path: "browser://test.realmmap", world: { id: "world-test", name: "テスト世界" }, features: [], assets: [], settings: { themeId: "ink", showGrid: true, exportScale: 2, exportExtent: "world" }, featureCount: 0, canUndo: false, canRedo: false };
+const emptySnapshot: RealmSnapshot = { formatVersion: 7, path: "browser://test.realmmap", world: { id: "world-test", name: "テスト世界" }, features: [], assets: [], settings: { themeId: "ink", showGrid: true, exportScale: 2, exportExtent: "world", canvasWidth: 2048, canvasHeight: 1024, gridKind: "graticule", gridColor: "#687784", gridWidth: 1, gridSpacing: 10, themeOverrides: {} }, featureCount: 0, canUndo: false, canRedo: false };
 
 describe("Realm library workflow", () => {
   it("creates and reopens a world", async () => {

@@ -1,13 +1,17 @@
+use crate::domain::settings::validate_settings;
 use crate::error::AppError;
 use rusqlite::{Connection, Error as SqlError, Transaction, params};
+use serde_json::{Number, Value};
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i32 = 6;
-pub(crate) const PREVIOUS_SCHEMA_VERSION: i32 = 5;
+pub(crate) const CURRENT_SCHEMA_VERSION: i32 = 7;
+pub(crate) const PREVIOUS_SCHEMA_VERSION: i32 = 6;
 pub(crate) const SCHEMA_VERSION_V3: i32 = 3;
 pub(crate) const SCHEMA_VERSION_V4: i32 = 4;
+pub(crate) const SCHEMA_VERSION_V5: i32 = 5;
+pub(crate) const SCHEMA_VERSION_V6: i32 = 6;
+pub(crate) const SCHEMA_VERSION_V7: i32 = 7;
 pub(crate) const SETTINGS_MAX_BYTES: usize = 32 * 1024;
-pub(crate) const DEFAULT_SETTINGS_JSON: &str =
-    r#"{"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world"}"#;
+pub(crate) const DEFAULT_SETTINGS_JSON: &str = r##"{"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":2048,"canvasHeight":1024,"gridKind":"graticule","gridColor":"#687784","gridWidth":1,"gridSpacing":10,"themeOverrides":{}}"##;
 pub(crate) const GRID_VERSION: i32 = 1;
 pub(crate) const GRID_COLUMNS: i32 = 512;
 pub(crate) const GRID_ROWS: i32 = 256;
@@ -131,6 +135,22 @@ pub(crate) fn schema_sql(transaction: &Transaction<'_>) -> Result<(), AppError> 
             settings_json TEXT NOT NULL CHECK (json_valid(settings_json)
                 AND json_type(settings_json) = 'object'
                 AND length(settings_json) <= 32768
+                AND json_type(json_extract(settings_json, '$.canvasWidth')) = 'integer'
+                AND json_extract(settings_json, '$.canvasWidth') BETWEEN 512 AND 8192
+                AND json_type(json_extract(settings_json, '$.canvasHeight')) = 'integer'
+                AND json_extract(settings_json, '$.canvasHeight') BETWEEN 512 AND 8192
+                AND json_type(json_extract(settings_json, '$.gridKind')) = 'text'
+                AND json_extract(settings_json, '$.gridKind') IN ('graticule', 'square', 'hex')
+                AND json_type(json_extract(settings_json, '$.gridColor')) = 'text'
+                AND length(json_extract(settings_json, '$.gridColor')) = 7
+                AND json_extract(settings_json, '$.gridColor') GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'
+                AND (json_type(json_extract(settings_json, '$.gridWidth')) = 'integer'
+                    OR json_type(json_extract(settings_json, '$.gridWidth')) = 'real')
+                AND CAST(json_extract(settings_json, '$.gridWidth') AS REAL) BETWEEN 0.25 AND 4
+                AND (json_type(json_extract(settings_json, '$.gridSpacing')) = 'integer'
+                    OR json_type(json_extract(settings_json, '$.gridSpacing')) = 'real')
+                AND CAST(json_extract(settings_json, '$.gridSpacing') AS REAL) BETWEEN 2 AND 45
+                AND json_type(json_extract(settings_json, '$.themeOverrides')) = 'object'
             )
         );
         CREATE TABLE IF NOT EXISTS features (
@@ -529,6 +549,21 @@ fn verify_schema_v5(connection: &Connection) -> Result<(), AppError> {
     verify_assets_schema(connection)
 }
 
+fn verify_schema_v6(connection: &Connection) -> Result<(), AppError> {
+    verify_schema_shape_current(connection)?;
+    let world_sql = normalized_object_sql(connection, "table", "world")?;
+    for invariant in [
+        "check (json_valid(settings_json)",
+        "json_type(settings_json) = 'object'",
+        "length(settings_json) <= 32768",
+    ] {
+        if !world_sql.contains(invariant) {
+            return Err(corrupt_schema());
+        }
+    }
+    verify_assets_schema(connection)
+}
+
 pub(crate) fn verify_schema(connection: &Connection) -> Result<(), AppError> {
     verify_schema_shape_current(connection)?;
     let world_sql = normalized_object_sql(connection, "table", "world")?;
@@ -536,6 +571,22 @@ pub(crate) fn verify_schema(connection: &Connection) -> Result<(), AppError> {
         "check (json_valid(settings_json)",
         "json_type(settings_json) = 'object'",
         "length(settings_json) <= 32768",
+        "json_type(json_extract(settings_json, '$.canvaswidth')) = 'integer'",
+        "json_extract(settings_json, '$.canvaswidth') between 512 and 8192",
+        "json_type(json_extract(settings_json, '$.canvasheight')) = 'integer'",
+        "json_extract(settings_json, '$.canvasheight') between 512 and 8192",
+        "json_type(json_extract(settings_json, '$.gridkind')) = 'text'",
+        "json_extract(settings_json, '$.gridkind') in ('graticule', 'square', 'hex')",
+        "json_type(json_extract(settings_json, '$.gridcolor')) = 'text'",
+        "length(json_extract(settings_json, '$.gridcolor')) = 7",
+        "json_extract(settings_json, '$.gridcolor') glob '#[0-9a-fa-f][0-9a-fa-f][0-9a-fa-f][0-9a-fa-f][0-9a-fa-f][0-9a-fa-f]'",
+        "json_type(json_extract(settings_json, '$.gridwidth')) = 'integer'",
+        "json_type(json_extract(settings_json, '$.gridwidth')) = 'real'",
+        "cast(json_extract(settings_json, '$.gridwidth') as real) between 0.25 and 4",
+        "json_type(json_extract(settings_json, '$.gridspacing')) = 'integer'",
+        "json_type(json_extract(settings_json, '$.gridspacing')) = 'real'",
+        "cast(json_extract(settings_json, '$.gridspacing') as real) between 2 and 45",
+        "json_type(json_extract(settings_json, '$.themeoverrides')) = 'object'",
     ] {
         if !world_sql.contains(invariant) {
             return Err(corrupt_schema());
@@ -589,7 +640,7 @@ fn read_schema_version(connection: &Connection) -> Result<i32, AppError> {
     Ok(user_version)
 }
 
-fn verify_world(connection: &Connection) -> Result<(), AppError> {
+fn verify_world_count(connection: &Connection) -> Result<(), AppError> {
     let world_count: i64 = connection
         .query_row("SELECT COUNT(*) FROM world", [], |row| row.get(0))
         .map_err(AppError::from)?;
@@ -602,6 +653,18 @@ fn verify_world(connection: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+fn verify_world(connection: &Connection) -> Result<(), AppError> {
+    verify_world_count(connection)?;
+    let settings: String = connection
+        .query_row("SELECT settings_json FROM world LIMIT 1", [], |row| {
+            row.get(0)
+        })
+        .map_err(AppError::from)?;
+    crate::domain::settings::parse_stored_settings(&settings)
+        .map(|_| ())
+        .map_err(|_| AppError::new("corrupt_project", "Project settings are invalid."))
+}
+
 pub(crate) fn validate_existing_schema_for_preflight(
     connection: &Connection,
 ) -> Result<i32, AppError> {
@@ -609,8 +672,9 @@ pub(crate) fn validate_existing_schema_for_preflight(
     match version {
         SCHEMA_VERSION_V3 => verify_schema_v3(connection)?,
         SCHEMA_VERSION_V4 => verify_schema_v4(connection)?,
-        PREVIOUS_SCHEMA_VERSION => verify_schema_v5(connection)?,
-        CURRENT_SCHEMA_VERSION => verify_schema(connection)?,
+        SCHEMA_VERSION_V5 => verify_schema_v5(connection)?,
+        SCHEMA_VERSION_V6 => verify_schema_v6(connection)?,
+        SCHEMA_VERSION_V7 => verify_schema(connection)?,
         _ => {
             return Err(AppError::new(
                 "unsupported_schema",
@@ -618,7 +682,11 @@ pub(crate) fn validate_existing_schema_for_preflight(
             ));
         }
     }
-    verify_world(connection)?;
+    if version == SCHEMA_VERSION_V7 {
+        verify_world(connection)?;
+    } else {
+        verify_world_count(connection)?;
+    }
     Ok(version)
 }
 
@@ -642,7 +710,7 @@ pub(crate) fn migrate_v3_to_v4(connection: &mut Connection) -> Result<(), AppErr
         ));
     }
     verify_schema_v3(connection)?;
-    verify_world(connection)?;
+    verify_world_count(connection)?;
     let transaction = connection.transaction().map_err(AppError::from)?;
     transaction
         .execute_batch(
@@ -666,7 +734,7 @@ pub(crate) fn migrate_v3_to_v4(connection: &mut Connection) -> Result<(), AppErr
         )
         .map_err(AppError::from)?;
     verify_schema_v4(&transaction)?;
-    verify_world(&transaction)?;
+    verify_world_count(&transaction)?;
     transaction.commit().map_err(AppError::from)
 }
 
@@ -678,7 +746,7 @@ pub(crate) fn migrate_v3_to_v5(connection: &mut Connection) -> Result<(), AppErr
         ));
     }
     verify_schema_v3(connection)?;
-    verify_world(connection)?;
+    verify_world_count(connection)?;
     let transaction = connection.transaction().map_err(AppError::from)?;
     transaction
         .execute_batch(
@@ -702,7 +770,7 @@ pub(crate) fn migrate_v3_to_v5(connection: &mut Connection) -> Result<(), AppErr
         )
         .map_err(AppError::from)?;
     verify_schema_v4(&transaction)?;
-    verify_world(&transaction)?;
+    verify_world_count(&transaction)?;
     transaction
         .execute_batch(
             "
@@ -722,7 +790,7 @@ pub(crate) fn migrate_v3_to_v5(connection: &mut Connection) -> Result<(), AppErr
         )
         .map_err(AppError::from)?;
     verify_schema_v5(&transaction)?;
-    verify_world(&transaction)?;
+    verify_world_count(&transaction)?;
     transaction.commit().map_err(AppError::from)
 }
 
@@ -734,7 +802,7 @@ pub(crate) fn migrate_v4_to_v5(connection: &mut Connection) -> Result<(), AppErr
         ));
     }
     verify_schema_v4(connection)?;
-    verify_world(connection)?;
+    verify_world_count(connection)?;
     let transaction = connection.transaction().map_err(AppError::from)?;
     transaction
         .execute_batch(
@@ -755,7 +823,7 @@ pub(crate) fn migrate_v4_to_v5(connection: &mut Connection) -> Result<(), AppErr
         )
         .map_err(AppError::from)?;
     verify_schema_v5(&transaction)?;
-    verify_world(&transaction)?;
+    verify_world_count(&transaction)?;
     transaction.commit().map_err(AppError::from)
 }
 
@@ -780,23 +848,139 @@ fn rebuild_world_for_v6(transaction: &Transaction<'_>) -> Result<(), AppError> {
         .map_err(AppError::from)
 }
 
-pub(crate) fn migrate_v5_to_v6(connection: &mut Connection) -> Result<(), AppError> {
-    if read_schema_version(connection)? != PREVIOUS_SCHEMA_VERSION {
+fn settings_for_v7(raw: &str) -> Result<String, AppError> {
+    let mut settings: Value = serde_json::from_str(raw)
+        .map_err(|_| AppError::new("corrupt_project", "Project settings are invalid."))?;
+    let object = settings
+        .as_object_mut()
+        .ok_or_else(|| AppError::new("corrupt_project", "Project settings are invalid."))?;
+    object
+        .entry("canvasWidth".to_owned())
+        .or_insert_with(|| Value::Number(Number::from(2048)));
+    object
+        .entry("canvasHeight".to_owned())
+        .or_insert_with(|| Value::Number(Number::from(1024)));
+    object
+        .entry("gridKind".to_owned())
+        .or_insert_with(|| Value::String("graticule".to_owned()));
+    object
+        .entry("gridColor".to_owned())
+        .or_insert_with(|| Value::String("#687784".to_owned()));
+    object
+        .entry("gridWidth".to_owned())
+        .or_insert_with(|| Value::Number(Number::from(1)));
+    object
+        .entry("gridSpacing".to_owned())
+        .or_insert_with(|| Value::Number(Number::from(10)));
+    object
+        .entry("themeOverrides".to_owned())
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    validate_settings(&settings)
+        .map_err(|_| AppError::new("corrupt_project", "Project settings are invalid."))
+}
+
+fn rebuild_world_for_v7(transaction: &Transaction<'_>) -> Result<(), AppError> {
+    let rows = {
+        let mut statement = transaction
+            .prepare("SELECT id, name, settings_json FROM world")
+            .map_err(AppError::from)?;
+        statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(AppError::from)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(AppError::from)?
+    };
+    let rows = rows
+        .into_iter()
+        .map(|(id, name, settings)| Ok((id, name, settings_for_v7(&settings)?)))
+        .collect::<Result<Vec<_>, AppError>>()?;
+    transaction
+        .execute_batch(&format!(
+            "ALTER TABLE world RENAME TO world_v6;
+             CREATE TABLE world (
+                 id TEXT PRIMARY KEY NOT NULL,
+                 name TEXT NOT NULL,
+                 settings_json TEXT NOT NULL CHECK (json_valid(settings_json)
+                     AND json_type(settings_json) = 'object'
+                     AND length(settings_json) <= {SETTINGS_MAX_BYTES}
+                     AND json_type(json_extract(settings_json, '$.canvasWidth')) = 'integer'
+                     AND json_extract(settings_json, '$.canvasWidth') BETWEEN 512 AND 8192
+                     AND json_type(json_extract(settings_json, '$.canvasHeight')) = 'integer'
+                     AND json_extract(settings_json, '$.canvasHeight') BETWEEN 512 AND 8192
+                     AND json_type(json_extract(settings_json, '$.gridKind')) = 'text'
+                     AND json_extract(settings_json, '$.gridKind') IN ('graticule', 'square', 'hex')
+                     AND json_type(json_extract(settings_json, '$.gridColor')) = 'text'
+                     AND length(json_extract(settings_json, '$.gridColor')) = 7
+                     AND json_extract(settings_json, '$.gridColor') GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'
+                     AND (json_type(json_extract(settings_json, '$.gridWidth')) = 'integer'
+                         OR json_type(json_extract(settings_json, '$.gridWidth')) = 'real')
+                     AND CAST(json_extract(settings_json, '$.gridWidth') AS REAL) BETWEEN 0.25 AND 4
+                     AND (json_type(json_extract(settings_json, '$.gridSpacing')) = 'integer'
+                         OR json_type(json_extract(settings_json, '$.gridSpacing')) = 'real')
+                     AND CAST(json_extract(settings_json, '$.gridSpacing') AS REAL) BETWEEN 2 AND 45
+                     AND json_type(json_extract(settings_json, '$.themeOverrides')) = 'object'
+                 )
+             );"
+        ))
+        .map_err(AppError::from)?;
+    for (id, name, settings) in rows {
+        transaction
+            .execute(
+                "INSERT INTO world(id, name, settings_json) VALUES (?1, ?2, ?3)",
+                params![id, name, settings],
+            )
+            .map_err(AppError::from)?;
+    }
+    transaction
+        .execute_batch(
+            "DROP TABLE world_v6;
+             INSERT INTO schema_migrations(version) VALUES (7);
+             PRAGMA user_version = 7;",
+        )
+        .map_err(AppError::from)
+}
+
+pub(crate) fn migrate_v5_to_v7(connection: &mut Connection) -> Result<(), AppError> {
+    if read_schema_version(connection)? != SCHEMA_VERSION_V5 {
         return Err(AppError::new(
             "unsupported_schema",
             "This project uses a legacy Realm format that is no longer supported.",
         ));
     }
     verify_schema_v5(connection)?;
-    verify_world(connection)?;
+    verify_world_count(connection)?;
     let transaction = connection.transaction().map_err(AppError::from)?;
     rebuild_world_for_v6(&transaction)?;
+    verify_schema_v6(&transaction)?;
+    rebuild_world_for_v7(&transaction)?;
     verify_schema(&transaction)?;
     verify_world(&transaction)?;
     transaction.commit().map_err(AppError::from)
 }
 
-pub(crate) fn migrate_v4_to_v6(connection: &mut Connection) -> Result<(), AppError> {
+pub(crate) fn migrate_v6_to_v7(connection: &mut Connection) -> Result<(), AppError> {
+    if read_schema_version(connection)? != SCHEMA_VERSION_V6 {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses a legacy Realm format that is no longer supported.",
+        ));
+    }
+    verify_schema_v6(connection)?;
+    verify_world_count(connection)?;
+    let transaction = connection.transaction().map_err(AppError::from)?;
+    rebuild_world_for_v7(&transaction)?;
+    verify_schema(&transaction)?;
+    verify_world(&transaction)?;
+    transaction.commit().map_err(AppError::from)
+}
+
+pub(crate) fn migrate_v4_to_v7(connection: &mut Connection) -> Result<(), AppError> {
     if read_schema_version(connection)? != SCHEMA_VERSION_V4 {
         return Err(AppError::new(
             "unsupported_schema",
@@ -804,7 +988,7 @@ pub(crate) fn migrate_v4_to_v6(connection: &mut Connection) -> Result<(), AppErr
         ));
     }
     verify_schema_v4(connection)?;
-    verify_world(connection)?;
+    verify_world_count(connection)?;
     let transaction = connection.transaction().map_err(AppError::from)?;
     transaction
         .execute_batch(
@@ -823,14 +1007,16 @@ pub(crate) fn migrate_v4_to_v6(connection: &mut Connection) -> Result<(), AppErr
         )
         .map_err(AppError::from)?;
     verify_schema_v5(&transaction)?;
-    verify_world(&transaction)?;
+    verify_world_count(&transaction)?;
     rebuild_world_for_v6(&transaction)?;
+    verify_schema_v6(&transaction)?;
+    rebuild_world_for_v7(&transaction)?;
     verify_schema(&transaction)?;
     verify_world(&transaction)?;
     transaction.commit().map_err(AppError::from)
 }
 
-pub(crate) fn migrate_v3_to_v6(connection: &mut Connection) -> Result<(), AppError> {
+pub(crate) fn migrate_v3_to_v7(connection: &mut Connection) -> Result<(), AppError> {
     if read_schema_version(connection)? != SCHEMA_VERSION_V3 {
         return Err(AppError::new(
             "unsupported_schema",
@@ -838,7 +1024,7 @@ pub(crate) fn migrate_v3_to_v6(connection: &mut Connection) -> Result<(), AppErr
         ));
     }
     verify_schema_v3(connection)?;
-    verify_world(connection)?;
+    verify_world_count(connection)?;
     let transaction = connection.transaction().map_err(AppError::from)?;
     transaction
         .execute_batch(
@@ -860,7 +1046,7 @@ pub(crate) fn migrate_v3_to_v6(connection: &mut Connection) -> Result<(), AppErr
         )
         .map_err(AppError::from)?;
     verify_schema_v4(&transaction)?;
-    verify_world(&transaction)?;
+    verify_world_count(&transaction)?;
     transaction
         .execute_batch(
             "CREATE TABLE assets (
@@ -878,8 +1064,10 @@ pub(crate) fn migrate_v3_to_v6(connection: &mut Connection) -> Result<(), AppErr
         )
         .map_err(AppError::from)?;
     verify_schema_v5(&transaction)?;
-    verify_world(&transaction)?;
+    verify_world_count(&transaction)?;
     rebuild_world_for_v6(&transaction)?;
+    verify_schema_v6(&transaction)?;
+    rebuild_world_for_v7(&transaction)?;
     verify_schema(&transaction)?;
     verify_world(&transaction)?;
     transaction.commit().map_err(AppError::from)

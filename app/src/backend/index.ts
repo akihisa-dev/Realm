@@ -10,9 +10,12 @@ export type {
   CellViewportInput,
   CreateFeatureInput,
   CreateFeaturesBatchInput,
+  DeleteFeaturesBatchInput,
+  DeleteAssetsBatchInput,
   FeatureType,
   GeoJsonGeometry,
   ImportAssetInput,
+  ImportAssetsBatchInput,
   Position,
   ProjectSettings,
   RealmBackend,
@@ -20,7 +23,9 @@ export type {
   RealmSnapshot,
   ProjectSummary,
   ReviseFeatureInput,
+  ReviseFeaturesBatchInput,
   SaveProjectInput,
+  SetFeaturesLockedInput,
   World,
 } from "./types";
 export { MemoryRealmBackend } from "./memoryRealmBackend";

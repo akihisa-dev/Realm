@@ -1,6 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createRealmMapRenderer,
+  type DrawingOptions,
+  type GridOptions,
   type RealmMapRenderer,
   type RealmMapRendererFactory,
   type RealmMapMode,
@@ -11,7 +13,8 @@ import { Minus } from "@phosphor-icons/react/dist/csr/Minus";
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
 import type { CellAttributeSnapshot, FeatureType, GeoJsonGeometry, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
-import { DEFAULT_MAP_THEME_ID, type MapThemeId } from "../map/themes";
+import type { ExportCanvasSize } from "../map/contracts";
+import { DEFAULT_MAP_THEME_ID, type MapThemeId, type ThemeOverrides } from "../map/themes";
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;
@@ -19,21 +22,28 @@ type MapCanvasProps = {
   features?: RealmFeature[];
   mode?: RealmMapMode;
   selectedFeatureId?: string | null;
+  selectedFeatureIds?: readonly string[];
   selectedCellIds?: readonly string[];
   cellAttributes?: readonly CellAttributeSnapshot[];
   cellBrushRadius?: number;
+  drawingOptions?: DrawingOptions;
+  gridOptions?: GridOptions;
+  themeOverrides?: ThemeOverrides;
   themeId?: MapThemeId;
   showGrid?: boolean;
   assetUrls?: Readonly<Record<string, string>>;
   layerVisibility?: Partial<Record<FeatureType, boolean>>;
   onDraw?: (geometry: GeoJsonGeometry) => void;
   onSelect?: (featureId: string | null) => void;
+  onSelectFeatures?: (featureIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
   onModify?: (featureId: string, geometry: GeoJsonGeometry) => void;
+  onModifyFeatures?: (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void;
   onErase?: (featureId: string) => void;
+  onEraseFeatures?: (featureIds: readonly string[]) => void;
   onError?: (message: string) => void;
   createRenderer?: RealmMapRendererFactory;
-  onExporterReady?: (exporter: ((mimeType: "image/png" | "image/jpeg", scale?: number, extent?: "viewport" | "world") => Promise<MapRaster>) | null) => void;
+  onExporterReady?: (exporter: ((mimeType: "image/png" | "image/jpeg", scale?: number, extent?: "viewport" | "world", size?: ExportCanvasSize) => Promise<MapRaster>) | null) => void;
 };
 
 export function MapCanvas({
@@ -42,41 +52,56 @@ export function MapCanvas({
   features = [],
   mode = "pan",
   selectedFeatureId = null,
+  selectedFeatureIds,
   selectedCellIds = [],
   cellAttributes = [],
   cellBrushRadius = 2,
+  drawingOptions = { gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null },
+  gridOptions = { kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 },
+  themeOverrides = {},
   themeId = DEFAULT_MAP_THEME_ID,
   showGrid = true,
   assetUrls = {},
   layerVisibility = {},
   onDraw,
   onSelect,
+  onSelectFeatures,
   onCellSelect,
   onModify,
+  onModifyFeatures,
   onErase,
+  onEraseFeatures,
   onError,
   createRenderer = createRealmMapRenderer,
   onExporterReady,
 }: MapCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const [brushPreview, setBrushPreview] = useState<{ x: number; y: number; diameter: number; opacity: number } | null>(null);
   const adapterRef = useRef<RealmMapRenderer | null>(null);
   const onZoomChangeRef = useRef(onZoomChange);
   const onDrawRef = useRef(onDraw);
   const onSelectRef = useRef(onSelect);
+  const onSelectFeaturesRef = useRef(onSelectFeatures);
   const onCellSelectRef = useRef(onCellSelect);
   const onModifyRef = useRef(onModify);
+  const onModifyFeaturesRef = useRef(onModifyFeatures);
   const onEraseRef = useRef(onErase);
+  const onEraseFeaturesRef = useRef(onEraseFeatures);
   const onErrorRef = useRef(onError);
   const onExporterReadyRef = useRef(onExporterReady);
   const mapHelp = mode === "pan"
-    ? "ドラッグまたは矢印キーで移動し、ホイールまたはプラス・マイナスキーで拡大縮小できます。"
+    ? "クリックで地物を選択し、Shiftクリックで追加・解除できます。ShiftまたはCommandを押しながら地図上を囲むと複数選択します。何もない場所のドラッグまたは矢印キーで移動し、ホイールで拡大縮小できます。"
     : mode === "erase"
       ? "消したい地物をクリックします。削除した地物は元に戻す操作で復元できます。"
     : mode === "cell-select"
       ? "地図上で押したまま筆のように塗り、通過したセルへ属性を付けます。クリックでも円形に塗れます。Escapeで選択を解除できます。"
+      : mode === "polygon-hole"
+        ? "選択した領域の内側を描いて穴を追加します。右クリックまたはダブルクリックで確定し、Escapeで取り消せます。"
       : mode === "city" || mode === "town" || mode === "mountain" || mode === "tree" || mode === "symbol" || mode === "label" || mode === "scale"
       ? "地図上をクリックして点を配置します。"
-      : "地図上で押したまま線または領域を描きます。続けて複数の地物を描けます。Escapeで描画中の線を取り消せます。";
+      : drawingOptions.gesture === "vertices"
+        ? "地図上を順にクリックして線または領域を描きます。右クリックまたはダブルクリックで確定し、Escapeで取り消せます。"
+        : "地図上で押したまま線または領域を描きます。続けて複数の地物を描けます。Escapeで描画中の線を取り消せます。";
 
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;
@@ -84,9 +109,12 @@ export function MapCanvas({
 
   useEffect(() => { onDrawRef.current = onDraw; }, [onDraw]);
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
+  useEffect(() => { onSelectFeaturesRef.current = onSelectFeatures; }, [onSelectFeatures]);
   useEffect(() => { onCellSelectRef.current = onCellSelect; }, [onCellSelect]);
   useEffect(() => { onModifyRef.current = onModify; }, [onModify]);
+  useEffect(() => { onModifyFeaturesRef.current = onModifyFeatures; }, [onModifyFeatures]);
   useEffect(() => { onEraseRef.current = onErase; }, [onErase]);
+  useEffect(() => { onEraseFeaturesRef.current = onEraseFeatures; }, [onEraseFeatures]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
   useEffect(() => { onExporterReadyRef.current = onExporterReady; }, [onExporterReady]);
 
@@ -97,7 +125,9 @@ export function MapCanvas({
 
   useEffect(() => { adapterRef.current?.setFeatures(features); }, [features]);
   useEffect(() => { adapterRef.current?.setTheme(themeId); }, [themeId]);
+  useEffect(() => { adapterRef.current?.setThemeOverrides(themeOverrides); }, [themeOverrides]);
   useEffect(() => { adapterRef.current?.setGridVisible(showGrid); }, [showGrid]);
+  useEffect(() => { adapterRef.current?.setGridOptions(gridOptions); }, [gridOptions]);
   useEffect(() => { adapterRef.current?.setAssets(assetUrls); }, [assetUrls]);
   useEffect(() => {
     for (const [featureType, visible] of Object.entries(layerVisibility)) {
@@ -105,32 +135,48 @@ export function MapCanvas({
     }
   }, [layerVisibility]);
   useEffect(() => { adapterRef.current?.setMode(mode); }, [mode]);
-  useEffect(() => { adapterRef.current?.setSelected(selectedFeatureId); }, [selectedFeatureId]);
+  useEffect(() => { adapterRef.current?.setDrawingOptions(drawingOptions); }, [drawingOptions]);
+  useEffect(() => {
+    adapterRef.current?.setSelectedFeatures(selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []));
+  }, [selectedFeatureId, selectedFeatureIds]);
   useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [selectedCellIds]);
   useEffect(() => { adapterRef.current?.setCellAttributes(cellAttributes); }, [cellAttributes]);
   useEffect(() => { adapterRef.current?.setCellBrushRadius(cellBrushRadius); }, [cellBrushRadius]);
+  useEffect(() => { if (mode !== "cell-select") setBrushPreview(null); }, [mode]);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return undefined;
     const adapter = createRenderer({ target: host });
     adapterRef.current = adapter;
-    onExporterReadyRef.current?.((mimeType, scale, extent) => adapter.exportRaster(mimeType, scale, extent));
+    onExporterReadyRef.current?.((mimeType, scale, extent, size) => adapter.exportRaster(mimeType, scale, extent, size));
     if (zoom !== undefined && Math.abs(adapter.getZoom() - zoom) > 0.01) adapter.setZoom(zoom);
     const stopZoomListener = adapter.onZoomChange((nextZoom) => onZoomChangeRef.current(nextZoom));
     const stopDrawListener = adapter.onDraw((geometry) => onDrawRef.current?.(geometry));
-    const stopSelectListener = adapter.onSelect((featureId) => onSelectRef.current?.(featureId));
+    const stopSelectListener = adapter.onSelectFeatures((featureIds) => {
+      onSelectFeaturesRef.current?.(featureIds);
+      onSelectRef.current?.(featureIds[0] ?? null);
+    });
     const stopCellSelectListener = adapter.onCellSelect((cellIds) => onCellSelectRef.current?.(cellIds));
-    const stopModifyListener = adapter.onModify((featureId, geometry) => onModifyRef.current?.(featureId, geometry));
-    const stopEraseListener = adapter.onErase((featureId) => onEraseRef.current?.(featureId));
+    const stopModifyListener = adapter.onModifyFeatures((changes) => {
+      onModifyFeaturesRef.current?.(changes);
+      if (!onModifyFeaturesRef.current) for (const { id, geometry } of changes) onModifyRef.current?.(id, geometry);
+    });
+    const stopEraseListener = adapter.onEraseFeatures((featureIds) => {
+      onEraseFeaturesRef.current?.(featureIds);
+      if (!onEraseFeaturesRef.current) for (const id of featureIds) onEraseRef.current?.(id);
+    });
     const stopErrorListener = adapter.onError((message) => onErrorRef.current?.(message));
     adapter.setFeatures(features);
     adapter.setTheme(themeId);
+    adapter.setThemeOverrides(themeOverrides);
     adapter.setGridVisible(showGrid);
+    adapter.setGridOptions(gridOptions);
     adapter.setAssets(assetUrls);
     for (const [featureType, visible] of Object.entries(layerVisibility)) adapter.setLayerVisibility(featureType as FeatureType, visible !== false);
     adapter.setMode(mode);
-    adapter.setSelected(selectedFeatureId);
+    adapter.setDrawingOptions(drawingOptions);
+    adapter.setSelectedFeatures(selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []));
     adapter.setSelectedCells(selectedCellIds);
     adapter.setCellAttributes(cellAttributes);
     adapter.setCellBrushRadius(cellBrushRadius);
@@ -157,7 +203,16 @@ export function MapCanvas({
   return (
     <>
       <p id="map-help" className="sr-only">{mapHelp}</p>
-      <div ref={hostRef} className={mode === "pan" ? "map-canvas" : "map-canvas map-canvas-draw"} role="region" tabIndex={0} aria-label="世界地図" aria-describedby="map-help" />
+      <div ref={hostRef} className={mode === "pan" ? "map-canvas" : "map-canvas map-canvas-draw"} role="region" tabIndex={0} aria-label="世界地図" aria-describedby="map-help" onPointerMove={(event) => {
+        if (mode !== "cell-select") return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        const pressure = event.pointerType === "pen" && event.pressure > 0 ? event.pressure : 1;
+        const worldScale = Math.pow(2, (zoom ?? 1) - 1);
+        const diameter = Math.max(10, cellBrushRadius * 2 * Math.max(1, bounds.width) / 512 * worldScale * pressure);
+        setBrushPreview({ x: event.clientX - bounds.left, y: event.clientY - bounds.top, diameter, opacity: 0.35 + pressure * 0.35 });
+      }} onPointerLeave={() => setBrushPreview(null)} />
+      <span className={`map-texture map-texture-${themeId}`} aria-hidden="true" />
+      {brushPreview ? <span className="brush-preview" aria-hidden="true" style={{ left: brushPreview.x, top: brushPreview.y, width: brushPreview.diameter, height: brushPreview.diameter, opacity: brushPreview.opacity }} /> : null}
       <div className="map-tools" role="group" aria-label="現在の地図操作">
         <button
           className={mode === "pan" ? "map-tool map-tool-active" : "map-tool"}

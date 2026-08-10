@@ -6,6 +6,9 @@ export const MAX_DRAW_COORDINATES = 4096;
 /** Minimum non-zero area (square degrees) accepted for a polygon ring. */
 export const MIN_POLYGON_AREA = 1e-8;
 
+/** Bounds the amount of resampling work a pointer stroke may request. */
+export const MAX_SMOOTHING_PASSES = 4;
+
 const WORLD_MIN_X = -180;
 const WORLD_MAX_X = 180;
 const WORLD_MIN_Y = -90;
@@ -174,16 +177,18 @@ const assertRing = (ring: readonly Position[]): void => {
   }
 };
 
-const refineLine = (positions: readonly Position[], resolution: number): Position[] => {
+const refineLine = (positions: readonly Position[], resolution: number, smoothingPasses: number): Position[] => {
   if (positions.length < 2) throw new Error("LineString geometry must contain at least two points.");
   const simplified = simplifyRamerDouglasPeucker(positions, toleranceForResolution(resolution));
   if (simplified.length < 2 || samePosition(simplified[0]!, simplified[simplified.length - 1]!)) {
     throw new Error("LineString geometry must contain two distinct points.");
   }
-  return capCoordinates(smoothOpenLine(simplified), false);
+  let refined = simplified;
+  for (let pass = 0; pass < smoothingPasses; pass += 1) refined = smoothOpenLine(refined);
+  return capCoordinates(refined, false);
 };
 
-const refineRing = (ring: readonly Position[], resolution: number): Position[] => {
+const refineRing = (ring: readonly Position[], resolution: number, smoothingPasses: number): Position[] => {
   if (ring.length < 3) throw new Error("Polygon rings must contain at least three points.");
   const closed = ring.length > 1 && samePosition(ring[0]!, ring[ring.length - 1]!)
     ? ring.map(([x, y]) => [x, y] as Position)
@@ -191,8 +196,9 @@ const refineRing = (ring: readonly Position[], resolution: number): Position[] =
   assertRing(closed);
   const open = simplifyRamerDouglasPeucker(closed, toleranceForResolution(resolution)).slice(0, -1);
   if (open.length < 3) throw new Error("Polygon rings must contain at least three distinct points.");
-  const smoothed = smoothClosedRing([...open, open[0]!]);
-  const capped = capCoordinates(smoothed, true);
+  let refined = [...open, open[0]!] as Position[];
+  for (let pass = 0; pass < smoothingPasses; pass += 1) refined = smoothClosedRing(refined);
+  const capped = capCoordinates(refined, true);
   assertRing(capped);
   return capped;
 };
@@ -203,32 +209,57 @@ const assertGeometryObject = (geometry: GeoJsonGeometry): void => {
   }
 };
 
+export type DrawingRefinementOptions = { smoothingPasses?: number };
+
+const defaultSmoothingPasses = (featureType: FeatureType): number =>
+  featureType === "terrain" || featureType === "forest" || featureType === "lake" ? 2 : 1;
+
+const resolveSmoothingPasses = (featureType: FeatureType, options?: DrawingRefinementOptions): number => {
+  const smoothingPasses = options?.smoothingPasses ?? defaultSmoothingPasses(featureType);
+  if (!Number.isInteger(smoothingPasses) || smoothingPasses < 0 || smoothingPasses > MAX_SMOOTHING_PASSES) {
+    throw new Error(`Smoothing passes must be an integer between 0 and ${MAX_SMOOTHING_PASSES}.`);
+  }
+  return smoothingPasses;
+};
+
 /** Refines raw pointer geometry while preserving feature semantics and world bounds. */
 export const refineDrawnGeometry = (
   featureType: FeatureType,
   geometry: GeoJsonGeometry,
   resolution: number,
+  options?: DrawingRefinementOptions,
 ): GeoJsonGeometry => {
   assertGeometryObject(geometry);
+  const smoothingPasses = resolveSmoothingPasses(featureType, options);
   if (geometry.type === "Point") {
     assertPosition(geometry.coordinates);
     return geometry;
   }
   if (geometry.type === "LineString") {
     const positions = assertPositions(geometry.coordinates);
-    return { type: "LineString", coordinates: refineLine(positions, resolution) };
+    return { type: "LineString", coordinates: refineLine(positions, resolution, smoothingPasses) };
   }
   if (geometry.type !== "Polygon") throw new Error("Unsupported GeoJSON geometry type.");
   const rings = geometry.coordinates;
   if (!Array.isArray(rings) || rings.length === 0) throw new Error("A polygon must contain at least one ring.");
-  const smoothingPasses = featureType === "terrain" || featureType === "forest" || featureType === "lake" ? 2 : 1;
-  let coordinates = rings.map((rawRing) => refineRing(assertPositions(rawRing), resolution));
-  for (let pass = 1; pass < smoothingPasses; pass += 1) {
-    coordinates = coordinates.map((ring) => {
-      const refined = capCoordinates(smoothClosedRing(ring), true);
-      assertRing(refined);
-      return refined;
-    });
-  }
+  const coordinates = rings.map((rawRing) => refineRing(assertPositions(rawRing), resolution, smoothingPasses));
   return { type: "Polygon", coordinates };
+};
+
+/** Snaps an endpoint to the nearest multiple of an angle step from the previous point. */
+export const snapPositionToAngle = (previous: Position, next: Position, stepDegrees: number): Position => {
+  const start = assertPosition(previous);
+  const end = assertPosition(next);
+  if (!Number.isFinite(stepDegrees) || stepDegrees <= 0 || stepDegrees > 360) {
+    throw new Error("Angle step must be finite and greater than 0 and at most 360 degrees.");
+  }
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  if (length === 0) throw new Error("Cannot snap a zero-length segment.");
+  const stepRadians = stepDegrees * Math.PI / 180;
+  const snappedAngle = Math.round(Math.atan2(dy, dx) / stepRadians) * stepRadians;
+  const snapped: Position = [start[0] + Math.cos(snappedAngle) * length, start[1] + Math.sin(snappedAngle) * length];
+  assertPosition(snapped);
+  return snapped;
 };

@@ -1,6 +1,8 @@
 use crate::contract::{CellLayer, FeatureType};
 use crate::error::AppError;
-use crate::state::{AssetState, CellState, EditOperation, FeatureEdit, FeatureState, OpenProject};
+use crate::state::{
+    AssetEdit, AssetState, CellState, EditOperation, FeatureEdit, FeatureState, OpenProject,
+};
 use crate::storage::schema::GRID_VERSION;
 use rusqlite::{Connection, Error as SqlError, Transaction, params};
 
@@ -220,20 +222,19 @@ pub(crate) fn apply_edit_operation(
             before,
             after,
         } => {
-            let state = if forward { after } else { before };
-            match state {
-                Some(state) => upsert_asset_state(&transaction, asset_id, state)?,
-                None => {
-                    if asset_is_referenced(&transaction, asset_id)? {
-                        return Err(AppError::new(
-                            "asset_in_use",
-                            "The asset is still referenced by a feature.",
-                        ));
-                    }
-                    transaction
-                        .execute("DELETE FROM assets WHERE id = ?1", [asset_id])
-                        .map_err(AppError::from)?;
-                }
+            apply_asset_change(
+                &transaction,
+                &AssetEdit {
+                    asset_id: asset_id.clone(),
+                    before: before.clone(),
+                    after: after.clone(),
+                },
+                forward,
+            )?;
+        }
+        EditOperation::AssetBatch { changes } => {
+            for change in changes {
+                apply_asset_change(&transaction, change, forward)?;
             }
         }
         EditOperation::CellAttributes { changes } => {
@@ -258,6 +259,33 @@ pub(crate) fn apply_edit_operation(
         }
     }
     transaction.commit().map_err(AppError::from)
+}
+
+fn apply_asset_change(
+    transaction: &Transaction<'_>,
+    change: &AssetEdit,
+    forward: bool,
+) -> Result<(), AppError> {
+    let state = if forward {
+        &change.after
+    } else {
+        &change.before
+    };
+    match state {
+        Some(state) => upsert_asset_state(transaction, &change.asset_id, state),
+        None => {
+            if asset_is_referenced(transaction, &change.asset_id)? {
+                return Err(AppError::new(
+                    "asset_in_use",
+                    "The asset is still referenced by a feature.",
+                ));
+            }
+            transaction
+                .execute("DELETE FROM assets WHERE id = ?1", [&change.asset_id])
+                .map_err(AppError::from)?;
+            Ok(())
+        }
+    }
 }
 
 fn apply_feature_change(
