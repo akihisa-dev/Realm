@@ -7,8 +7,6 @@ export type {
   CellAttributeSnapshot,
   CellViewportInput,
   CreateFeatureInput,
-  Era,
-  EraInput,
   FeatureType,
   GeoJsonGeometry,
   RealmBackend,
@@ -17,8 +15,6 @@ export type {
   ProjectSummary,
   ReviseFeatureInput,
   SaveProjectInput,
-  TimelineEvent,
-  TimelineEventInput,
   World,
 } from "./types";
 export { MemoryRealmBackend } from "./memoryRealmBackend";

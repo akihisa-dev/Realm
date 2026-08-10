@@ -1,108 +1,26 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   errorMessage,
   type CellAttribute,
   type CellAttributeSnapshot,
-  type EraInput,
-  type FeatureType,
   type GeoJsonGeometry,
   type RealmBackend,
   type RealmFeature,
   type RealmSnapshot,
-  type TimelineEventInput,
 } from "../backend";
 import { MapCanvas, MapZoomControls } from "./MapCanvas";
-import { CaretLeft } from "@phosphor-icons/react/dist/csr/CaretLeft";
-import { CaretRight } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { FolderOpen } from "@phosphor-icons/react/dist/csr/FolderOpen";
 import { GlobeHemisphereWest } from "@phosphor-icons/react/dist/csr/GlobeHemisphereWest";
 import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
-import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
-import { SkipBack } from "@phosphor-icons/react/dist/csr/SkipBack";
 import { X } from "@phosphor-icons/react/dist/csr/X";
 import { pdfFromJpeg, type MapRaster } from "../exportArtifacts";
 
-type EditableEra = Omit<EraInput, "startYear" | "endYear"> & {
-  editorKey: string;
-  startYear: string;
-  endYear: string;
-};
-
-type EditableTimelineEvent = Omit<TimelineEventInput, "startYear" | "endYear"> & {
-  editorKey: string;
-  startYear: string;
-  endYear: string;
-};
-
-const FEATURE_TYPES: readonly { type: FeatureType; label: string }[] = [
-  { type: "terrain", label: "地形" },
-  { type: "forest", label: "森林" },
-  { type: "river", label: "河川" },
-  { type: "coastline", label: "海岸線" },
-  { type: "country", label: "国" },
-  { type: "region", label: "地域" },
-  { type: "boundary", label: "境界" },
-  { type: "city", label: "都市" },
-  { type: "town", label: "町" },
-];
-
-const MIN_YEAR = -2_147_483_648;
-const MAX_YEAR = 2_147_483_647;
-const TIMELINE_SPAN = 5_000;
-const TIMELINE_STEP = 1_000;
-const INTEGER_YEAR = /^-?\d+$/;
+const FEATURE_TYPES = [
+  ["terrain", "地形"], ["forest", "森林"], ["river", "河川"], ["coastline", "海岸線"],
+  ["country", "国"], ["region", "地域"], ["boundary", "境界"], ["city", "都市"], ["town", "町"],
+] as const;
 const CellAttributeSelect = "select";
-
-const parseYear = (value: string): number | null => {
-  const trimmed = value.trim();
-  if (!INTEGER_YEAR.test(trimmed)) return null;
-  const parsed = Number(trimmed);
-  return Number.isSafeInteger(parsed) && parsed >= MIN_YEAR && parsed <= MAX_YEAR ? parsed : null;
-};
-
-const timelineWindowStart = (year: number): number => {
-  if (year >= 0 && year <= TIMELINE_SPAN) return 0;
-  const centered = year - Math.floor(TIMELINE_SPAN / 2);
-  return Math.min(MAX_YEAR - TIMELINE_SPAN, Math.max(MIN_YEAR, centered));
-};
-
-const normalizeEditableEras = (eras: EditableEra[]): { eras: EraInput[]; error: string | null } => {
-  const normalized: EraInput[] = [];
-  for (const era of eras) {
-    const name = era.name.trim();
-    if (!name) return { eras: [], error: "時代の名前を入力してください。" };
-    if (name.length > 200) return { eras: [], error: "時代の名前は200文字以内にしてください。" };
-    const startYear = parseYear(era.startYear);
-    if (startYear === null) return { eras: [], error: "時代の開始年を整数で入力してください。" };
-    const endYear = era.endYear.trim() === "" ? null : parseYear(era.endYear);
-    if (era.endYear.trim() !== "" && endYear === null) {
-      return { eras: [], error: "時代の終了年を整数で入力してください。" };
-    }
-    if (endYear !== null && endYear < startYear) {
-      return { eras: [], error: "時代の終了年は開始年以降にしてください。" };
-    }
-    normalized.push({ id: era.id, name, startYear, endYear });
-  }
-  return { eras: normalized, error: null };
-};
-
-const normalizeEditableEvents = (events: EditableTimelineEvent[]): { events: TimelineEventInput[]; error: string | null } => {
-  const normalized: TimelineEventInput[] = [];
-  for (const event of events) {
-    const title = event.title.trim();
-    if (!title) return { events: [], error: "出来事のタイトルを入力してください。" };
-    if (title.length > 200) return { events: [], error: "出来事のタイトルは200文字以内にしてください。" };
-    if (event.description.length > 10_000) return { events: [], error: "出来事の説明が長すぎます。" };
-    const startYear = parseYear(event.startYear);
-    if (startYear === null) return { events: [], error: "出来事の開始年を整数で入力してください。" };
-    const endYear = event.endYear.trim() === "" ? null : parseYear(event.endYear);
-    if (event.endYear.trim() !== "" && endYear === null) return { events: [], error: "出来事の終了年を整数で入力してください。" };
-    if (endYear !== null && endYear < startYear) return { events: [], error: "出来事の終了年は開始年以降にしてください。" };
-    normalized.push({ id: event.id, title, description: event.description.trim(), startYear, endYear });
-  }
-  return { events: normalized, error: null };
-};
-
+type Tool = "pan" | "cell-select" | typeof FEATURE_TYPES[number][0];
 type EditorShellProps = {
   snapshot: RealmSnapshot;
   backend: RealmBackend;
@@ -113,565 +31,155 @@ type EditorShellProps = {
   onExportArtifact: (format: "png" | "pdf", bytes: number[]) => Promise<void>;
 };
 
-const editableEras = (snapshot: RealmSnapshot): EditableEra[] =>
-  snapshot.eras.map((era) => ({
-    id: era.id,
-    name: era.name,
-    startYear: String(era.startYear),
-    endYear: era.endYear === null ? "" : String(era.endYear),
-    editorKey: era.id,
-  }));
-
-const editableEvents = (snapshot: RealmSnapshot): EditableTimelineEvent[] =>
-  snapshot.timelineEvents.map((event) => ({
-    id: event.id,
-    title: event.title,
-    description: event.description,
-    startYear: String(event.startYear),
-    endYear: event.endYear === null ? "" : String(event.endYear),
-    editorKey: event.id,
-  }));
-
-export function EditorShell({ snapshot, backend, busy, onClose, onSaved, onExportTransfer, onExportArtifact }: EditorShellProps) {
+export function EditorShell(props: EditorShellProps) {
+  const { snapshot, backend, busy, onClose, onSaved, onExportTransfer, onExportArtifact } = props;
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
   const [worldName, setWorldName] = useState(snapshot.world.name);
-  const [currentYearDraft, setCurrentYearDraft] = useState(String(snapshot.world.currentYear));
-  const [timelineStart, setTimelineStart] = useState(() => timelineWindowStart(snapshot.world.currentYear));
-  const [eras, setEras] = useState<EditableEra[]>(() => editableEras(snapshot));
-  const [selectedEraKey, setSelectedEraKey] = useState<string | null>(snapshot.eras[0]?.id ?? null);
-  const [timelineEvents, setTimelineEvents] = useState<EditableTimelineEvent[]>(() => editableEvents(snapshot));
-  const [selectedEventKey, setSelectedEventKey] = useState<string | null>(snapshot.timelineEvents[0]?.id ?? null);
+  const [activeTool, setActiveTool] = useState<Tool>("pan");
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
   const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
   const [cellAttributes, setCellAttributes] = useState<CellAttributeSnapshot[]>([]);
-  const [activeTool, setActiveTool] = useState<"pan" | "cell-select" | FeatureType>("pan");
-  const [cellAttribute, setCellAttribute] = useState<CellAttribute>("terrain_kind");
-  const [cellAttributeValue, setCellAttributeValue] = useState("land");
+  const [cellAttribute, setCellAttribute] = useState<CellAttribute>("forest");
+  const [cellAttributeValue, setCellAttributeValue] = useState("forest");
   const [cellPaintMode, setCellPaintMode] = useState<"paint" | "erase">("paint");
   const [cellBrushRadius, setCellBrushRadius] = useState(2);
   const [featureName, setFeatureName] = useState("新しい地物");
   const [zoom, setZoom] = useState(1);
   const [saving, setSaving] = useState(false);
   const [operating, setOperating] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const viewSequence = useRef(0);
-  const cellAttributeSequence = useRef(0);
+  const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const mapExporter = useRef<((mimeType: "image/png" | "image/jpeg") => Promise<MapRaster>) | null>(null);
+  const saveTimer = useRef<number | null>(null);
+  const cellRequest = useRef(0);
 
   useLayoutEffect(() => {
-    const nextEras = editableEras(snapshot);
-    const nextEvents = editableEvents(snapshot);
     setViewedSnapshot(snapshot);
     setWorldName(snapshot.world.name);
-    setCurrentYearDraft(String(snapshot.world.currentYear));
-    setTimelineStart(timelineWindowStart(snapshot.world.currentYear));
-    setEras(nextEras);
-    setTimelineEvents(nextEvents);
-    setSelectedEraKey((current) =>
-      current && nextEras.some((era) => era.editorKey === current)
-        ? current
-        : (nextEras[0]?.editorKey ?? null));
-    setSelectedEventKey((current) =>
-      current && nextEvents.some((event) => event.editorKey === current)
-        ? current
-        : (nextEvents[0]?.editorKey ?? null));
-    setSelectedFeatureId((current) => snapshot.features.some((feature) => feature.id === current) ? current : null);
+    setSelectedFeatureId(null);
+    setSelectedCellIds([]);
   }, [snapshot]);
 
-  const dirty = useMemo(() => {
-    if (worldName !== snapshot.world.name || currentYearDraft !== String(snapshot.world.currentYear)) return true;
-    if (eras.length !== snapshot.eras.length) return true;
-    const erasChanged = eras.some((era, index) => {
-      const persisted = snapshot.eras[index];
-      return !persisted
-        || era.id !== persisted.id
-        || era.name !== persisted.name
-        || era.startYear !== String(persisted.startYear)
-        || era.endYear !== (persisted.endYear === null ? "" : String(persisted.endYear));
-    });
-    if (erasChanged || timelineEvents.length !== snapshot.timelineEvents.length) return true;
-    return timelineEvents.some((event, index) => {
-      const persisted = snapshot.timelineEvents[index];
-      return !persisted
-        || event.id !== persisted.id
-        || event.title !== persisted.title
-        || event.description !== persisted.description
-        || event.startYear !== String(persisted.startYear)
-        || event.endYear !== (persisted.endYear === null ? "" : String(persisted.endYear));
-    });
-  }, [currentYearDraft, eras, snapshot, timelineEvents, worldName]);
+  const refreshCells = useCallback(async () => {
+    const request = ++cellRequest.current;
+    try {
+      const next = await backend.viewCellAttributes({});
+      if (cellRequest.current === request) setCellAttributes(next);
+    } catch (cause) {
+      if (cellRequest.current === request) setError(errorMessage(cause, "セル属性を読み込めませんでした。"));
+    }
+  }, [backend]);
 
-  const normalizedEraResult = useMemo(() => normalizeEditableEras(eras), [eras]);
-  const normalizedEventResult = useMemo(() => normalizeEditableEvents(timelineEvents), [timelineEvents]);
-  const parsedCurrentYear = parseYear(currentYearDraft);
-  const validationError = useMemo(() => {
-    if (!worldName.trim()) return "世界の名前を入力してください。";
-    if (worldName.trim().length > 200) return "世界の名前は200文字以内にしてください。";
-    if (parsedCurrentYear === null) return "表示年を32ビット整数で入力してください。";
-    return normalizedEraResult.error ?? normalizedEventResult.error;
-  }, [normalizedEraResult.error, normalizedEventResult.error, parsedCurrentYear, worldName]);
+  useEffect(() => { void refreshCells(); }, [refreshCells, viewedSnapshot.path, viewedSnapshot.world.id, viewedSnapshot.features]);
+
   const locked = busy || saving || operating;
-  const viewYear = parsedCurrentYear ?? snapshot.world.currentYear;
-  const timelineEnd = timelineStart + TIMELINE_SPAN;
-  const timelineTicks = Array.from(
-    { length: (TIMELINE_SPAN / TIMELINE_STEP) + 1 },
-    (_, index) => timelineStart + (index * TIMELINE_STEP),
-  );
-
-  const selectedEra = eras.find((era) => era.editorKey === selectedEraKey) ?? null;
-  const selectedEvent = timelineEvents.find((event) => event.editorKey === selectedEventKey) ?? null;
   const selectedFeature = viewedSnapshot.features.find((feature) => feature.id === selectedFeatureId) ?? null;
-  const currentEra = normalizedEraResult.eras.find((era) =>
-    era.startYear <= viewYear && (era.endYear === null || viewYear <= era.endYear));
-
-  useEffect(() => {
-    if (parsedCurrentYear === null) return undefined;
-    const operation = ++viewSequence.current;
-    let active = true;
-    void backend.viewProjectYear(parsedCurrentYear)
-      .then((next) => {
-        if (active && viewSequence.current === operation) {
-          setViewedSnapshot(next);
-          setSelectedFeatureId((current) => next.features.some((feature) => feature.id === current) ? current : null);
-        }
-      })
-      .catch((cause: unknown) => {
-        if (active && viewSequence.current === operation) setSaveError(errorMessage(cause, "この年の地図を読み込めませんでした。"));
-      });
-    return () => { active = false; };
-  }, [backend, parsedCurrentYear]);
-
-  useEffect(() => {
-    if (parsedCurrentYear === null) return undefined;
-    const operation = ++cellAttributeSequence.current;
-    let active = true;
-    setCellAttributes([]);
-    void backend.viewCellAttributes({ year: parsedCurrentYear })
-      .then((next) => {
-        if (active && cellAttributeSequence.current === operation) setCellAttributes(next);
-      })
-      .catch((cause: unknown) => {
-        if (active && cellAttributeSequence.current === operation) setSaveError(errorMessage(cause, "セル属性を読み込めませんでした。"));
-      });
-    return () => { active = false; };
-  }, [backend, parsedCurrentYear, viewedSnapshot]);
-
-  const setViewYear = (year: number) => {
-    const nextYear = Math.min(MAX_YEAR, Math.max(MIN_YEAR, year));
-    setCurrentYearDraft(String(nextYear));
-    setTimelineStart((currentStart) =>
-      nextYear < currentStart || nextYear > currentStart + TIMELINE_SPAN
-        ? timelineWindowStart(nextYear)
-        : currentStart);
+  const dirty = worldName !== viewedSnapshot.world.name;
+  const validateName = (value: string): string | null => {
+    if (!value.trim()) return "世界の名前を入力してください。";
+    if (value.trim().length > 200) return "世界の名前は200文字以内にしてください。";
+    return null;
   };
 
-  const setViewYearDraft = (value: string) => {
-    setCurrentYearDraft(value);
-    const year = parseYear(value);
-    if (year !== null) {
-      setTimelineStart((currentStart) =>
-        year < currentStart || year > currentStart + TIMELINE_SPAN
-          ? timelineWindowStart(year)
-          : currentStart);
-    }
-  };
-
-  const save = async (): Promise<boolean> => {
-    if (validationError || parsedCurrentYear === null) {
-      setSaveError(validationError ?? "表示年を確認してください。");
-      return false;
-    }
-    setSaving(true);
-    setSaveError(null);
+  const saveName = useCallback(async (): Promise<boolean> => {
+    const validation = validateName(worldName);
+    setNameError(validation);
+    if (validation) return false;
+    if (!dirty) return true;
+    setSaving(true); setError(null);
     try {
-      const saved = await backend.saveProject({
-        name: worldName,
-        currentYear: parsedCurrentYear,
-        eras: normalizedEraResult.eras,
-        timelineEvents: normalizedEventResult.events,
-      });
-      onSaved(saved);
-      return true;
+      const next = await backend.saveProject({ name: worldName.trim() });
+      setViewedSnapshot(next); onSaved(next); return true;
     } catch (cause) {
-      setSaveError(errorMessage(cause, "自動保存に失敗しました。"));
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  };
+      setError(errorMessage(cause, "自動保存に失敗しました。")); return false;
+    } finally { setSaving(false); }
+  }, [backend, dirty, onSaved, worldName]);
 
   useEffect(() => {
-    if (!dirty || validationError || saving || operating) return undefined;
-    const timer = window.setTimeout(() => { void save(); }, 600);
-    return () => window.clearTimeout(timer);
-  });
+    if (!dirty) { setNameError(null); return undefined; }
+    setNameError(validateName(worldName));
+    if (saveTimer.current !== null) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => { void saveName(); }, 350);
+    return () => { if (saveTimer.current !== null) window.clearTimeout(saveTimer.current); };
+  }, [dirty, saveName, worldName]);
 
-  const addEra = () => {
-    const editorKey = crypto.randomUUID();
-    setEras((current) => [...current, {
-      id: null,
-      editorKey,
-      name: "新しい時代",
-      startYear: String(viewYear),
-      endYear: "",
-    }]);
-    setSelectedEraKey(editorKey);
+  const flushSave = async (): Promise<boolean> => {
+    if (saveTimer.current !== null) { window.clearTimeout(saveTimer.current); saveTimer.current = null; }
+    return saveName();
   };
 
-  const updateSelectedEra = (update: Partial<EditableEra>) => {
-    if (!selectedEraKey) return;
-    setEras((current) => current.map((era) =>
-      era.editorKey === selectedEraKey ? { ...era, ...update } : era));
-  };
-
-  const removeSelectedEra = () => {
-    if (!selectedEraKey) return;
-    setEras((current) => current.filter((era) => era.editorKey !== selectedEraKey));
-    setSelectedEraKey(null);
-  };
-
-  const addTimelineEvent = () => {
-    const editorKey = crypto.randomUUID();
-    setTimelineEvents((current) => [...current, {
-      id: null,
-      editorKey,
-      title: "新しい出来事",
-      description: "",
-      startYear: String(viewYear),
-      endYear: "",
-    }]);
-    setSelectedEventKey(editorKey);
-  };
-
-  const updateSelectedEvent = (update: Partial<EditableTimelineEvent>) => {
-    if (!selectedEventKey) return;
-    setTimelineEvents((current) => current.map((event) =>
-      event.editorKey === selectedEventKey ? { ...event, ...update } : event));
-  };
-
-  const removeSelectedEvent = () => {
-    if (!selectedEventKey) return;
-    setTimelineEvents((current) => current.filter((event) => event.editorKey !== selectedEventKey));
-    setSelectedEventKey(null);
-  };
-
-  const commitBackendSnapshot = (next: RealmSnapshot) => {
-    viewSequence.current += 1;
-    setViewedSnapshot(next);
-    onSaved(next);
-  };
-
-  const runMutation = async (action: () => Promise<RealmSnapshot>, fallback: string) => {
-    if (dirty && !(await save())) return;
-    setOperating(true);
-    setSaveError(null);
-    try {
-      commitBackendSnapshot(await action());
-    } catch (cause) {
-      setViewedSnapshot((current) => structuredClone(current));
-      setSaveError(errorMessage(cause, fallback));
-    } finally {
-      setOperating(false);
-    }
+  const run = async (action: () => Promise<RealmSnapshot>, fallback: string) => {
+    if (!(await flushSave())) return;
+    setOperating(true); setError(null);
+    try { const next = await action(); setViewedSnapshot(next); onSaved(next); }
+    catch (cause) { setError(errorMessage(cause, fallback)); }
+    finally { setOperating(false); }
   };
 
   const createDrawnFeature = (geometry: GeoJsonGeometry) => {
-    if (activeTool === "pan" || activeTool === "cell-select" || parsedCurrentYear === null) return;
-    const name = featureName.trim();
-    if (!name) {
-      setSaveError("地物の名前を入力してください。");
-      return;
-    }
-    void runMutation(async () => {
-      const next = await backend.createFeature({
-        featureType: activeTool,
-        name,
-        validFromYear: parsedCurrentYear,
-        geometry,
-      });
-      const created = next.features.find((feature) => !viewedSnapshot.features.some((current) => current.id === feature.id));
-      setSelectedFeatureId(created?.id ?? null);
-      setActiveTool("pan");
-      return next;
-    }, "地物を作成できませんでした。");
+    if (activeTool === "pan" || activeTool === "cell-select") return;
+    void run(() => backend.createFeature({ featureType: activeTool, name: featureName.trim() || "新しい地物", geometry }), "地物を作成できませんでした。");
+    setActiveTool("pan");
   };
-
-  const updateCellPaint = (paint: string) => {
-    const [attribute, value] = paint.split(":", 2) as [CellAttribute, string];
-    setCellAttribute(attribute);
-    setCellAttributeValue(value === "fixed-land" ? "land" : value === "fixed-mountain" ? "mountain" : value === "fixed-forest" ? "forest" : value === "country" ? "新しい国" : value === "region" ? "新しい地域" : value);
+  const applyCellAttribute = (value: string | null, ids = selectedCellIds) => {
+    if (!ids.length) return;
+    void run(() => backend.applyCellAttributes({ cellIds: ids, attribute: cellAttribute, value }), "セル属性を変更できませんでした。");
   };
-
-  const activateBrushPreset = (attribute: CellAttribute, value: string) => {
-    setActiveTool("cell-select");
-    setSelectedCellIds([]);
-    setSelectedFeatureId(null);
-    setCellPaintMode("paint");
-    setCellAttribute(attribute);
-    setCellAttributeValue(value);
-  };
-
-  const effectiveCellAttributeValue = cellPaintMode === "erase" ? null : cellAttribute === "terrain_kind" || cellAttribute === "forest" ? cellAttributeValue : cellAttributeValue.trim();
-
-  const applyCellAttribute = (value: string | null, cellIds = selectedCellIds) => {
-    if (cellIds.length === 0 || parsedCurrentYear === null) {
-      setSaveError("先に地図上でセルを選択してください。");
-      return;
-    }
-    void runMutation(
-      () => backend.applyCellAttributes({ year: parsedCurrentYear, cellIds: [...cellIds], attribute: cellAttribute, value }),
-      "セル属性を変更できませんでした。",
-    );
-  };
-
-  const reviseFeature = (feature: RealmFeature, geometry = feature.geometry) => {
-    if (parsedCurrentYear === null) return;
-    const name = featureName.trim();
-    if (!name) {
-      setSaveError("地物の名前を入力してください。");
-      return;
-    }
-    void runMutation(() => backend.reviseFeature({
-      id: feature.id,
-      name,
-      validFromYear: parsedCurrentYear,
-      geometry,
-    }), "地物を変更できませんでした。");
-  };
-
-  const selectFeature = (featureId: string | null) => {
-    setSelectedFeatureId(featureId);
-    const feature = viewedSnapshot.features.find((candidate) => candidate.id === featureId);
+  const selectFeature = (id: string | null) => {
+    setSelectedFeatureId(id);
+    const feature = viewedSnapshot.features.find((item) => item.id === id);
     if (feature) setFeatureName(feature.name);
   };
-
-  const undo = () => {
-    void runMutation(() => backend.undoProject(), "操作を元に戻せませんでした。");
+  const reviseFeature = (feature: RealmFeature, geometry = feature.geometry) => {
+    void run(() => backend.reviseFeature({ id: feature.id, name: featureName.trim() || feature.name, geometry }), "地物を変更できませんでした。");
   };
-
-  const redo = () => {
-    void runMutation(() => backend.redoProject(), "操作をやり直せませんでした。");
-  };
-
-  const exportTransfer = async () => {
-    if (dirty && !(await save())) return;
-    setOperating(true);
-    setSaveError(null);
-    try {
-      await onExportTransfer();
-    } catch (cause) {
-      setSaveError(errorMessage(cause, "移行データを書き出せませんでした。"));
-    } finally {
-      setOperating(false);
-    }
-  };
-
   const exportMap = async (format: "png" | "pdf") => {
-    if (dirty && !(await save())) return;
-    if (!mapExporter.current) return;
-    setOperating(true);
-    setSaveError(null);
-    try {
-      const raster = await mapExporter.current(format === "png" ? "image/png" : "image/jpeg");
-      await onExportArtifact(format, format === "png" ? raster.bytes : pdfFromJpeg(raster));
-    } catch (cause) {
-      setSaveError(errorMessage(cause, "地図を書き出せませんでした。"));
-    } finally {
-      setOperating(false);
-    }
+    if (!(await flushSave()) || !mapExporter.current) return;
+    setOperating(true); setError(null);
+    try { const raster = await mapExporter.current(format === "png" ? "image/png" : "image/jpeg"); await onExportArtifact(format, format === "png" ? raster.bytes : pdfFromJpeg(raster)); }
+    catch (cause) { setError(errorMessage(cause, "地図を書き出せませんでした。")); }
+    finally { setOperating(false); }
   };
-
-  const returnToLibrary = async () => {
-    if (dirty && !(await save())) return;
-    onClose();
+  const exportTransfer = async () => {
+    if (!(await flushSave())) return;
+    setOperating(true); setError(null);
+    try { await onExportTransfer(); } catch (cause) { setError(errorMessage(cause, "移行データを書き出せませんでした。")); } finally { setOperating(false); }
   };
+  const close = async () => { if (!(await flushSave())) return; onClose(); };
 
   return (
     <main className="editor-shell" aria-label="Realm編集画面">
       <header className="editor-toolbar">
-        <div className="app-mark" data-tauri-drag-region><strong>Realm</strong></div>
-        <div className="toolbar-separator" data-tauri-drag-region />
+        <div className="app-mark"><strong>Realm</strong></div>
         <nav className="document-actions" aria-label="ファイル操作">
-          <button type="button" onClick={() => { void returnToLibrary(); }} disabled={locked}><FolderOpen aria-hidden="true" size={21} weight="regular" /><span>ライブラリ</span></button>
-          <button type="button" onClick={() => { void exportMap("png"); }} disabled={locked || validationError !== null}>PNG</button>
-          <button type="button" onClick={() => { void exportMap("pdf"); }} disabled={locked || validationError !== null}>PDF</button>
-          <button type="button" onClick={() => { void exportTransfer(); }} disabled={locked || validationError !== null}>移行データ</button>
-          <button type="button" onClick={() => { void returnToLibrary(); }} disabled={locked} aria-label="世界を閉じる"><X aria-hidden="true" size={20} weight="regular" /></button>
+          <button type="button" onClick={() => { void close(); }} disabled={locked}><FolderOpen aria-hidden="true" size={21} /><span>ライブラリ</span></button>
+          <button type="button" onClick={() => { void exportMap("png"); }} disabled={locked}>PNG</button>
+          <button type="button" onClick={() => { void exportMap("pdf"); }} disabled={locked}>PDF</button>
+          <button type="button" onClick={() => { void exportTransfer(); }} disabled={locked}>移行データ</button>
+          <button type="button" onClick={() => { void close(); }} disabled={locked} aria-label="世界を閉じる"><X aria-hidden="true" size={20} /></button>
         </nav>
         <nav className="history-actions" aria-label="編集履歴">
-          <button type="button" onClick={undo} disabled={locked || !viewedSnapshot.canUndo}>元に戻す</button>
-          <button type="button" onClick={redo} disabled={locked || !viewedSnapshot.canRedo}>やり直す</button>
+          <button type="button" onClick={() => { void run(() => backend.undoProject(), "操作を元に戻せませんでした。"); }} disabled={locked || !viewedSnapshot.canUndo}>元に戻す</button>
+          <button type="button" onClick={() => { void run(() => backend.redoProject(), "操作をやり直せませんでした。"); }} disabled={locked || !viewedSnapshot.canRedo}>やり直す</button>
         </nav>
-        <div className="toolbar-separator" data-tauri-drag-region />
-        <label className="world-name-input">
-          <span className="sr-only">世界の名前</span>
-          <input value={worldName} onChange={(event) => setWorldName(event.target.value)} aria-label="世界の名前" disabled={locked} maxLength={200} />
-          <PencilSimple aria-hidden="true" size={17} weight="regular" />
-        </label>
-        <div className="toolbar-spacer" data-tauri-drag-region />
-        <span className={`save-state ${dirty ? "save-state-dirty" : ""}`} aria-live="polite">
-          {validationError ? "入力を確認" : saving || dirty ? "自動保存中…" : "自動保存済み"}
-        </span>
+        <label className="world-name-input"><span className="sr-only">世界の名前</span><input value={worldName} onChange={(event) => setWorldName(event.target.value)} disabled={locked} maxLength={200} /><PencilSimple aria-hidden="true" size={17} /></label>
+        <span className={`save-state ${dirty ? "save-state-dirty" : ""}`} aria-live="polite">{nameError ? "入力を確認" : saving || dirty ? "自動保存中…" : "自動保存済み"}</span>
       </header>
-
       <div className="editor-body">
         <aside className="left-rail" aria-label="主要ナビゲーション">
-          <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => { setActiveTool("pan"); setSelectedCellIds([]); }} disabled={locked}><GlobeHemisphereWest aria-hidden="true" size={25} weight="regular" /><span>移動</span></button>
+          <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => { setActiveTool("pan"); setSelectedCellIds([]); }} disabled={locked}><GlobeHemisphereWest aria-hidden="true" size={25} /><span>移動</span></button>
+          {FEATURE_TYPES.map(([type, label]) => <button key={type} className={activeTool === type ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === type} onClick={() => { setActiveTool(type); setSelectedCellIds([]); setSelectedFeatureId(null); setFeatureName(`新しい${label}`); }} disabled={locked}><span className="feature-tool-mark" aria-hidden="true" /><span>{label}</span></button>)}
           <button className={activeTool === "cell-select" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "cell-select"} onClick={() => { setActiveTool("cell-select"); setSelectedCellIds([]); setSelectedFeatureId(null); }} disabled={locked}><span className="feature-tool-mark" aria-hidden="true" /><span>ブラシ</span></button>
-          {FEATURE_TYPES.map(({ type, label }) => (
-            <button key={type} className={(type === "terrain" || type === "forest" ? activeTool === "cell-select" && ((type === "terrain" && cellAttribute === "terrain_kind" && cellAttributeValue === "land") || (type === "forest" && cellAttribute === "forest")) : activeTool === type) ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={type === "terrain" || type === "forest" ? activeTool === "cell-select" && ((type === "terrain" && cellAttribute === "terrain_kind" && cellAttributeValue === "land") || (type === "forest" && cellAttribute === "forest")) : activeTool === type} onClick={() => { if (type === "terrain") activateBrushPreset("terrain_kind", "land"); else if (type === "forest") activateBrushPreset("forest", "forest"); else { setActiveTool(type); setSelectedCellIds([]); setFeatureName(`新しい${label}`); setSelectedFeatureId(null); } }} disabled={locked || dirty}><span className="feature-tool-mark" aria-hidden="true" /> <span>{label}</span></button>
-          ))}
         </aside>
         <aside className="world-sidebar" aria-label="世界の構成">
-          <div className="sidebar-heading"><h2>世界</h2><button type="button" aria-label="時代を追加" onClick={addEra} disabled={locked}><Plus aria-hidden="true" size={21} weight="regular" /></button></div>
-          <div className="world-tree">
-            <p>{viewedSnapshot.featureCount === 0 ? "地物はまだありません" : `地物 ${viewedSnapshot.featureCount}件`}</p>
-            <div className="feature-list" aria-label="表示年の地物">
-              {viewedSnapshot.features.map((feature) => (
-                <button key={feature.id} type="button" className={feature.id === selectedFeatureId ? "feature-row feature-row-selected" : "feature-row"} aria-pressed={feature.id === selectedFeatureId} onClick={() => selectFeature(feature.id)} disabled={locked}>
-                  <strong>{feature.name}</strong><span>{FEATURE_TYPES.find((item) => item.type === feature.featureType)?.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <section className="feature-editor" aria-label="地物編集">
-            <label>地物名<input value={featureName} onChange={(event) => setFeatureName(event.target.value)} disabled={locked} maxLength={200} /></label>
-            {activeTool !== "pan" ? (
-              <p>{activeTool === "city" || activeTool === "town"
-                ? `地図上をクリックして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を配置してください。`
-                : activeTool === "country" || activeTool === "region"
-                  ? `地形の上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}の領域を描いてください。`
-                : activeTool === "cell-select"
-                  ? "筆の属性とサイズを選び、地図をドラッグして直接塗ります。クリックでも塗れます。"
-                  : `地図上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を描いてください。`}</p>
-            ) : null}
-            {selectedFeature ? <div className="feature-editor-actions"><button type="button" onClick={() => reviseFeature(selectedFeature)} disabled={locked}>名前を保存</button><button type="button" className="danger-action" onClick={() => { if (parsedCurrentYear !== null && window.confirm("この年以降から地物を削除しますか？")) void runMutation(() => backend.deleteFeature({ id: selectedFeature.id, validFromYear: parsedCurrentYear }), "地物を削除できませんでした。"); }} disabled={locked}>削除</button></div> : null}
-          </section>
-          <section className="cell-inspector" aria-label="ブラシ設定">
-            <h3>ブラシ</h3>
-            <p aria-live="polite">直前のストローク: {selectedCellIds.length}セル</p>
-            <label>操作<CellAttributeSelect value={cellPaintMode} onChange={(event) => setCellPaintMode(event.target.value as "paint" | "erase")} disabled={locked}>
-              <option value="paint">塗る</option>
-              <option value="erase">消す</option>
-            </CellAttributeSelect></label>
-            <label>筆の属性<CellAttributeSelect value={cellAttribute === "terrain_kind" ? `terrain_kind:fixed-${cellAttributeValue}` : cellAttribute === "forest" ? "forest:fixed-forest" : `${cellAttribute}:${cellAttribute}`} onChange={(event) => updateCellPaint(event.target.value)} disabled={locked}>
-              <option value="terrain_kind:fixed-land">地形: 平地</option>
-              <option value="terrain_kind:fixed-mountain">地形: 山地</option>
-              <option value="forest:fixed-forest">森林</option>
-              <option value="country:country">国</option>
-              <option value="region:region">地域</option>
-            </CellAttributeSelect></label>
-            <label>値<input value={cellAttributeValue} onChange={(event) => setCellAttributeValue(event.target.value)} disabled={locked || cellPaintMode === "erase" || cellAttribute === "terrain_kind" || cellAttribute === "forest"} maxLength={200} /></label>
-            <label>筆サイズ<CellAttributeSelect value={String(cellBrushRadius)} onChange={(event) => setCellBrushRadius(Number(event.target.value))} disabled={locked}>
-              <option value="1">小（半径1セル）</option>
-              <option value="2">中（半径2セル）</option>
-              <option value="4">大（半径4セル）</option>
-              <option value="8">特大（半径8セル）</option>
-            </CellAttributeSelect></label>
-            <p className="cell-inspector-hint">指を離すと自動保存されます。</p>
-            <div className="feature-editor-actions">
-              <button type="button" onClick={() => applyCellAttribute(effectiveCellAttributeValue, selectedCellIds)} disabled={locked || selectedCellIds.length === 0 || (effectiveCellAttributeValue === "")}>選択範囲に再適用</button>
-              <button type="button" className="danger-action" onClick={() => applyCellAttribute(null, selectedCellIds)} disabled={locked || selectedCellIds.length === 0}>選択範囲を解除</button>
-            </div>
-          </section>
-          <section className="era-list" aria-labelledby="era-list-title">
-            <h3 id="era-list-title">時代</h3>
-            {eras.length === 0 ? <p>時代はまだありません</p> : eras.map((era) => (
-              <button
-                className={era.editorKey === selectedEraKey ? "era-row era-row-selected" : "era-row"}
-                key={era.editorKey}
-                type="button"
-                aria-pressed={era.editorKey === selectedEraKey}
-                onClick={() => setSelectedEraKey(era.editorKey)}
-                disabled={locked}
-              >
-                <strong>{era.name || "名前のない時代"}</strong>
-                <span>{era.startYear}–{era.endYear || "継続中"}</span>
-              </button>
-            ))}
-          </section>
-          {selectedEra ? (
-            <section className="era-editor" aria-label="選択した時代を編集">
-              <label>名前<input value={selectedEra.name} onChange={(event) => updateSelectedEra({ name: event.target.value })} disabled={locked} maxLength={200} /></label>
-              <div className="era-years">
-                <label>開始年<input type="number" value={selectedEra.startYear} min={MIN_YEAR} max={MAX_YEAR} step="1" onChange={(event) => updateSelectedEra({ startYear: event.target.value })} disabled={locked} /></label>
-                <label>終了年<input type="number" value={selectedEra.endYear} min={MIN_YEAR} max={MAX_YEAR} step="1" placeholder="継続中" onChange={(event) => updateSelectedEra({ endYear: event.target.value })} disabled={locked} /></label>
-              </div>
-              <button className="remove-era" type="button" onClick={removeSelectedEra} disabled={locked}>この時代を削除</button>
-            </section>
-          ) : null}
-          <section className="event-list" aria-labelledby="event-list-title">
-            <div className="section-heading"><h3 id="event-list-title">出来事</h3><button type="button" onClick={addTimelineEvent} aria-label="出来事を追加" disabled={locked}>＋</button></div>
-            {timelineEvents.length === 0 ? <p>出来事はまだありません</p> : timelineEvents.map((event) => (
-              <button key={event.editorKey} type="button" className={event.editorKey === selectedEventKey ? "event-row event-row-selected" : "event-row"} aria-pressed={event.editorKey === selectedEventKey} onClick={() => setSelectedEventKey(event.editorKey)} disabled={locked}><strong>{event.title || "タイトルのない出来事"}</strong><span>{event.startYear}{event.endYear ? `–${event.endYear}` : ""}</span></button>
-            ))}
-          </section>
-          {selectedEvent ? <section className="event-editor" aria-label="選択した出来事を編集">
-            <label>タイトル<input value={selectedEvent.title} onChange={(event) => updateSelectedEvent({ title: event.target.value })} disabled={locked} maxLength={200} /></label>
-            <label>説明<textarea value={selectedEvent.description} onChange={(event) => updateSelectedEvent({ description: event.target.value })} disabled={locked} maxLength={10_000} /></label>
-            <div className="era-years"><label>開始年<input type="number" value={selectedEvent.startYear} min={MIN_YEAR} max={MAX_YEAR} onChange={(event) => updateSelectedEvent({ startYear: event.target.value })} disabled={locked} /></label><label>終了年<input type="number" value={selectedEvent.endYear} min={MIN_YEAR} max={MAX_YEAR} placeholder="単年" onChange={(event) => updateSelectedEvent({ endYear: event.target.value })} disabled={locked} /></label></div>
-            <button className="remove-era" type="button" onClick={removeSelectedEvent} disabled={locked}>この出来事を削除</button>
-          </section> : null}
+          <div className="sidebar-heading"><h2>世界</h2></div>
+          <p>{viewedSnapshot.featureCount === 0 ? "地物はまだありません" : `地物 ${viewedSnapshot.featureCount}件`}</p>
+          <div className="feature-list" aria-label="地物一覧">{viewedSnapshot.features.map((feature) => <button key={feature.id} type="button" className={feature.id === selectedFeatureId ? "feature-row feature-row-selected" : "feature-row"} aria-pressed={feature.id === selectedFeatureId} onClick={() => selectFeature(feature.id)} disabled={locked}><strong>{feature.name}</strong><span>{FEATURE_TYPES.find(([type]) => type === feature.featureType)?.[1]}</span></button>)}</div>
+          <section className="feature-editor" aria-label="地物編集"><label>地物名<input value={featureName} onChange={(event) => setFeatureName(event.target.value)} disabled={locked} maxLength={200} /></label>{selectedFeature ? <div className="feature-editor-actions"><button type="button" onClick={() => reviseFeature(selectedFeature)} disabled={locked}>名前を保存</button><button type="button" className="danger-action" onClick={() => { if (window.confirm("この地物を削除しますか？")) void run(() => backend.deleteFeature({ id: selectedFeature.id }), "地物を削除できませんでした。"); }} disabled={locked}>削除</button></div> : null}</section>
+          <section className="cell-inspector" aria-label="ブラシ設定"><h3>ブラシ</h3><label>操作<CellAttributeSelect value={cellPaintMode} onChange={(event) => setCellPaintMode(event.target.value as "paint" | "erase")} disabled={locked}><option value="paint">塗る</option><option value="erase">消す</option></CellAttributeSelect></label><label>筆の属性<CellAttributeSelect value={`${cellAttribute}:${cellAttributeValue}`} onChange={(event) => { const [attribute, value] = event.target.value.split(":"); setCellAttribute(attribute as CellAttribute); setCellAttributeValue(value ?? ""); }} disabled={locked}><option value="forest:forest">森林</option><option value="country:country">国</option><option value="region:region">地域</option></CellAttributeSelect></label><label>値<input value={cellAttributeValue} onChange={(event) => setCellAttributeValue(event.target.value)} disabled={locked || cellAttribute === "forest" || cellPaintMode === "erase"} /></label><label>筆サイズ<CellAttributeSelect value={String(cellBrushRadius)} onChange={(event) => setCellBrushRadius(Number(event.target.value))} disabled={locked}><option value="1">小</option><option value="2">中</option><option value="4">大</option></CellAttributeSelect></label></section>
         </aside>
-        <section className="map-region" aria-label="地図編集領域">
-          <MapCanvas
-            onZoomChange={setZoom}
-            zoom={zoom}
-            features={viewedSnapshot.features}
-            mode={locked ? "pan" : activeTool}
-            selectedFeatureId={selectedFeatureId}
-            selectedCellIds={selectedCellIds}
-            cellAttributes={cellAttributes}
-            cellBrushRadius={cellBrushRadius}
-            onDraw={createDrawnFeature}
-            onSelect={selectFeature}
-            onCellSelect={(cellIds) => {
-              const strokeCells = [...cellIds];
-              setSelectedCellIds(strokeCells);
-              setSelectedFeatureId(null);
-              if (strokeCells.length > 0) void applyCellAttribute(effectiveCellAttributeValue, strokeCells);
-            }}
-            onModify={(featureId, geometry) => {
-              const feature = viewedSnapshot.features.find((candidate) => candidate.id === featureId);
-              if (feature) reviseFeature(feature, geometry);
-            }}
-            onExporterReady={(exporter) => { mapExporter.current = exporter; }}
-          />
-          {validationError ? <p className="save-error" role="alert">{validationError}</p> : saveError ? <p className="save-error" role="alert">{saveError}</p> : null}
-        </section>
-
-        <footer className="timeline-bar">
-          <div className="timeline-status">
-            <label className="timeline-year-field">
-              <span className="sr-only">表示年</span>
-              <input
-                type="number"
-                value={currentYearDraft}
-                min={MIN_YEAR}
-                max={MAX_YEAR}
-                step="1"
-                onChange={(event) => setViewYearDraft(event.target.value)}
-                aria-label="表示年"
-                disabled={locked}
-                style={{ width: `${Math.min(Math.max(currentYearDraft.length, 1), 11)}ch` }}
-              />
-              <strong>年</strong>
-            </label>
-            <span>{currentEra?.name ?? "時代未設定"}</span>
-          </div>
-          <div className="timeline-controls" role="group" aria-label="年の移動">
-            <button type="button" aria-label="0年へ移動" onClick={() => setViewYear(0)} disabled={locked || parsedCurrentYear === null || viewYear === 0}><SkipBack aria-hidden="true" size={18} weight="regular" /></button>
-            <button type="button" aria-label="前の年" onClick={() => setViewYear(viewYear - 1)} disabled={locked || parsedCurrentYear === null || viewYear === MIN_YEAR}><CaretLeft aria-hidden="true" size={19} weight="bold" /></button>
-            <button type="button" aria-label="次の年" onClick={() => setViewYear(viewYear + 1)} disabled={locked || parsedCurrentYear === null || viewYear === MAX_YEAR}><CaretRight aria-hidden="true" size={19} weight="bold" /></button>
-          </div>
-          <div className="timeline-slider-wrap">
-            <input type="range" min={timelineStart} max={timelineEnd} value={viewYear} onChange={(event) => setViewYear(Number(event.target.value))} aria-label="年表上の表示年" disabled={locked || parsedCurrentYear === null} />
-            <div className="timeline-scale" aria-hidden="true">
-              {timelineTicks.map((year) => <span key={year}>{year}</span>)}
-            </div>
-          </div>
-          <MapZoomControls zoom={zoom} onChange={setZoom} />
-        </footer>
+        <section className="map-region" aria-label="地図編集領域"><MapCanvas features={viewedSnapshot.features} mode={locked ? "pan" : activeTool} selectedFeatureId={selectedFeatureId} selectedCellIds={selectedCellIds} cellAttributes={cellAttributes} cellBrushRadius={cellBrushRadius} onDraw={createDrawnFeature} onSelect={selectFeature} onCellSelect={(ids) => { const selected = [...ids]; setSelectedCellIds(selected); applyCellAttribute(cellPaintMode === "erase" ? null : cellAttributeValue, selected); }} onModify={(id, geometry) => { const feature = viewedSnapshot.features.find((item) => item.id === id); if (feature) reviseFeature(feature, geometry); }} onExporterReady={(exporter) => { mapExporter.current = exporter; }} onZoomChange={setZoom} zoom={zoom} />{nameError ? <p className="save-error" role="alert">{nameError}</p> : error ? <p className="save-error" role="alert">{error}</p> : null}</section>
+        <footer className="editor-footer"><MapZoomControls zoom={zoom} onChange={setZoom} /></footer>
       </div>
     </main>
   );

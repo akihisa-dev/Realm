@@ -10,7 +10,6 @@ export const tauriRealmBackend: RealmBackend = {
   exportProject: (input) => invoke<void>("export_project", { path: input.path }),
   writeArtifact: (input) => invoke<void>("write_artifact", { path: input.path, bytes: input.bytes }),
   saveProject: (input) => invoke<RealmSnapshot>("save_project", { input }),
-  viewProjectYear: (year) => invoke<RealmSnapshot>("view_project_year", { year }),
   applyCellAttributes: (input: ApplyCellAttributesInput) => invoke<RealmSnapshot>("apply_cell_attributes", { input }),
   viewCellAttributes: (input: CellViewportInput) => invoke<CellAttributeSnapshot[]>("view_cell_attributes", { input }),
   createFeature: (input) => invoke<RealmSnapshot>("create_feature", { input }),

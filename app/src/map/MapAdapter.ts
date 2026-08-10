@@ -152,14 +152,12 @@ const cellStyle = (feature: FeatureLike): Style | Style[] | undefined => {
   const has = (attribute: CellAttributeSnapshot["attribute"]): boolean => attributes?.some((item) => item.attribute === attribute) ?? false;
   const selected = feature.get("selected") === true;
   const showGrid = feature.get("showGrid") === true;
-  const hasPhysical = has("forest") || has("terrain_kind");
-  const terrainValue = attributes?.find((item) => item.attribute === "terrain_kind")?.value;
-  const mountain = terrainValue === "mountain";
+  const hasPhysical = has("forest");
   if (!showGrid && !hasPhysical && !has("country") && !has("region") && !selected) return undefined;
   const styles: Style[] = [new Style({
     image: new CircleStyle({
-      radius: mountain ? 2.8 : hasPhysical ? 2 : 1.25,
-      fill: new Fill({ color: has("forest") ? "#3f7c55" : mountain ? "#5f4a37" : terrainValue === "land" ? "#8b7754" : "rgba(74, 87, 98, 0.24)" }),
+      radius: hasPhysical ? 2 : 1.25,
+      fill: new Fill({ color: has("forest") ? "#3f7c55" : "rgba(74, 87, 98, 0.24)" }),
     }),
     zIndex: 5,
   })];

@@ -92,7 +92,7 @@ git config core.hooksPath .githooks
 ## Write and review rules
 
 - Preserve concurrent and unrelated changes.
-- Update the source-of-truth document when changing `.realmmap`, year semantics, command permissions, or release behavior.
+- Update the source-of-truth document when changing `.realmmap`, feature or cell semantics, command permissions, or release behavior.
 - Use placeholders such as `example.invalid` and `REDACTED`; never record real tokens, private map data, or private locations.
 - Tests create synthetic temporary `.realmmap` files. The secret guard blocks map and database files even when force-added.
 

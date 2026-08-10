@@ -13,13 +13,12 @@ export function StartupScreen({ projects, onCreate, onOpen, onImport, busy }: St
     <main className="startup-screen">
       <section className="startup-panel" aria-labelledby="startup-title">
         <h1 id="startup-title">Realm</h1>
-        <p>創作世界の地図と歴史を、アプリ内で安全に管理。</p>
+        <p>創作世界の地図を、アプリ内で安全に管理。</p>
         {projects.length > 0 ? (
           <div className="project-library" aria-label="世界ライブラリ">
             {projects.map((project) => (
               <button key={project.libraryId} type="button" onClick={() => onOpen(project.libraryId)} disabled={busy}>
                 <strong>{project.name}</strong>
-                <span>{project.currentYear}年</span>
               </button>
             ))}
           </div>

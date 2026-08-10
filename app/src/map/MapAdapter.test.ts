@@ -18,6 +18,7 @@ describe("RealmMapAdapter", () => {
     expect(narrow).toContain("256:128");
     expect(wide.length).toBeGreaterThan(narrow.length);
     expect(cellIdsWithinBrushPath([], 1)).toEqual([]);
+    expect(cellIdsWithinBrushPath([oneCell], -1)).toEqual([]);
     expect(cellIdsWithinBrushPath([oneCell], Number.NaN)).toEqual([]);
     expect(cellIdsWithinBrushPath([cellCenter(0, 0)], 0)).toEqual(["0:0"]);
     expect(cellIdsWithinBrushPath([[-180, -90]], 1)).toContain("0:0");
@@ -41,11 +42,15 @@ describe("RealmMapAdapter", () => {
     expect(referenceAxes).toBeInstanceOf(VectorLayer);
     expect((referenceAxes as VectorLayer).getSource()?.getFeatures()).toHaveLength(2);
     adapter.setFeatures([
-      { id: "city-1", featureType: "city", name: "City", validFromYear: 0, geometry: { type: "Point", coordinates: [12, 34] } },
-      { id: "river-1", featureType: "river", name: "River", validFromYear: 0, geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
-      { id: "terrain-1", featureType: "terrain", name: "Land", validFromYear: 0, geometry: { type: "Polygon", coordinates: [[[-2, -2], [2, -2], [2, 2], [-2, -2]]] } },
-      { id: "country-1", featureType: "country", name: "Country", validFromYear: 0, geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } },
-      { id: "region-1", featureType: "region", name: "Region", validFromYear: 0, geometry: { type: "Polygon", coordinates: [[[0, 0], [0.5, 0], [0.5, 0.5], [0, 0]]] } },
+      { id: "city-1", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [12, 34] } },
+      { id: "river-1", featureType: "river", name: "River", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
+      { id: "terrain-1", featureType: "terrain", name: "Land", geometry: { type: "Polygon", coordinates: [[[-2, -2], [2, -2], [2, 2], [-2, -2]]] } },
+      { id: "country-1", featureType: "country", name: "Country", geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } },
+      { id: "region-1", featureType: "region", name: "Region", geometry: { type: "Polygon", coordinates: [[[0, 0], [0.5, 0], [0.5, 0.5], [0, 0]]] } },
+      { id: "forest-1", featureType: "forest", name: "Forest", geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] } },
+      { id: "coast-1", featureType: "coastline", name: "Coast", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
+      { id: "boundary-1", featureType: "boundary", name: "Boundary", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
+      { id: "town-1", featureType: "town", name: "Town", geometry: { type: "Point", coordinates: [1, 1] } },
     ]);
     const featureLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
     const featureSource = featureLayer.getSource();
@@ -57,10 +62,11 @@ describe("RealmMapAdapter", () => {
       expect(style).toBeInstanceOf(Style);
       return style as Style;
     };
-    expect(featureSource?.getFeatures()).toHaveLength(5);
+    expect(featureSource?.getFeatures()).toHaveLength(9);
     const terrainStyle = styleFor("terrain-1");
     const countryStyle = styleFor("country-1");
     const regionStyle = styleFor("region-1");
+    styleFor("forest-1"); styleFor("coast-1"); styleFor("boundary-1"); styleFor("town-1");
     expect(terrainStyle.getZIndex()).toBeLessThan(countryStyle.getZIndex() ?? 0);
     expect(countryStyle.getZIndex()).toBeLessThan(regionStyle.getZIndex() ?? 0);
     expect(countryStyle.getFill()?.getColor()).not.toBe(regionStyle.getFill()?.getColor());
@@ -69,6 +75,8 @@ describe("RealmMapAdapter", () => {
     expect(regionStyle.getStroke()?.getLineDash()).toEqual([5, 4]);
     adapter.setSelected("city-1");
     adapter.setSelectedCells(["0:0"]);
+    adapter.setSelectedCells([]);
+    adapter.setCellAttributes([]);
     adapter.setMode("river");
     const riverDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
     expect(riverDraw).toBeInstanceOf(Draw);
@@ -77,6 +85,10 @@ describe("RealmMapAdapter", () => {
     const terrainDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
     expect(terrainDraw).toBeInstanceOf(Draw);
     expect((terrainDraw as Draw).getFreehand()).toBe(true);
+    for (const mode of ["coastline", "boundary", "country", "region", "town", "forest"] as const) {
+      adapter.setMode(mode);
+      adapter.setMode("pan");
+    }
     adapter.setMode("city");
     const cityDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
     expect(cityDraw).toBeInstanceOf(Draw);
@@ -94,22 +106,14 @@ describe("RealmMapAdapter", () => {
     expect(cellLayer.getVisible()).toBe(true);
     expect(cellLayer.getSource()?.getFeatures()).toHaveLength(CELL_GRID_CELL_COUNT);
     adapter.setCellAttributes([
-      { cellId: "1:0", attribute: "forest", value: "forest", validFromYear: 0 },
-      { cellId: "2:0", attribute: "terrain_kind", value: "mountain", validFromYear: 0 },
-      { cellId: "3:0", attribute: "country", value: "A", validFromYear: 0 },
-      { cellId: "4:0", attribute: "region", value: "B", validFromYear: 0 },
-      { cellId: "5:0", attribute: "terrain_kind", value: "land", validFromYear: 0 },
+      { cellId: "1:0", attribute: "forest", value: "forest" },
+      { cellId: "3:0", attribute: "country", value: "A" },
+      { cellId: "4:0", attribute: "region", value: "B" },
     ]);
     const cellStyleFunction = cellLayer.getStyleFunction();
     const forestCell = cellLayer.getSource()?.getFeatureById("1:0");
     const forestStyle = (cellStyleFunction?.(forestCell!, 1) as Style[])[0]!;
     expect((forestStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#3f7c55");
-    const mountainCell = cellLayer.getSource()?.getFeatureById("2:0");
-    const mountainStyle = (cellStyleFunction?.(mountainCell!, 1) as Style[])[0]!;
-    expect((mountainStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#5f4a37");
-    const landCell = cellLayer.getSource()?.getFeatureById("5:0");
-    const landStyle = (cellStyleFunction?.(landCell!, 1) as Style[])[0]!;
-    expect((landStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#8b7754");
     const cellBrush = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof PointerInteraction && !(interaction instanceof DragPan));
     expect(cellBrush).toBeInstanceOf(PointerInteraction);
     expect(interactions.find((interaction) => interaction instanceof DragPan)?.getActive()).toBe(false);
@@ -119,16 +123,21 @@ describe("RealmMapAdapter", () => {
     adapter.setSelectedCells(["0:0"]);
     host.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(onCellSelect).toHaveBeenCalledWith([]);
+    host.dispatchEvent(new Event("pointercancel", { bubbles: true }));
     stopCellSelect();
     adapter.setMode("pan");
     expect(cellLayer.getVisible()).toBe(true);
-    expect(cellStyleFunction?.(mountainCell!, 1)).toBeInstanceOf(Array);
+    const emptyCell = cellLayer.getSource()?.getFeatureById("10:10");
+    expect(cellStyleFunction?.(emptyCell!, 1)).toBeUndefined();
     adapter.setZoom(3);
     expect(adapter.getZoom()).toBe(3);
     adapter.setZoom(99);
     expect(adapter.getZoom()).toBe(8);
     adapter.setZoom(-99);
     expect(adapter.getZoom()).toBe(0);
+    adapter.setCellBrushRadius(Number.NaN);
+    adapter.setCellBrushRadius(999);
+    adapter.setSelected("missing");
     adapter.getMap().getView().setCenter([42, -20]);
     adapter.setZoom(5);
     adapter.resetView();

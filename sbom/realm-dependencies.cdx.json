@@ -26,9 +26,9 @@
     "component": {
       "type": "application",
       "name": "Realm",
-      "version": "0.8.0",
-      "purl": "pkg:generic/realm@0.8.0",
-      "bom-ref": "pkg:generic/realm@0.8.0",
+      "version": "0.9.0",
+      "purl": "pkg:generic/realm@0.9.0",
+      "bom-ref": "pkg:generic/realm@0.9.0",
       "licenses": [
         {
           "license": {
@@ -2024,9 +2024,9 @@
     {
       "type": "application",
       "name": "realm-app",
-      "version": "0.8.0",
-      "purl": "pkg:cargo/realm-app@0.8.0",
-      "bom-ref": "pkg:cargo/realm-app@0.8.0",
+      "version": "0.9.0",
+      "purl": "pkg:cargo/realm-app@0.9.0",
+      "bom-ref": "pkg:cargo/realm-app@0.9.0",
       "licenses": [
         {
           "expression": "AGPL-3.0-or-later"
@@ -3912,9 +3912,9 @@
     {
       "type": "library",
       "name": "realm",
-      "version": "0.8.0",
-      "purl": "pkg:npm/realm@0.8.0",
-      "bom-ref": "pkg:npm/realm@0.8.0",
+      "version": "0.9.0",
+      "purl": "pkg:npm/realm@0.9.0",
+      "bom-ref": "pkg:npm/realm@0.9.0",
       "licenses": [
         {
           "license": {
@@ -3922,7 +3922,7 @@
           }
         }
       ],
-      "description": "A local macOS application for authoring fictional world maps across historical time."
+      "description": "A local macOS application for authoring fictional world maps."
     },
     {
       "type": "library",
@@ -5093,7 +5093,7 @@
       "dependsOn": []
     },
     {
-      "ref": "pkg:cargo/realm-app@0.8.0",
+      "ref": "pkg:cargo/realm-app@0.9.0",
       "dependsOn": [
         "pkg:cargo/libc@0.2.189",
         "pkg:cargo/rusqlite@0.38.0",
@@ -6017,10 +6017,10 @@
       "dependsOn": []
     },
     {
-      "ref": "pkg:generic/realm@0.8.0",
+      "ref": "pkg:generic/realm@0.9.0",
       "dependsOn": [
-        "pkg:cargo/realm-app@0.8.0",
-        "pkg:npm/realm@0.8.0"
+        "pkg:cargo/realm-app@0.9.0",
+        "pkg:npm/realm@0.9.0"
       ]
     },
     {
@@ -6135,7 +6135,7 @@
       "dependsOn": []
     },
     {
-      "ref": "pkg:npm/realm@0.8.0",
+      "ref": "pkg:npm/realm@0.9.0",
       "dependsOn": [
         "pkg:npm/%40phosphor-icons/react@2.1.10",
         "pkg:npm/%40tauri-apps/api@2.11.1",

@@ -18,6 +18,6 @@ body:
     id: proposal
     attributes:
       label: Proposal
-      description: Describe the smallest useful behavior and its year/revision impact.
+      description: Describe the smallest useful behavior and its map-editing impact.
     validations:
       required: true

@@ -9,7 +9,6 @@ const skillsRoot = path.join(repositoryRoot, ".agents", "skills");
 const expectedSkills = [
   "realm-audit-code-health",
   "realm-audit-skills",
-  "realm-change-history",
   "realm-change-local-verification",
   "realm-change-map",
   "realm-change-storage",

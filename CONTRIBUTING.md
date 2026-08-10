@@ -11,7 +11,7 @@ Read [docs/INDEX.md](docs/INDEX.md), [AGENTS.md](AGENTS.md), the relevant docume
 ## Local change rules
 
 - Keep the change small and preserve unrelated work already present in the checkout.
-- Do not change the `.realmmap` storage contract, year semantics, or feature history behavior without updating the corresponding architecture and data-model documents.
+- Do not change the `.realmmap` storage contract, feature semantics, or cell-attribute behavior without updating the corresponding architecture and data-model documents.
 - Do not add network, cloud, generation, or image-to-map behavior to the 0.1 series scope without an explicit product decision.
 - Add or update tests for behavior and failure paths. Never use a real user's map file in tests; use a temporary fixture created by the test.
 - Keep secrets out of source, fixtures, logs, screenshots, and commit messages. Run `.githooks/secret-guard.sh --self-test` when changing the guard.

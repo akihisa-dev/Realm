@@ -22,6 +22,10 @@ describe("MapZoomControls", () => {
   it("drives the canvas only through the replaceable renderer contract", () => {
     let zoom = 1;
     let zoomListener: ((nextZoom: number) => void) | null = null;
+    let drawListener: ((geometry: never) => void) | null = null;
+    let selectListener: ((id: string | null) => void) | null = null;
+    let cellListener: ((ids: readonly string[]) => void) | null = null;
+    let modifyListener: ((id: string, geometry: never) => void) | null = null;
     const renderer: RealmMapRenderer = {
       getZoom: vi.fn(() => zoom),
       setZoom: vi.fn((nextZoom) => { zoom = nextZoom; }),
@@ -32,10 +36,10 @@ describe("MapZoomControls", () => {
       setSelected: vi.fn(),
       setSelectedCells: vi.fn(),
       setCellAttributes: vi.fn(),
-      onDraw: vi.fn(() => vi.fn()),
-      onSelect: vi.fn(() => vi.fn()),
-      onCellSelect: vi.fn(() => vi.fn()),
-      onModify: vi.fn(() => vi.fn()),
+      onDraw: vi.fn((listener) => { drawListener = listener as typeof drawListener; return vi.fn(); }),
+      onSelect: vi.fn((listener) => { selectListener = listener; return vi.fn(); }),
+      onCellSelect: vi.fn((listener) => { cellListener = listener; return vi.fn(); }),
+      onModify: vi.fn((listener) => { modifyListener = listener as typeof modifyListener; return vi.fn(); }),
       onZoomChange: vi.fn((listener) => {
         zoomListener = listener;
         return vi.fn();
@@ -56,6 +60,10 @@ describe("MapZoomControls", () => {
     expect(screen.getByRole("group", { name: "現在の地図操作" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "地図を移動" }));
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveFocus();
+    (drawListener as ((geometry: never) => void) | null)?.({} as never);
+    (selectListener as ((id: string | null) => void) | null)?.(null);
+    (cellListener as ((ids: readonly string[]) => void) | null)?.([]);
+    (modifyListener as ((id: string, geometry: never) => void) | null)?.("id", {} as never);
     fireEvent.click(screen.getByRole("button", { name: "表示を中央に戻す" }));
     expect(renderer.resetView).toHaveBeenCalledOnce();
     act(() => { zoomListener?.(4); });

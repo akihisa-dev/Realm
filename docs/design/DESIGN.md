@@ -7,9 +7,9 @@ Realm's editing surface stays quiet so the map remains the dominant object. The 
 ## Initial states
 
 - [Startup concept](concepts/initial-startup.png): no world is open; the app-managed library, create action, and transfer-data import are available.
-- [Editor concept](concepts/initial-editor.png): a world is open; pan, zoom, year selection, era and event editing, feature drawing and selection, cell-brush painting, undo, redo, library return, PNG/PDF export, and transfer export are available. Valid edits save automatically.
+- A world-open editor provides pan, zoom, feature drawing and selection, cell-brush painting, undo, redo, library return, PNG/PDF export, and transfer export. Valid edits save automatically.
 
-The concept images define composition and density. Visible controls remain code-native. The primary rail exposes the cell brush and nine manual feature classes; the sidebar lists visible features, configures brush attribute, paint/erase mode and size, and edits the selected feature, named eras, and timeline events.
+The startup concept defines composition and density. Visible controls remain code-native. The primary rail exposes the nine manual feature classes; the sidebar lists visible features, configures forest, country, and region brush attributes, paint/erase mode and size, and edits the selected feature.
 
 ## Visual system
 
@@ -22,11 +22,11 @@ The concept images define composition and density. Visible controls remain code-
 
 ## Layout contract
 
-The editor uses one native overlay title bar with a compact file toolbar, a narrow primary rail, a project sidebar, a dominant OpenLayers canvas, and a bottom year control. The rail and sidebar continue to the bottom edge while the year control stays directly under the map. Do not draw a second set of macOS traffic lights in React. At smaller widths the project sidebar may collapse, but the map and current year remain usable. Default zoom and center are part of the map adapter contract and must not be persisted as project data.
+The editor uses one native overlay title bar with a compact file toolbar, a narrow primary rail, a project sidebar, a dominant OpenLayers canvas, and compact map controls. The rail and sidebar continue to the bottom edge. Do not draw a second set of macOS traffic lights in React. At smaller widths the project sidebar may collapse, but the map remains usable. Default zoom and center are part of the map adapter contract and must not be persisted as project data.
 
 ## Allowed initial copy
 
-The startup state uses `Realm`, `創作世界の地図と歴史を、アプリ内で安全に管理。`, `新しい世界を作成`, and `移行データを読み込む`, together with the library worlds. The editor uses the world name, `ライブラリ`, `PNG`, `PDF`, `移行データ`, `自動保存中…`, `自動保存済み`, `元に戻す`, `やり直す`, `世界`, feature class names, the feature count, named eras, timeline events, the current year, the current era or `時代未設定`, and the zoom value. Controls for unavailable layers, settings, or menus are not shown.
+The startup state uses `Realm`, `創作世界の地図を、アプリ内で安全に管理。`, `新しい世界を作成`, and `移行データを読み込む`, together with the library worlds. The editor uses the world name, `ライブラリ`, `PNG`, `PDF`, `移行データ`, `自動保存中…`, `自動保存済み`, `元に戻す`, `やり直す`, `世界`, feature class names, the feature count, and the zoom value. Controls for unavailable layers, settings, or menus are not shown.
 
 ## Renderer boundary
 

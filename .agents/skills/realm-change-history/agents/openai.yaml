@@ -1,4 +1,0 @@
-interface:
-  display_name: "Realm History Change"
-  short_description: "Change Realm years eras and revisions"
-  default_prompt: "Use $realm-change-history to change Realm year, era, or revision behavior."

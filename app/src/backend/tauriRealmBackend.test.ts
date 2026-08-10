@@ -14,12 +14,10 @@ import { chooseTauriArtifactPath, chooseTauriTransferPath, tauriRealmBackend } f
 import type { RealmSnapshot } from "./types";
 
 const snapshot: RealmSnapshot = {
-  formatVersion: 2,
+  formatVersion: 3,
   path: "/tmp/test.realmmap",
-  world: { id: "world-test", name: "Test", currentYear: 0 },
-  eras: [],
+  world: { id: "world-test", name: "Test" },
   features: [],
-  timelineEvents: [],
   featureCount: 0,
   canUndo: false,
   canRedo: false,
@@ -40,11 +38,10 @@ describe("Tauri Realm backend", () => {
     await tauriRealmBackend.importProject({ path: "/tmp/import.realmmap" });
     await tauriRealmBackend.exportProject({ path: "/tmp/export.realmmap" });
     await tauriRealmBackend.writeArtifact({ path: "/tmp/map.png", bytes: [1, 2] });
-    await tauriRealmBackend.saveProject({ name: "Saved", currentYear: 12, eras: [], timelineEvents: [] });
-    await tauriRealmBackend.viewProjectYear(12);
-    await tauriRealmBackend.createFeature({ featureType: "city", name: "City", validFromYear: 12, geometry: { type: "Point", coordinates: [1, 2] } });
-    await tauriRealmBackend.reviseFeature({ id: "feature-id", name: "New City", validFromYear: 13, geometry: { type: "Point", coordinates: [2, 3] } });
-    await tauriRealmBackend.deleteFeature({ id: "feature-id", validFromYear: 14 });
+    await tauriRealmBackend.saveProject({ name: "Saved" });
+    await tauriRealmBackend.createFeature({ featureType: "city", name: "City", geometry: { type: "Point", coordinates: [1, 2] } });
+    await tauriRealmBackend.reviseFeature({ id: "feature-id", name: "New City", geometry: { type: "Point", coordinates: [2, 3] } });
+    await tauriRealmBackend.deleteFeature({ id: "feature-id" });
     await tauriRealmBackend.undoProject();
     await tauriRealmBackend.redoProject();
     await tauriRealmBackend.closeProject();
@@ -56,8 +53,18 @@ describe("Tauri Realm backend", () => {
     expect(mocks.invoke).toHaveBeenNthCalledWith(4, "import_project", { path: "/tmp/import.realmmap" });
     expect(mocks.invoke).toHaveBeenNthCalledWith(5, "export_project", { path: "/tmp/export.realmmap" });
     expect(mocks.invoke).toHaveBeenNthCalledWith(6, "write_artifact", { path: "/tmp/map.png", bytes: [1, 2] });
-    expect(mocks.invoke).toHaveBeenNthCalledWith(7, "save_project", { input: { name: "Saved", currentYear: 12, eras: [], timelineEvents: [] } });
-    expect(mocks.invoke).toHaveBeenNthCalledWith(8, "view_project_year", { year: 12 });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(7, "save_project", { input: { name: "Saved" } });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(8, "create_feature", {
+      input: { featureType: "city", name: "City", geometry: { type: "Point", coordinates: [1, 2] } },
+    });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(9, "revise_feature", {
+      input: { id: "feature-id", name: "New City", geometry: { type: "Point", coordinates: [2, 3] } },
+    });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(10, "delete_feature", { input: { id: "feature-id" } });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(11, "undo_project");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(12, "redo_project");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(13, "close_project");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(14, "get_open_project");
   });
 
   it("normalizes transfer export paths and preserves valid extension casing", async () => {
@@ -72,17 +79,16 @@ describe("Tauri Realm backend", () => {
 
   it("uses typed sparse-cell commands", async () => {
     await tauriRealmBackend.applyCellAttributes({
-      year: 12,
       cellIds: ["1:2", "2:2"],
-      attribute: "terrain_kind",
-      value: "mountain",
+      attribute: "forest",
+      value: "on",
     });
-    await tauriRealmBackend.viewCellAttributes({ year: 12, minX: 0, maxX: 10 });
+    await tauriRealmBackend.viewCellAttributes({ minX: 0, maxX: 10 });
     expect(mocks.invoke).toHaveBeenNthCalledWith(1, "apply_cell_attributes", {
-      input: { year: 12, cellIds: ["1:2", "2:2"], attribute: "terrain_kind", value: "mountain" },
+      input: { cellIds: ["1:2", "2:2"], attribute: "forest", value: "on" },
     });
     expect(mocks.invoke).toHaveBeenNthCalledWith(2, "view_cell_attributes", {
-      input: { year: 12, minX: 0, maxX: 10 },
+      input: { minX: 0, maxX: 10 },
     });
   });
 

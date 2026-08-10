@@ -11,7 +11,7 @@ description: Realmリポジトリの変更・コミット・外部操作で、�
 4. 調査では読み取り専用を保ち、push、tag、Release、画面起動を推測しない。ユーザーが現在の依頼で画面起動そのものを明示していなければ、Realm、browser、その他のGUI appやwindowを起動せず、起動しなければ確認できない事項は未確認として報告する。
 5. 起動を伴うtestは、ユーザーが現在の依頼で画面起動そのものを明示した場合だけ`Realmをテスト起動.command`または`script/build_and_run.sh`から開発版を起動して行い、build・package・install済みappを使わない。実装、修正、test、確認、E2E、screenshotなどの依頼だけを起動許可として扱わない。
 6. 実ユーザーの.realmmapをtest、fixture、Gitへ使わず、一時領域の合成dataだけを使う。
-7. local-only、macOS arm64、単一SQLite、手動編集、年履歴、生成なしを守る。
+7. local-only、macOS arm64、単一SQLite、現在状態、手動編集、生成なしを守る。
 8. 秘密情報、個人情報、内部URL、ローカル絶対pathを成果物とcommitへ含めない。
 9. 完了前に最新指示、全差分、test、docs、未実施操作を照合する。
 10. commitは全作業と検証後、最終報告直前だけrealm-commitへ渡す。
