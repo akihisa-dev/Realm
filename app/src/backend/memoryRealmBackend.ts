@@ -3,6 +3,9 @@ import type {
   FeatureType,
   GeoJsonGeometry,
   RealmBackend,
+  CellAttribute,
+  CellAttributeSnapshot,
+  CellViewportInput,
   RealmFeature,
   RealmSnapshot,
   ReviseFeatureInput,
@@ -17,11 +20,20 @@ type MemoryRevision = {
   deleted: boolean;
 };
 
+type MemoryCellRevision = {
+  cellId: string;
+  attribute: CellAttribute;
+  year: number;
+  sequence: number;
+  value: string | null;
+  deleted: boolean;
+};
+
 type MemoryFeature = { id: string; featureType: FeatureType; revisions: MemoryRevision[] };
-type MemoryProject = { snapshot: RealmSnapshot; features: Map<string, MemoryFeature> };
+type MemoryProject = { snapshot: RealmSnapshot; features: Map<string, MemoryFeature>; cells: MemoryCellRevision[] };
 
 const makeSnapshot = (path: string, name: string, currentYear = 0): RealmSnapshot => ({
-  formatVersion: 1,
+  formatVersion: 2,
   path,
   world: { id: crypto.randomUUID(), name, currentYear },
   eras: [],
@@ -35,6 +47,7 @@ const makeSnapshot = (path: string, name: string, currentYear = 0): RealmSnapsho
 const cloneProject = (project: MemoryProject): MemoryProject => ({
   snapshot: structuredClone(project.snapshot),
   features: new Map([...project.features].map(([id, feature]) => [id, structuredClone(feature)])),
+  cells: structuredClone(project.cells),
 });
 
 const storedProject = (snapshot: RealmSnapshot): MemoryProject => ({
@@ -50,6 +63,7 @@ const storedProject = (snapshot: RealmSnapshot): MemoryProject => ({
       deleted: false,
     }],
   }])),
+  cells: [],
 });
 
 const snapshotAt = (project: MemoryProject, year: number): RealmSnapshot => {
@@ -147,6 +161,61 @@ export class MemoryRealmBackend implements RealmBackend {
 
   async viewProjectYear(year: number): Promise<RealmSnapshot> {
     return this.result(this.openProjectState(), year);
+  }
+
+  async applyCellAttributes(input: {
+    year: number;
+    cellIds: string[];
+    attribute: CellAttribute;
+    value: string | null;
+  }): Promise<RealmSnapshot> {
+    const project = this.openProjectState();
+    const cellIds = [...new Set(input.cellIds)];
+    if (cellIds.length === 0) throw new Error("セルを選択してください。");
+    if (cellIds.some((cellId) => {
+      const match = /^(\d+):(\d+)$/u.exec(cellId);
+      if (!match) return true;
+      const x = Number(match[1]);
+      const y = Number(match[2]);
+      return !Number.isInteger(x) || !Number.isInteger(y) || x < 0 || x >= 512 || y < 0 || y >= 256;
+    })) throw new Error("セルの指定が不正です。");
+    if (input.value !== null && input.value.trim().length === 0) throw new Error("属性値を入力してください。");
+    this.checkpoint(project);
+    const sequence = Math.max(-1, ...project.cells.filter((cell) => cell.year === input.year).map((cell) => cell.sequence)) + 1;
+    for (const cellId of cellIds) {
+      project.cells.push({
+        cellId,
+        attribute: input.attribute,
+        year: input.year,
+        sequence,
+        value: input.value?.trim() ?? null,
+        deleted: input.value === null,
+      });
+    }
+    project.snapshot.world.currentYear = input.year;
+    return this.result(project, input.year);
+  }
+
+  async viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]> {
+    const project = this.openProjectState();
+    const minX = Math.max(0, input.minX ?? 0);
+    const maxX = Math.min(511, input.maxX ?? 511);
+    const minY = Math.max(0, input.minY ?? 0);
+    const maxY = Math.min(255, input.maxY ?? 255);
+    const latest = new Map<string, MemoryCellRevision>();
+    for (const revision of project.cells) {
+      const [xText, yText] = revision.cellId.split(":");
+      const x = Number(xText);
+      const y = Number(yText);
+      if (revision.year > input.year || x < minX || x > maxX || y < minY || y > maxY) continue;
+      const key = `${revision.cellId}:${revision.attribute}`;
+      const previous = latest.get(key);
+      if (!previous || revision.year > previous.year || (revision.year === previous.year && revision.sequence > previous.sequence)) latest.set(key, revision);
+    }
+    return [...latest.values()]
+      .filter((revision) => !revision.deleted && revision.value !== null)
+      .sort((left, right) => left.cellId.localeCompare(right.cellId) || left.attribute.localeCompare(right.attribute))
+      .map((revision) => ({ cellId: revision.cellId, attribute: revision.attribute, value: revision.value ?? "", validFromYear: revision.year }));
   }
 
   async createFeature(input: CreateFeatureInput): Promise<RealmSnapshot> {

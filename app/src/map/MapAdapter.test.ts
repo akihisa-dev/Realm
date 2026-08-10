@@ -1,4 +1,4 @@
-import { RealmMapAdapter } from "./MapAdapter";
+import { CELL_GRID_CELL_COUNT, RealmMapAdapter, cellIdsWithinPolygon } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -7,8 +7,17 @@ import Graticule from "ol/layer/Graticule";
 import VectorLayer from "ol/layer/Vector";
 import Draw from "ol/interaction/Draw";
 import Style from "ol/style/Style";
+import CircleStyle from "ol/style/Circle";
+import Polygon from "ol/geom/Polygon";
 
 describe("RealmMapAdapter", () => {
+  it("uses stable x:y cell ids and selects grid centers inside a lasso polygon", () => {
+    const polygon = new Polygon([[[-1, -1], [1, -1], [1, 1], [-1, 1], [-1, -1]]]);
+    const ids = cellIdsWithinPolygon(polygon);
+    expect(ids).toContain("256:128");
+    expect(ids.every((id) => /^\d+:\d+$/.test(id))).toBe(true);
+  });
+
   it("creates a bounded world view and disposes its OpenLayers target", () => {
     const host = document.createElement("div");
     host.style.width = "640px";
@@ -53,6 +62,7 @@ describe("RealmMapAdapter", () => {
     expect(regionStyle.getText()?.getText()).toBe("Region");
     expect(regionStyle.getStroke()?.getLineDash()).toEqual([5, 4]);
     adapter.setSelected("city-1");
+    adapter.setSelectedCells(["0:0"]);
     adapter.setMode("river");
     const riverDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
     expect(riverDraw).toBeInstanceOf(Draw);
@@ -72,6 +82,38 @@ describe("RealmMapAdapter", () => {
     expect(interactions.some((interaction) => interaction instanceof MouseWheelZoom)).toBe(true);
     expect(interactions.some((interaction) => interaction instanceof KeyboardPan)).toBe(true);
     expect(interactions.some((interaction) => interaction instanceof KeyboardZoom)).toBe(true);
+
+    adapter.setMode("cell-select");
+    const cellLayer = adapter.getMap().getLayers().item(3) as VectorLayer;
+    expect(cellLayer.getVisible()).toBe(true);
+    expect(cellLayer.getSource()?.getFeatures()).toHaveLength(CELL_GRID_CELL_COUNT);
+    adapter.setCellAttributes([
+      { cellId: "1:0", attribute: "forest", value: "forest", validFromYear: 0 },
+      { cellId: "2:0", attribute: "terrain_kind", value: "mountain", validFromYear: 0 },
+      { cellId: "3:0", attribute: "country", value: "A", validFromYear: 0 },
+      { cellId: "4:0", attribute: "region", value: "B", validFromYear: 0 },
+    ]);
+    const cellStyleFunction = cellLayer.getStyleFunction();
+    const forestCell = cellLayer.getSource()?.getFeatureById("1:0");
+    const forestStyle = (cellStyleFunction?.(forestCell!, 1) as Style[])[0]!;
+    expect((forestStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#3f7c55");
+    const mountainCell = cellLayer.getSource()?.getFeatureById("2:0");
+    const mountainStyle = (cellStyleFunction?.(mountainCell!, 1) as Style[])[0]!;
+    expect((mountainStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#8b7754");
+    const cellDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
+    expect(cellDraw).toBeInstanceOf(Draw);
+    expect((cellDraw as Draw).getFreehand()).toBe(true);
+    expect(interactions.find((interaction) => interaction instanceof DragPan)?.getActive()).toBe(false);
+    expect(interactions.find((interaction) => interaction instanceof KeyboardPan)?.getActive()).toBe(false);
+    const onCellSelect = vi.fn();
+    const stopCellSelect = adapter.onCellSelect(onCellSelect);
+    adapter.setSelectedCells(["0:0"]);
+    host.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(onCellSelect).toHaveBeenCalledWith([]);
+    stopCellSelect();
+    adapter.setMode("pan");
+    expect(cellLayer.getVisible()).toBe(true);
+    expect(cellStyleFunction?.(mountainCell!, 1)).toBeInstanceOf(Array);
     adapter.setZoom(3);
     expect(adapter.getZoom()).toBe(3);
     adapter.setZoom(99);

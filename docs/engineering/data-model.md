@@ -4,7 +4,7 @@
 
 Each map project is one SQLite file ending in `.realmmap`. The file is the portable project artifact. SQLite journal/WAL sidecars may exist while the project is open and are not separate user documents.
 
-Schema version 1 records the same value in `PRAGMA user_version` and `schema_migrations`; disagreement is corruption. Version 1 is the first supported format, so no implicit version-0 migration exists. A read-only preflight rejects newer versions, partial SQLite files, integrity failures, and schema objects whose columns, declared types, nullability, keys, indexes, foreign keys, checks, or append-only triggers do not preserve the version-1 invariants before opening a read/write connection. Future migrations must use an explicit old-version fixture and leave the source untouched on failure.
+Schema version 2 records the same value in `PRAGMA user_version` and `schema_migrations`; disagreement is corruption. Version 1 is the first supported format, so no implicit version-0 migration exists. Opening a valid version-1 project adds the version-2 cell tables in one transaction without rewriting its feature revisions. A read-only preflight rejects newer versions, partial SQLite files, integrity failures, and schema objects whose columns, declared types, nullability, keys, indexes, foreign keys, checks, or append-only triggers do not preserve the declared version before opening a read/write connection. Migrations use explicit old-version fixtures and leave the source untouched on failure.
 
 ## Identity and time
 
@@ -23,11 +23,19 @@ Country and region polygons are independent political overlays on the same world
 
 Timeline-event storage is part of schema version 1 because chronology is confirmed product scope. The project save command transactionally replaces the complete editable era and timeline-event lists while preserving their stable identifiers. Events with the same start year receive deterministic order from their submitted list order.
 
+## Cell grid and attributes
+
+Schema version 2 adds a fixed EPSG:4326 grid of 512 columns by 256 rows. A cell has no stored GeoJSON: its stable `x:y` identifier and grid version derive its center coordinate and bounds. A freehand lasso selects every cell whose center lies inside the completed polygon, so the result is deterministic and independent of display zoom.
+
+Cell attributes are independent layers. `terrain_kind`, `forest`, `country`, and `region` may coexist on one cell; changing or clearing one layer does not replace the others. `mountain` is a `terrain_kind` value rather than a tenth feature class. Country and region values are local labels and remain independent from legacy country and region polygons.
+
+Each lasso application writes one cell edit operation and a revision for every affected cell in one transaction. Revisions use the same inclusive view-year and deterministic same-year ordering rules as features. Clearing an attribute appends a deleted state. Undo and redo compensate the complete batch rather than updating or deleting prior rows.
+
 ## Edit behavior
 
 Manual edits append or supersede revisions inside a transaction. Database triggers prevent updates and deletes of revision rows; deletion is a new revision with a deleted state, not an immediate loss of historical rows. A user can inspect earlier years after later edits. Geometry is JSON validated by SQLite and is documented as GeoJSON in EPSG:4326. Image import is outside the product boundary.
 
-Feature undo and redo append compensating revisions through the same transaction boundary. Metadata undo and redo restore the prior world, era, and event state transactionally. Undo stacks belong to the open Rust project session and are cleared when a project is opened again; they are not a second persisted history format.
+Feature and cell-batch undo and redo append compensating revisions through the same transaction boundary. Metadata undo and redo restore the prior world, era, and event state transactionally. Undo stacks belong to the open Rust project session and are cleared when a project is opened again; they are not a second persisted history format.
 
 ## Compatibility
 

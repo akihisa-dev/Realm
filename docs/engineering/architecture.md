@@ -21,10 +21,10 @@ Rust command boundary ── validation ── revision service
 
 - Rust owns the opened project path, SQLite transaction, migration state, stable identifiers, persisted revision data, and session undo/redo stacks.
 - React owns transient selection, viewport, tool mode, and unsaved form state.
-- OpenLayers owns only rendering and interaction objects derived from the current view-year snapshot; map objects are not an additional source of truth. Completed draw and modify gestures cross the renderer boundary as GeoJSON geometry, and the resulting authoritative Rust snapshot replaces the derived layer.
+- OpenLayers owns only rendering and interaction objects derived from the current view year; map objects are not an additional source of truth. Completed feature draw and modify gestures cross the renderer boundary as GeoJSON geometry. A completed cell lasso crosses as stable cell IDs, while the lasso and selection remain transient React/OpenLayers state.
 - A view-year change reads a consistent snapshot and replaces derived layers atomically from the UI's perspective.
 
-The coarse IPC surface creates, opens, saves, closes, and reads a project; reads a complete snapshot for a view year; creates, revises, and deletes one completed feature edit; and performs undo or redo. Save replaces the editable world fields and complete era and timeline-event lists in one Rust transaction and returns the authoritative snapshot, including Rust-generated IDs. Feature commands accept complete validated GeoJSON geometry rather than SQL-shaped or per-coordinate IPC calls.
+The coarse IPC surface creates, opens, saves, closes, and reads a project; reads a complete feature snapshot for a view year; creates, revises, and deletes one completed feature edit; applies one cell-attribute batch; reads active cell attributes for a year and optional grid viewport; and performs undo or redo. Save replaces the editable world fields and complete era and timeline-event lists in one Rust transaction and returns the authoritative snapshot, including Rust-generated IDs. Feature commands accept complete validated GeoJSON geometry, while cell commands accept bounded stable IDs rather than SQL-shaped or per-coordinate calls.
 
 Tauri imports are isolated in `app/src/backend/tauriRealmBackend.ts`. The browser-only memory backend implements the same interface for deterministic UI tests without pretending to be a second persistence format.
 

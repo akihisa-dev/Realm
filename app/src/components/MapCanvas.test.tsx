@@ -29,8 +29,11 @@ describe("MapZoomControls", () => {
       setFeatures: vi.fn(),
       setMode: vi.fn(),
       setSelected: vi.fn(),
+      setSelectedCells: vi.fn(),
+      setCellAttributes: vi.fn(),
       onDraw: vi.fn(() => vi.fn()),
       onSelect: vi.fn(() => vi.fn()),
+      onCellSelect: vi.fn(() => vi.fn()),
       onModify: vi.fn(() => vi.fn()),
       onZoomChange: vi.fn((listener) => {
         zoomListener = listener;
@@ -63,6 +66,12 @@ describe("MapZoomControls", () => {
     expect(screen.getByText("地図上でマウスまたはトラックパッドを押したままドラッグし、線または領域を描きます。")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
     expect(renderer.setMode).toHaveBeenLastCalledWith("river");
+
+    rerender(<MapCanvas mode="cell-select" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(screen.getByText("地図上で押したまま自由に囲むと、囲ったセルを選択します。Escapeで選択を解除できます。")).toBeInTheDocument();
+    expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
+    rerender(<MapCanvas mode="cell-select" selectedCellIds={["256:128"]} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(renderer.setSelectedCells).toHaveBeenLastCalledWith(["256:128"]);
 
     rerender(<MapCanvas mode="city" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("地図上をクリックして点を配置します。")).toBeInTheDocument();

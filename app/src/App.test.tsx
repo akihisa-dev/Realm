@@ -3,7 +3,7 @@ import { MemoryRealmBackend, type RealmBackend, type RealmSnapshot } from "./bac
 import App from "./App";
 
 const emptySnapshot: RealmSnapshot = {
-  formatVersion: 1,
+  formatVersion: 2,
   path: "browser://test.realmmap",
   world: { id: "world-test", name: "テスト世界", currentYear: 0 },
   eras: [],
@@ -61,6 +61,8 @@ describe("Realm start and editor workflow", () => {
       deleteFeature: async () => emptySnapshot,
       undoProject: async () => emptySnapshot,
       redoProject: async () => emptySnapshot,
+      applyCellAttributes: async () => emptySnapshot,
+      viewCellAttributes: async () => [],
       closeProject: async () => undefined,
       getOpenProject: async () => null,
     };
@@ -111,6 +113,8 @@ describe("Realm start and editor workflow", () => {
       deleteFeature: async () => emptySnapshot,
       undoProject: async () => emptySnapshot,
       redoProject: async () => emptySnapshot,
+      applyCellAttributes: async () => emptySnapshot,
+      viewCellAttributes: async () => [],
       closeProject: async () => undefined,
       getOpenProject: async () => new Promise((resolve) => { resolveOpenProject = resolve; }),
     };

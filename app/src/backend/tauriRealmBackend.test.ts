@@ -14,7 +14,7 @@ import { chooseTauriProjectPath, tauriRealmBackend } from "./tauriRealmBackend";
 import type { RealmSnapshot } from "./types";
 
 const snapshot: RealmSnapshot = {
-  formatVersion: 1,
+  formatVersion: 2,
   path: "/tmp/test.realmmap",
   world: { id: "world-test", name: "Test", currentYear: 0 },
   eras: [],
@@ -67,6 +67,22 @@ describe("Tauri Realm backend", () => {
       defaultPath: "無題の世界.realmmap",
       filters: [{ name: "Realm map", extensions: ["realmmap"] }],
     }));
+  });
+
+  it("uses typed sparse-cell commands", async () => {
+    await tauriRealmBackend.applyCellAttributes({
+      year: 12,
+      cellIds: ["1:2", "2:2"],
+      attribute: "terrain_kind",
+      value: "mountain",
+    });
+    await tauriRealmBackend.viewCellAttributes({ year: 12, minX: 0, maxX: 10 });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(1, "apply_cell_attributes", {
+      input: { year: 12, cellIds: ["1:2", "2:2"], attribute: "terrain_kind", value: "mountain" },
+    });
+    expect(mocks.invoke).toHaveBeenNthCalledWith(2, "view_cell_attributes", {
+      input: { year: 12, minX: 0, maxX: 10 },
+    });
   });
 
   it("returns null for cancelled or non-file dialog results", async () => {

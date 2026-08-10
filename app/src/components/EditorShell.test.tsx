@@ -9,13 +9,15 @@ vi.mock("./MapCanvas", () => ({
     selectedFeatureId,
     onDraw,
     onSelect,
+    onCellSelect,
     onModify,
   }: {
-    mode: "pan" | FeatureType;
+    mode: "pan" | "cell-select" | FeatureType;
     features: RealmSnapshot["features"];
     selectedFeatureId: string | null;
     onDraw: (geometry: GeoJsonGeometry) => void;
     onSelect: (id: string | null) => void;
+    onCellSelect: (ids: readonly string[]) => void;
     onModify: (id: string, geometry: GeoJsonGeometry) => void;
   }) => {
     const geometry = mode === "city" || mode === "town"
@@ -26,6 +28,7 @@ vi.mock("./MapCanvas", () => ({
     return <div role="region" aria-label="世界地図">
       <button type="button" onClick={() => onDraw(geometry)}>テスト描画</button>
       <button type="button" onClick={() => onSelect(features[0]?.id ?? null)}>テスト選択</button>
+      <button type="button" onClick={() => onCellSelect(["256:128", "257:128"])}>テストセル選択</button>
       <button type="button" onClick={() => { if (selectedFeatureId) onModify(selectedFeatureId, geometry); }}>テスト変形</button>
     </div>;
   },
@@ -67,6 +70,34 @@ describe("EditorShell feature workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "やり直す" }));
     await waitFor(() => expect(screen.getByText("地物はまだありません")).toBeInTheDocument());
     confirm.mockRestore();
+  });
+
+  it("selects cells and sends explicit attribute apply/clear commands", async () => {
+    const backend = new MemoryRealmBackend();
+    const initial = await backend.createProject({ path: "browser://cells.realmmap", name: "Cells" });
+    const applyCellAttributes = vi.fn(async () => backend.getOpenProject().then((next) => next!));
+    const cellBackend = Object.assign(backend, { applyCellAttributes });
+    render(<Harness backend={cellBackend} initial={initial} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "セル選択" }));
+    fireEvent.click(screen.getByRole("button", { name: "テストセル選択" }));
+    expect(screen.getByText("2件")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "適用" }));
+    await waitFor(() => expect(applyCellAttributes).toHaveBeenCalledWith({
+      year: 0,
+      cellIds: ["256:128", "257:128"],
+      attribute: "terrain_kind",
+      value: "mountain",
+    }));
+    expect(screen.getByText("2件")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "解除" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "解除" }));
+    await waitFor(() => expect(applyCellAttributes).toHaveBeenLastCalledWith({
+      year: 0,
+      cellIds: ["256:128", "257:128"],
+      attribute: "terrain_kind",
+      value: null,
+    }));
   });
 
   it("explains drag drawing for line and area tools", async () => {

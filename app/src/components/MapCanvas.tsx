@@ -3,21 +3,25 @@ import {
   createRealmMapRenderer,
   type RealmMapRenderer,
   type RealmMapRendererFactory,
+  type RealmMapMode,
 } from "../map/MapAdapter";
 import { Crosshair } from "@phosphor-icons/react/dist/csr/Crosshair";
 import { Hand } from "@phosphor-icons/react/dist/csr/Hand";
 import { Minus } from "@phosphor-icons/react/dist/csr/Minus";
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
-import type { FeatureType, GeoJsonGeometry, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, GeoJsonGeometry, RealmFeature } from "../backend";
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;
   zoom?: number;
   features?: RealmFeature[];
-  mode?: "pan" | FeatureType;
+  mode?: RealmMapMode;
   selectedFeatureId?: string | null;
+  selectedCellIds?: readonly string[];
+  cellAttributes?: readonly CellAttributeSnapshot[];
   onDraw?: (geometry: GeoJsonGeometry) => void;
   onSelect?: (featureId: string | null) => void;
+  onCellSelect?: (cellIds: readonly string[]) => void;
   onModify?: (featureId: string, geometry: GeoJsonGeometry) => void;
   createRenderer?: RealmMapRendererFactory;
 };
@@ -28,8 +32,11 @@ export function MapCanvas({
   features = [],
   mode = "pan",
   selectedFeatureId = null,
+  selectedCellIds = [],
+  cellAttributes = [],
   onDraw,
   onSelect,
+  onCellSelect,
   onModify,
   createRenderer = createRealmMapRenderer,
 }: MapCanvasProps) {
@@ -38,10 +45,13 @@ export function MapCanvas({
   const onZoomChangeRef = useRef(onZoomChange);
   const onDrawRef = useRef(onDraw);
   const onSelectRef = useRef(onSelect);
+  const onCellSelectRef = useRef(onCellSelect);
   const onModifyRef = useRef(onModify);
   const mapHelp = mode === "pan"
     ? "ドラッグまたは矢印キーで移動し、ホイールまたはプラス・マイナスキーで拡大縮小できます。"
-    : mode === "city" || mode === "town"
+    : mode === "cell-select"
+      ? "地図上で押したまま自由に囲むと、囲ったセルを選択します。Escapeで選択を解除できます。"
+      : mode === "city" || mode === "town"
       ? "地図上をクリックして点を配置します。"
       : "地図上でマウスまたはトラックパッドを押したままドラッグし、線または領域を描きます。";
 
@@ -51,6 +61,7 @@ export function MapCanvas({
 
   useEffect(() => { onDrawRef.current = onDraw; }, [onDraw]);
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
+  useEffect(() => { onCellSelectRef.current = onCellSelect; }, [onCellSelect]);
   useEffect(() => { onModifyRef.current = onModify; }, [onModify]);
 
   useEffect(() => {
@@ -61,6 +72,8 @@ export function MapCanvas({
   useEffect(() => { adapterRef.current?.setFeatures(features); }, [features]);
   useEffect(() => { adapterRef.current?.setMode(mode); }, [mode]);
   useEffect(() => { adapterRef.current?.setSelected(selectedFeatureId); }, [selectedFeatureId]);
+  useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [selectedCellIds]);
+  useEffect(() => { adapterRef.current?.setCellAttributes(cellAttributes); }, [cellAttributes]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -71,10 +84,13 @@ export function MapCanvas({
     const stopZoomListener = adapter.onZoomChange((nextZoom) => onZoomChangeRef.current(nextZoom));
     const stopDrawListener = adapter.onDraw((geometry) => onDrawRef.current?.(geometry));
     const stopSelectListener = adapter.onSelect((featureId) => onSelectRef.current?.(featureId));
+    const stopCellSelectListener = adapter.onCellSelect((cellIds) => onCellSelectRef.current?.(cellIds));
     const stopModifyListener = adapter.onModify((featureId, geometry) => onModifyRef.current?.(featureId, geometry));
     adapter.setFeatures(features);
     adapter.setMode(mode);
     adapter.setSelected(selectedFeatureId);
+    adapter.setSelectedCells(selectedCellIds);
+    adapter.setCellAttributes(cellAttributes);
     onZoomChangeRef.current(adapter.getZoom());
 
     const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => adapter.updateSize());
@@ -85,6 +101,7 @@ export function MapCanvas({
       stopZoomListener();
       stopDrawListener();
       stopSelectListener();
+      stopCellSelectListener();
       stopModifyListener();
       adapter.dispose();
       adapterRef.current = null;

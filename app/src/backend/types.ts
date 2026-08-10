@@ -8,6 +8,7 @@ export type Era = {
 export type EraInput = Omit<Era, "id"> & { id: string | null };
 
 export type FeatureType = "terrain" | "forest" | "river" | "coastline" | "country" | "region" | "boundary" | "city" | "town";
+export type CellAttribute = "terrain_kind" | "forest" | "country" | "region";
 
 export type Position = [number, number];
 export type GeoJsonGeometry =
@@ -51,6 +52,28 @@ export type RealmSnapshot = {
   canRedo: boolean;
 };
 
+export type CellAttributeSnapshot = {
+  cellId: string;
+  attribute: CellAttribute;
+  value: string;
+  validFromYear: number;
+};
+
+export type ApplyCellAttributesInput = {
+  year: number;
+  cellIds: string[];
+  attribute: CellAttribute;
+  value: string | null;
+};
+
+export type CellViewportInput = {
+  year: number;
+  minX?: number;
+  maxX?: number;
+  minY?: number;
+  maxY?: number;
+};
+
 export type SaveProjectInput = {
   name: string;
   currentYear: number;
@@ -77,6 +100,8 @@ export interface RealmBackend {
   deleteFeature(input: { id: string; validFromYear: number }): Promise<RealmSnapshot>;
   undoProject(): Promise<RealmSnapshot>;
   redoProject(): Promise<RealmSnapshot>;
+  applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot>;
+  viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]>;
   closeProject(): Promise<void>;
   getOpenProject(): Promise<RealmSnapshot | null>;
 }

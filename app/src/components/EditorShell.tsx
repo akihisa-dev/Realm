@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   errorMessage,
+  type CellAttribute,
+  type CellAttributeSnapshot,
   type EraInput,
   type FeatureType,
   type GeoJsonGeometry,
@@ -50,6 +52,7 @@ const MAX_YEAR = 2_147_483_647;
 const TIMELINE_SPAN = 5_000;
 const TIMELINE_STEP = 1_000;
 const INTEGER_YEAR = /^-?\d+$/;
+const CellAttributeSelect = "select";
 
 const parseYear = (value: string): number | null => {
   const trimmed = value.trim();
@@ -140,13 +143,18 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
   const [timelineEvents, setTimelineEvents] = useState<EditableTimelineEvent[]>(() => editableEvents(snapshot));
   const [selectedEventKey, setSelectedEventKey] = useState<string | null>(snapshot.timelineEvents[0]?.id ?? null);
   const [selectedFeatureId, setSelectedFeatureId] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<"pan" | FeatureType>("pan");
+  const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
+  const [cellAttributes, setCellAttributes] = useState<CellAttributeSnapshot[]>([]);
+  const [activeTool, setActiveTool] = useState<"pan" | "cell-select" | FeatureType>("pan");
+  const [cellAttribute, setCellAttribute] = useState<CellAttribute>("terrain_kind");
+  const [cellAttributeValue, setCellAttributeValue] = useState("mountain");
   const [featureName, setFeatureName] = useState("新しい地物");
   const [zoom, setZoom] = useState(1);
   const [saving, setSaving] = useState(false);
   const [operating, setOperating] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const viewSequence = useRef(0);
+  const cellAttributeSequence = useRef(0);
 
   useLayoutEffect(() => {
     const nextEras = editableEras(snapshot);
@@ -230,6 +238,21 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
       });
     return () => { active = false; };
   }, [backend, parsedCurrentYear]);
+
+  useEffect(() => {
+    if (parsedCurrentYear === null) return undefined;
+    const operation = ++cellAttributeSequence.current;
+    let active = true;
+    setCellAttributes([]);
+    void backend.viewCellAttributes({ year: parsedCurrentYear })
+      .then((next) => {
+        if (active && cellAttributeSequence.current === operation) setCellAttributes(next);
+      })
+      .catch((cause: unknown) => {
+        if (active && cellAttributeSequence.current === operation) setSaveError(errorMessage(cause, "セル属性を読み込めませんでした。"));
+      });
+    return () => { active = false; };
+  }, [backend, parsedCurrentYear, viewedSnapshot]);
 
   const setViewYear = (year: number) => {
     const nextYear = Math.min(MAX_YEAR, Math.max(MIN_YEAR, year));
@@ -349,7 +372,7 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
   };
 
   const createDrawnFeature = (geometry: GeoJsonGeometry) => {
-    if (activeTool === "pan" || parsedCurrentYear === null) return;
+    if (activeTool === "pan" || activeTool === "cell-select" || parsedCurrentYear === null) return;
     if (dirty) {
       setSaveError("地物を編集する前に世界と年表の変更を保存してください。");
       return;
@@ -371,6 +394,28 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
       setActiveTool("pan");
       return next;
     }, "地物を作成できませんでした。");
+  };
+
+  const updateCellAttributeValue = (attribute: CellAttribute) => {
+    setCellAttribute(attribute);
+    setCellAttributeValue(attribute === "terrain_kind" ? "mountain" : attribute === "forest" ? "forest" : attribute === "country" ? "新しい国" : "新しい地域");
+  };
+
+  const effectiveCellAttributeValue = cellAttribute === "terrain_kind" ? "mountain" : cellAttribute === "forest" ? "forest" : cellAttributeValue.trim();
+
+  const applyCellAttribute = (value: string | null) => {
+    if (selectedCellIds.length === 0 || parsedCurrentYear === null) {
+      setSaveError("先に地図上でセルを選択してください。");
+      return;
+    }
+    if (dirty) {
+      setSaveError("セルを編集する前に世界と年表の変更を保存してください。");
+      return;
+    }
+    void runMutation(
+      () => backend.applyCellAttributes({ year: parsedCurrentYear, cellIds: [...selectedCellIds], attribute: cellAttribute, value }),
+      "セル属性を変更できませんでした。",
+    );
   };
 
   const reviseFeature = (feature: RealmFeature, geometry = feature.geometry) => {
@@ -433,9 +478,10 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
 
       <div className="editor-body">
         <aside className="left-rail" aria-label="主要ナビゲーション">
-          <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => setActiveTool("pan")} disabled={locked}><GlobeHemisphereWest aria-hidden="true" size={25} weight="regular" /><span>移動</span></button>
+          <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => { setActiveTool("pan"); setSelectedCellIds([]); }} disabled={locked}><GlobeHemisphereWest aria-hidden="true" size={25} weight="regular" /><span>移動</span></button>
+          <button className={activeTool === "cell-select" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "cell-select"} onClick={() => { setActiveTool("cell-select"); setSelectedCellIds([]); setSelectedFeatureId(null); }} disabled={locked || dirty}><span className="feature-tool-mark" aria-hidden="true" /><span>セル選択</span></button>
           {FEATURE_TYPES.map(({ type, label }) => (
-            <button key={type} className={activeTool === type ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === type} onClick={() => { setActiveTool(type); setFeatureName(`新しい${label}`); setSelectedFeatureId(null); }} disabled={locked || dirty}><span className="feature-tool-mark" aria-hidden="true" /> <span>{label}</span></button>
+            <button key={type} className={activeTool === type ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === type} onClick={() => { setActiveTool(type); setSelectedCellIds([]); setFeatureName(`新しい${label}`); setSelectedFeatureId(null); }} disabled={locked || dirty}><span className="feature-tool-mark" aria-hidden="true" /> <span>{label}</span></button>
           ))}
         </aside>
         <aside className="world-sidebar" aria-label="世界の構成">
@@ -460,6 +506,21 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
                 : `地図上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を描いてください。`}</p>
             ) : null}
             {selectedFeature ? <div className="feature-editor-actions"><button type="button" onClick={() => reviseFeature(selectedFeature)} disabled={locked || dirty}>名前を保存</button><button type="button" className="danger-action" onClick={() => { if (parsedCurrentYear !== null && window.confirm("この年以降から地物を削除しますか？")) void runMutation(() => backend.deleteFeature({ id: selectedFeature.id, validFromYear: parsedCurrentYear }), "地物を削除できませんでした。"); }} disabled={locked || dirty}>削除</button></div> : null}
+          </section>
+          <section className="cell-inspector" aria-label="選択セルの属性編集">
+            <h3>選択セル</h3>
+            <p aria-live="polite">{selectedCellIds.length}件</p>
+            <label>属性<CellAttributeSelect value={cellAttribute} onChange={(event) => updateCellAttributeValue(event.target.value as CellAttribute)} disabled={locked}>
+              <option value="terrain_kind">地形: 山地</option>
+              <option value="forest">森林</option>
+              <option value="country">国</option>
+              <option value="region">地域</option>
+            </CellAttributeSelect></label>
+            <label>値<input value={cellAttributeValue} onChange={(event) => setCellAttributeValue(event.target.value)} disabled={locked || cellAttribute === "terrain_kind" || cellAttribute === "forest"} maxLength={200} /></label>
+            <div className="feature-editor-actions">
+              <button type="button" onClick={() => applyCellAttribute(effectiveCellAttributeValue || null)} disabled={locked || dirty || selectedCellIds.length === 0 || !effectiveCellAttributeValue}>適用</button>
+              <button type="button" className="danger-action" onClick={() => applyCellAttribute(null)} disabled={locked || dirty || selectedCellIds.length === 0}>解除</button>
+            </div>
           </section>
           <section className="era-list" aria-labelledby="era-list-title">
             <h3 id="era-list-title">時代</h3>
@@ -507,8 +568,11 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
             features={viewedSnapshot.features}
             mode={dirty ? "pan" : activeTool}
             selectedFeatureId={selectedFeatureId}
+            selectedCellIds={selectedCellIds}
+            cellAttributes={cellAttributes}
             onDraw={createDrawnFeature}
             onSelect={selectFeature}
+            onCellSelect={(cellIds) => { setSelectedCellIds([...cellIds]); setSelectedFeatureId(null); }}
             onModify={(featureId, geometry) => {
               const feature = viewedSnapshot.features.find((candidate) => candidate.id === featureId);
               if (feature) reviseFeature(feature, geometry);

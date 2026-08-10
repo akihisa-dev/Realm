@@ -2,6 +2,10 @@ import { MemoryRealmBackend } from "./memoryRealmBackend";
 import { chooseTauriProjectPath, tauriRealmBackend } from "./tauriRealmBackend";
 
 export type {
+  ApplyCellAttributesInput,
+  CellAttribute,
+  CellAttributeSnapshot,
+  CellViewportInput,
   CreateFeatureInput,
   Era,
   EraInput,

@@ -71,4 +71,20 @@ describe("MemoryRealmBackend", () => {
     expect((await backend.viewProjectYear(-1)).features).toHaveLength(9);
     expect((await backend.viewProjectYear(10)).features).toHaveLength(0);
   });
+
+  it("applies sparse cell attributes by layer and keeps grouped undo parity", async () => {
+    const backend = new MemoryRealmBackend();
+    await backend.createProject({ path: "browser://cells.realmmap", name: "Cells" });
+    await backend.applyCellAttributes({ year: -10, cellIds: ["1:2", "2:2", "1:2"], attribute: "terrain_kind", value: "mountain" });
+    await backend.applyCellAttributes({ year: -10, cellIds: ["1:2"], attribute: "forest", value: "on" });
+    await expect(backend.viewCellAttributes({ year: -10 })).resolves.toHaveLength(3);
+    await backend.applyCellAttributes({ year: 0, cellIds: ["1:2"], attribute: "terrain_kind", value: null });
+    expect(await backend.viewCellAttributes({ year: 0, minX: 1, maxX: 1, minY: 2, maxY: 2 })).toEqual([
+      expect.objectContaining({ cellId: "1:2", attribute: "forest", value: "on" }),
+    ]);
+    await backend.undoProject();
+    expect(await backend.viewCellAttributes({ year: 0, minX: 1, maxX: 1, minY: 2, maxY: 2 })).toHaveLength(2);
+    await backend.redoProject();
+    expect(await backend.viewCellAttributes({ year: 0, minX: 1, maxX: 1, minY: 2, maxY: 2 })).toHaveLength(1);
+  });
 });

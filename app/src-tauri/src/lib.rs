@@ -18,7 +18,10 @@ use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
 
-const CURRENT_SCHEMA_VERSION: i32 = 1;
+const CURRENT_SCHEMA_VERSION: i32 = 2;
+const GRID_VERSION: i32 = 1;
+const GRID_COLUMNS: i32 = 512;
+const GRID_ROWS: i32 = 256;
 const PROJECT_EXTENSION: &str = "realmmap";
 
 #[derive(Clone, Copy)]
@@ -69,6 +72,29 @@ const FEATURE_REVISION_COLUMNS: &[ColumnExpectation] = &[
     column("sequence", "INTEGER", true, false),
     column("name", "TEXT", true, false),
     column("geometry_json", "TEXT", false, false),
+    column("deleted", "INTEGER", true, false),
+];
+const CELL_GRID_COLUMNS: &[ColumnExpectation] = &[
+    column("id", "INTEGER", true, true),
+    column("grid_version", "INTEGER", true, false),
+    column("grid_columns", "INTEGER", true, false),
+    column("grid_rows", "INTEGER", true, false),
+];
+const CELL_OPERATION_COLUMNS: &[ColumnExpectation] = &[
+    column("id", "TEXT", true, true),
+    column("valid_from_year", "INTEGER", true, false),
+    column("sequence", "INTEGER", true, false),
+];
+const CELL_REVISION_COLUMNS: &[ColumnExpectation] = &[
+    column("id", "INTEGER", false, true),
+    column("operation_id", "TEXT", true, false),
+    column("grid_version", "INTEGER", true, false),
+    column("cell_x", "INTEGER", true, false),
+    column("cell_y", "INTEGER", true, false),
+    column("layer", "TEXT", true, false),
+    column("valid_from_year", "INTEGER", true, false),
+    column("sequence", "INTEGER", true, false),
+    column("value", "TEXT", false, false),
     column("deleted", "INTEGER", true, false),
 ];
 const TIMELINE_EVENT_COLUMNS: &[ColumnExpectation] = &[
@@ -161,6 +187,36 @@ pub enum FeatureType {
     Town,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CellLayer {
+    TerrainKind,
+    Forest,
+    Country,
+    Region,
+}
+
+impl CellLayer {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::TerrainKind => "terrain_kind",
+            Self::Forest => "forest",
+            Self::Country => "country",
+            Self::Region => "region",
+        }
+    }
+
+    fn from_storage(value: &str) -> Result<Self, AppError> {
+        match value {
+            "terrain_kind" => Ok(Self::TerrainKind),
+            "forest" => Ok(Self::Forest),
+            "country" => Ok(Self::Country),
+            "region" => Ok(Self::Region),
+            _ => Err(corrupt_schema()),
+        }
+    }
+}
+
 impl FeatureType {
     fn as_str(self) -> &'static str {
         match self {
@@ -234,6 +290,34 @@ pub struct ProjectSnapshot {
     pub can_redo: bool,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CellAttributeSnapshot {
+    pub cell_id: String,
+    pub attribute: CellLayer,
+    pub value: String,
+    pub valid_from_year: i32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyCellAttributesInput {
+    pub year: i32,
+    pub cell_ids: Vec<String>,
+    pub attribute: CellLayer,
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CellViewportInput {
+    pub year: i32,
+    pub min_x: Option<i32>,
+    pub max_x: Option<i32>,
+    pub min_y: Option<i32>,
+    pub max_y: Option<i32>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveEraInput {
@@ -288,6 +372,21 @@ pub struct DeleteFeatureInput {
 }
 
 #[derive(Debug, Clone)]
+struct CellRevisionState {
+    value: Option<String>,
+    deleted: bool,
+}
+
+#[derive(Debug, Clone)]
+struct CellEditChange {
+    x: i32,
+    y: i32,
+    layer: CellLayer,
+    before: Option<CellRevisionState>,
+    after: CellRevisionState,
+}
+
+#[derive(Debug, Clone)]
 struct FeatureRevisionState {
     name: String,
     geometry_json: Option<String>,
@@ -313,6 +412,10 @@ enum EditOperation {
     Metadata {
         before: MetadataState,
         after: MetadataState,
+    },
+    CellAttributes {
+        year: i32,
+        changes: Vec<CellEditChange>,
     },
 }
 
@@ -689,6 +792,73 @@ fn schema_sql(transaction: &Transaction<'_>) -> Result<(), AppError> {
         BEGIN
             SELECT RAISE(ABORT, 'feature revisions are append-only');
         END;
+        CREATE TABLE IF NOT EXISTS cell_grid (
+            id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+            grid_version INTEGER NOT NULL CHECK (grid_version = 1),
+            grid_columns INTEGER NOT NULL CHECK (grid_columns = 512),
+            grid_rows INTEGER NOT NULL CHECK (grid_rows = 256)
+        );
+        CREATE TABLE IF NOT EXISTS cell_edit_operations (
+            id TEXT PRIMARY KEY NOT NULL,
+            valid_from_year INTEGER NOT NULL,
+            sequence INTEGER NOT NULL CHECK (sequence >= 0),
+            UNIQUE (valid_from_year, sequence)
+        );
+        CREATE TABLE IF NOT EXISTS cell_attribute_revisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            operation_id TEXT NOT NULL REFERENCES cell_edit_operations(id),
+            grid_version INTEGER NOT NULL CHECK (grid_version = 1),
+            cell_x INTEGER NOT NULL CHECK (cell_x >= 0 AND cell_x < 512),
+            cell_y INTEGER NOT NULL CHECK (cell_y >= 0 AND cell_y < 256),
+            layer TEXT NOT NULL CHECK (layer IN ('terrain_kind','forest','country','region')),
+            valid_from_year INTEGER NOT NULL,
+            sequence INTEGER NOT NULL CHECK (sequence >= 0),
+            value TEXT,
+            deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
+            UNIQUE (grid_version, cell_x, cell_y, layer, valid_from_year, sequence)
+        );
+        CREATE INDEX IF NOT EXISTS cell_attribute_revisions_lookup
+            ON cell_attribute_revisions(
+                grid_version, cell_x, cell_y, layer, valid_from_year DESC, sequence DESC
+            );
+        CREATE INDEX IF NOT EXISTS cell_attribute_revisions_view
+            ON cell_attribute_revisions(valid_from_year, sequence);
+        CREATE TRIGGER IF NOT EXISTS cell_attribute_revision_sequence_monotonic
+        BEFORE INSERT ON cell_attribute_revisions
+        WHEN EXISTS (
+            SELECT 1 FROM cell_attribute_revisions AS previous
+            WHERE previous.grid_version = NEW.grid_version
+              AND previous.cell_x = NEW.cell_x
+              AND previous.cell_y = NEW.cell_y
+              AND previous.layer = NEW.layer
+              AND previous.valid_from_year = NEW.valid_from_year
+              AND NEW.sequence <= previous.sequence
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'cell revision sequence must increase');
+        END;
+        CREATE TRIGGER IF NOT EXISTS cell_attribute_revision_no_update
+        BEFORE UPDATE ON cell_attribute_revisions
+        BEGIN
+            SELECT RAISE(ABORT, 'cell attribute revisions are append-only');
+        END;
+        CREATE TRIGGER IF NOT EXISTS cell_attribute_revision_no_delete
+        BEFORE DELETE ON cell_attribute_revisions
+        BEGIN
+            SELECT RAISE(ABORT, 'cell attribute revisions are append-only');
+        END;
+        CREATE TRIGGER IF NOT EXISTS cell_edit_operation_no_update
+        BEFORE UPDATE ON cell_edit_operations
+        BEGIN
+            SELECT RAISE(ABORT, 'cell edit operations are append-only');
+        END;
+        CREATE TRIGGER IF NOT EXISTS cell_edit_operation_no_delete
+        BEFORE DELETE ON cell_edit_operations
+        BEGIN
+            SELECT RAISE(ABORT, 'cell edit operations are append-only');
+        END;
+        INSERT OR IGNORE INTO cell_grid(id, grid_version, grid_columns, grid_rows)
+            VALUES (1, 1, 512, 256);
         /* Geometry is GeoJSON in EPSG:4326; revisions are append-only and deletions are states. */
         ",
     )
@@ -724,7 +894,7 @@ fn initialize_schema_transaction(
         )
         .map_err(AppError::from)?;
     transaction
-        .execute_batch("PRAGMA user_version = 1;")
+        .execute_batch(&format!("PRAGMA user_version = {CURRENT_SCHEMA_VERSION};"))
         .map_err(AppError::from)?;
     transaction
         .execute(
@@ -784,7 +954,7 @@ fn index_columns(connection: &Connection, index: &str) -> Result<Vec<String>, Ap
         .map_err(AppError::from)
 }
 
-fn verify_schema(connection: &Connection) -> Result<(), AppError> {
+fn verify_base_schema(connection: &Connection) -> Result<(), AppError> {
     let required_columns = [
         ("schema_migrations", SCHEMA_MIGRATION_COLUMNS),
         ("world", WORLD_COLUMNS),
@@ -942,6 +1112,183 @@ fn verify_schema(connection: &Connection) -> Result<(), AppError> {
         }
     }
     Ok(())
+}
+
+fn verify_cell_schema(connection: &Connection) -> Result<(), AppError> {
+    let required_columns = [
+        ("cell_grid", CELL_GRID_COLUMNS),
+        ("cell_edit_operations", CELL_OPERATION_COLUMNS),
+        ("cell_attribute_revisions", CELL_REVISION_COLUMNS),
+    ];
+    for (table, expected) in required_columns {
+        let pragma = format!("PRAGMA table_info({table})");
+        let mut statement = connection.prepare(&pragma).map_err(AppError::from)?;
+        let found = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)? != 0,
+                    row.get::<_, i64>(5)? != 0,
+                ))
+            })
+            .map_err(AppError::from)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(AppError::from)?;
+        if found.len() != expected.len()
+            || found.iter().zip(expected).any(
+                |((name, declared_type, not_null, primary_key), expected)| {
+                    name != expected.name
+                        || !declared_type.eq_ignore_ascii_case(expected.declared_type)
+                        || *not_null != expected.not_null
+                        || *primary_key != expected.primary_key
+                },
+            )
+        {
+            return Err(corrupt_schema());
+        }
+    }
+
+    let grid_sql = normalized_object_sql(connection, "table", "cell_grid")?;
+    for invariant in [
+        "check (id = 1)",
+        "check (grid_version = 1)",
+        "check (grid_columns = 512)",
+        "check (grid_rows = 256)",
+    ] {
+        if !grid_sql.contains(invariant) {
+            return Err(corrupt_schema());
+        }
+    }
+    let operation_sql = normalized_object_sql(connection, "table", "cell_edit_operations")?;
+    for invariant in [
+        "check (sequence >= 0)",
+        "unique (valid_from_year, sequence)",
+    ] {
+        if !operation_sql.contains(invariant) {
+            return Err(corrupt_schema());
+        }
+    }
+    let revision_sql = normalized_object_sql(connection, "table", "cell_attribute_revisions")?;
+    for invariant in [
+        "check (grid_version = 1)",
+        "check (cell_x >= 0 and cell_x < 512)",
+        "check (cell_y >= 0 and cell_y < 256)",
+        "check (layer in ('terrain_kind','forest','country','region'))",
+        "check (sequence >= 0)",
+        "check (deleted in (0, 1))",
+        "unique (grid_version, cell_x, cell_y, layer, valid_from_year, sequence)",
+    ] {
+        if !revision_sql.contains(invariant) {
+            return Err(corrupt_schema());
+        }
+    }
+    for (index, expected) in [
+        (
+            "cell_attribute_revisions_lookup",
+            &[
+                "grid_version",
+                "cell_x",
+                "cell_y",
+                "layer",
+                "valid_from_year",
+                "sequence",
+            ][..],
+        ),
+        (
+            "cell_attribute_revisions_view",
+            &["valid_from_year", "sequence"][..],
+        ),
+    ] {
+        if index_columns(connection, index)? != expected {
+            return Err(corrupt_schema());
+        }
+    }
+
+    let mut foreign_keys = connection
+        .prepare("PRAGMA foreign_key_list(cell_attribute_revisions)")
+        .map_err(AppError::from)?;
+    let foreign_keys = foreign_keys
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+            ))
+        })
+        .map_err(AppError::from)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::from)?;
+    if foreign_keys
+        != vec![(
+            "cell_edit_operations".to_owned(),
+            "operation_id".to_owned(),
+            "id".to_owned(),
+            "NO ACTION".to_owned(),
+            "NO ACTION".to_owned(),
+        )]
+    {
+        return Err(corrupt_schema());
+    }
+    for (trigger, invariants) in [
+        (
+            "cell_attribute_revision_sequence_monotonic",
+            &[
+                "before insert on cell_attribute_revisions",
+                "previous.cell_x = new.cell_x",
+                "previous.cell_y = new.cell_y",
+                "previous.layer = new.layer",
+                "new.sequence <= previous.sequence",
+            ][..],
+        ),
+        (
+            "cell_attribute_revision_no_update",
+            &[
+                "before update on cell_attribute_revisions",
+                "cell attribute revisions are append-only",
+            ][..],
+        ),
+        (
+            "cell_attribute_revision_no_delete",
+            &[
+                "before delete on cell_attribute_revisions",
+                "cell attribute revisions are append-only",
+            ][..],
+        ),
+        (
+            "cell_edit_operation_no_update",
+            &[
+                "before update on cell_edit_operations",
+                "cell edit operations are append-only",
+            ][..],
+        ),
+        (
+            "cell_edit_operation_no_delete",
+            &[
+                "before delete on cell_edit_operations",
+                "cell edit operations are append-only",
+            ][..],
+        ),
+    ] {
+        let sql = normalized_object_sql(connection, "trigger", trigger)?;
+        if invariants.iter().any(|invariant| !sql.contains(invariant)) {
+            return Err(corrupt_schema());
+        }
+    }
+    let grid_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM cell_grid", [], |row| row.get(0))
+        .map_err(AppError::from)?;
+    if grid_count != 1 {
+        return Err(corrupt_schema());
+    }
+    Ok(())
+}
+
+fn verify_schema(connection: &Connection) -> Result<(), AppError> {
+    verify_base_schema(connection)?;
+    verify_cell_schema(connection)
 }
 
 fn project_snapshot_at(
@@ -1140,14 +1487,18 @@ fn validate_existing_schema(connection: &Connection) -> Result<(), AppError> {
             "The project schema versions do not agree.",
         ));
     }
-    if user_version != CURRENT_SCHEMA_VERSION {
+    if user_version < 1 {
         return Err(AppError::new(
             "unsupported_schema",
             "This project uses an unsupported older Realm format.",
         ));
     }
 
-    verify_schema(connection)?;
+    if user_version == 1 {
+        verify_base_schema(connection)?;
+    } else {
+        verify_schema(connection)?;
+    }
     let world_count: i64 = connection
         .query_row("SELECT COUNT(*) FROM world", [], |row| row.get(0))
         .map_err(AppError::from)?;
@@ -1158,6 +1509,95 @@ fn validate_existing_schema(connection: &Connection) -> Result<(), AppError> {
         ));
     }
     Ok(())
+}
+
+fn migrate_schema(connection: &mut Connection, from_version: i32) -> Result<(), AppError> {
+    if from_version == CURRENT_SCHEMA_VERSION {
+        return Ok(());
+    }
+    if from_version != 1 {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses an unsupported older Realm format.",
+        ));
+    }
+    let transaction = connection.transaction().map_err(AppError::from)?;
+    transaction
+        .execute_batch(
+            "
+            CREATE TABLE cell_grid (
+                id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+                grid_version INTEGER NOT NULL CHECK (grid_version = 1),
+                grid_columns INTEGER NOT NULL CHECK (grid_columns = 512),
+                grid_rows INTEGER NOT NULL CHECK (grid_rows = 256)
+            );
+            CREATE TABLE cell_edit_operations (
+                id TEXT PRIMARY KEY NOT NULL,
+                valid_from_year INTEGER NOT NULL,
+                sequence INTEGER NOT NULL CHECK (sequence >= 0),
+                UNIQUE (valid_from_year, sequence)
+            );
+            CREATE TABLE cell_attribute_revisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                operation_id TEXT NOT NULL REFERENCES cell_edit_operations(id),
+                grid_version INTEGER NOT NULL CHECK (grid_version = 1),
+                cell_x INTEGER NOT NULL CHECK (cell_x >= 0 AND cell_x < 512),
+                cell_y INTEGER NOT NULL CHECK (cell_y >= 0 AND cell_y < 256),
+                layer TEXT NOT NULL CHECK (layer IN ('terrain_kind','forest','country','region')),
+                valid_from_year INTEGER NOT NULL,
+                sequence INTEGER NOT NULL CHECK (sequence >= 0),
+                value TEXT,
+                deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted IN (0, 1)),
+                UNIQUE (grid_version, cell_x, cell_y, layer, valid_from_year, sequence)
+            );
+            CREATE INDEX cell_attribute_revisions_lookup
+                ON cell_attribute_revisions(
+                    grid_version, cell_x, cell_y, layer, valid_from_year DESC, sequence DESC
+                );
+            CREATE INDEX cell_attribute_revisions_view
+                ON cell_attribute_revisions(valid_from_year, sequence);
+            CREATE TRIGGER cell_attribute_revision_sequence_monotonic
+            BEFORE INSERT ON cell_attribute_revisions
+            WHEN EXISTS (
+                SELECT 1 FROM cell_attribute_revisions AS previous
+                WHERE previous.grid_version = NEW.grid_version
+                  AND previous.cell_x = NEW.cell_x
+                  AND previous.cell_y = NEW.cell_y
+                  AND previous.layer = NEW.layer
+                  AND previous.valid_from_year = NEW.valid_from_year
+                  AND NEW.sequence <= previous.sequence
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'cell revision sequence must increase');
+            END;
+            CREATE TRIGGER cell_attribute_revision_no_update
+            BEFORE UPDATE ON cell_attribute_revisions
+            BEGIN
+                SELECT RAISE(ABORT, 'cell attribute revisions are append-only');
+            END;
+            CREATE TRIGGER cell_attribute_revision_no_delete
+            BEFORE DELETE ON cell_attribute_revisions
+            BEGIN
+                SELECT RAISE(ABORT, 'cell attribute revisions are append-only');
+            END;
+            CREATE TRIGGER cell_edit_operation_no_update
+            BEFORE UPDATE ON cell_edit_operations
+            BEGIN
+                SELECT RAISE(ABORT, 'cell edit operations are append-only');
+            END;
+            CREATE TRIGGER cell_edit_operation_no_delete
+            BEFORE DELETE ON cell_edit_operations
+            BEGIN
+                SELECT RAISE(ABORT, 'cell edit operations are append-only');
+            END;
+            INSERT INTO cell_grid(id, grid_version, grid_columns, grid_rows)
+                VALUES (1, 1, 512, 256);
+            INSERT INTO schema_migrations(version) VALUES (2);
+            PRAGMA user_version = 2;
+            ",
+        )
+        .map_err(AppError::from)?;
+    transaction.commit().map_err(AppError::from)
 }
 
 fn open_connection(path: &Path) -> Result<Connection, AppError> {
@@ -1180,9 +1620,12 @@ fn open_connection(path: &Path) -> Result<Connection, AppError> {
     )
     .map_err(AppError::from)?;
     validate_existing_schema(&read_only)?;
+    let existing_version: i32 = read_only
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(AppError::from)?;
     drop(read_only);
 
-    let connection = Connection::open_with_flags(
+    let mut connection = Connection::open_with_flags(
         &path,
         OpenFlags::SQLITE_OPEN_READ_WRITE
             | OpenFlags::SQLITE_OPEN_NO_MUTEX
@@ -1190,6 +1633,7 @@ fn open_connection(path: &Path) -> Result<Connection, AppError> {
     )
     .map_err(AppError::from)?;
     configure_connection(&connection)?;
+    migrate_schema(&mut connection, existing_version)?;
     validate_existing_schema(&connection)?;
     Ok(connection)
 }
@@ -1463,6 +1907,195 @@ fn feature_type_for_id(connection: &Connection, feature_id: &str) -> Result<Feat
     FeatureType::from_storage(&stored)
 }
 
+fn parse_cell_id(value: &str) -> Result<(i32, i32), AppError> {
+    let mut parts = value.trim().split(':');
+    let x = parts
+        .next()
+        .and_then(|part| part.parse::<i32>().ok())
+        .ok_or_else(|| AppError::invalid("A cell identifier must use x:y coordinates."))?;
+    let y = parts
+        .next()
+        .and_then(|part| part.parse::<i32>().ok())
+        .ok_or_else(|| AppError::invalid("A cell identifier must use x:y coordinates."))?;
+    if parts.next().is_some() || !(0..GRID_COLUMNS).contains(&x) || !(0..GRID_ROWS).contains(&y) {
+        return Err(AppError::invalid(
+            "A cell identifier is outside the world grid.",
+        ));
+    }
+    Ok((x, y))
+}
+
+fn cell_id(x: i32, y: i32) -> String {
+    format!("{x}:{y}")
+}
+
+fn normalize_cell_ids(cell_ids: Vec<String>) -> Result<Vec<(i32, i32)>, AppError> {
+    if cell_ids.is_empty() {
+        return Err(AppError::invalid("At least one cell must be selected."));
+    }
+    if cell_ids.len() > 200_000 {
+        return Err(AppError::invalid("The cell selection is too large."));
+    }
+    let mut cells = cell_ids
+        .into_iter()
+        .map(|id| parse_cell_id(&id))
+        .collect::<Result<Vec<_>, _>>()?;
+    cells.sort_unstable();
+    cells.dedup();
+    Ok(cells)
+}
+
+fn validate_cell_value(layer: CellLayer, value: Option<&str>) -> Result<(), AppError> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    let value = value.trim();
+    if value.is_empty() || value.chars().count() > 200 {
+        return Err(AppError::invalid("A cell attribute value is invalid."));
+    }
+    // Cell labels remain independent from polygon features. This lets a user assign a
+    // temporary political name before drawing or revising its corresponding overlay.
+    let _ = layer;
+    Ok(())
+}
+
+fn latest_cell_state(
+    connection: &Connection,
+    x: i32,
+    y: i32,
+    layer: CellLayer,
+    year: i32,
+) -> Result<Option<CellRevisionState>, AppError> {
+    let result = connection.query_row(
+        "SELECT r.value, r.deleted
+         FROM cell_attribute_revisions AS r
+         JOIN cell_edit_operations AS o ON o.id = r.operation_id
+         WHERE r.grid_version = ?1 AND r.cell_x = ?2 AND r.cell_y = ?3
+           AND r.layer = ?4 AND o.valid_from_year <= ?5
+         ORDER BY o.valid_from_year DESC, o.sequence DESC, r.id DESC
+         LIMIT 1",
+        params![GRID_VERSION, x, y, layer.as_str(), year],
+        |row| {
+            Ok(CellRevisionState {
+                value: row.get(0)?,
+                deleted: row.get::<_, i64>(1)? != 0,
+            })
+        },
+    );
+    match result {
+        Ok(state) => Ok(Some(state)),
+        Err(SqlError::QueryReturnedNoRows) => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn append_cell_batch(
+    connection: &Connection,
+    year: i32,
+    changes: &[CellEditChange],
+) -> Result<(), AppError> {
+    if changes.is_empty() {
+        return Err(AppError::invalid("At least one cell must be selected."));
+    }
+    let sequence: i64 = connection
+        .query_row(
+            "SELECT COALESCE(MAX(sequence), -1) + 1
+             FROM cell_edit_operations WHERE valid_from_year = ?1",
+            [year],
+            |row| row.get(0),
+        )
+        .map_err(AppError::from)?;
+    let operation_id = Uuid::new_v4().to_string();
+    connection
+        .execute(
+            "INSERT INTO cell_edit_operations(id, valid_from_year, sequence)
+             VALUES (?1, ?2, ?3)",
+            params![operation_id, year, sequence],
+        )
+        .map_err(AppError::from)?;
+    for change in changes {
+        let state = &change.after;
+        connection
+            .execute(
+                "INSERT INTO cell_attribute_revisions(
+                    operation_id, grid_version, cell_x, cell_y, layer,
+                    valid_from_year, sequence, value, deleted
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    operation_id,
+                    GRID_VERSION,
+                    change.x,
+                    change.y,
+                    change.layer.as_str(),
+                    year,
+                    sequence,
+                    state.value.as_deref(),
+                    i64::from(state.deleted),
+                ],
+            )
+            .map_err(AppError::from)?;
+    }
+    Ok(())
+}
+
+fn cell_attributes_snapshot(
+    project: &OpenProject,
+    input: CellViewportInput,
+) -> Result<Vec<CellAttributeSnapshot>, AppError> {
+    validate_year(input.year)?;
+    let min_x = input.min_x.unwrap_or(0).max(0);
+    let max_x = input
+        .max_x
+        .unwrap_or(GRID_COLUMNS - 1)
+        .min(GRID_COLUMNS - 1);
+    let min_y = input.min_y.unwrap_or(0).max(0);
+    let max_y = input.max_y.unwrap_or(GRID_ROWS - 1).min(GRID_ROWS - 1);
+    if min_x > max_x || min_y > max_y {
+        return Err(AppError::invalid("The cell viewport is invalid."));
+    }
+    let mut query = project
+        .connection
+        .prepare(
+            "SELECT r.cell_x, r.cell_y, r.layer, r.value, o.valid_from_year
+         FROM cell_attribute_revisions AS r
+         JOIN cell_edit_operations AS o ON o.id = r.operation_id
+         WHERE r.grid_version = ?1 AND r.cell_x BETWEEN ?2 AND ?3
+           AND r.cell_y BETWEEN ?4 AND ?5 AND o.valid_from_year <= ?6
+           AND r.id = (
+             SELECT latest.id
+             FROM cell_attribute_revisions AS latest
+             JOIN cell_edit_operations AS latest_op ON latest_op.id = latest.operation_id
+             WHERE latest.grid_version = r.grid_version
+               AND latest.cell_x = r.cell_x AND latest.cell_y = r.cell_y
+               AND latest.layer = r.layer
+               AND latest_op.valid_from_year <= ?6
+             ORDER BY latest_op.valid_from_year DESC, latest_op.sequence DESC, latest.id DESC
+             LIMIT 1
+           ) AND r.deleted = 0 AND r.value IS NOT NULL
+         ORDER BY r.cell_y, r.cell_x, r.layer",
+        )
+        .map_err(AppError::from)?;
+    let rows = query
+        .query_map(
+            params![GRID_VERSION, min_x, max_x, min_y, max_y, input.year],
+            |row| {
+                let layer_value: String = row.get(2)?;
+                let layer = CellLayer::from_storage(&layer_value)
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?;
+                Ok(CellAttributeSnapshot {
+                    cell_id: cell_id(row.get(0)?, row.get(1)?),
+                    attribute: layer,
+                    value: row.get(3)?,
+                    valid_from_year: row.get(4)?,
+                })
+            },
+        )
+        .map_err(AppError::from)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(AppError::from)?;
+    Ok(rows)
+}
+
 fn save_project_in_state(
     state: &AppState,
     input: SaveProjectInput,
@@ -1514,6 +2147,75 @@ fn view_project_year(
     year: i32,
 ) -> Result<ProjectSnapshot, AppError> {
     view_project_year_in_state(state.inner(), year)
+}
+
+fn apply_cell_attributes_in_state(
+    state: &AppState,
+    input: ApplyCellAttributesInput,
+) -> Result<ProjectSnapshot, AppError> {
+    validate_year(input.year)?;
+    let cells = normalize_cell_ids(input.cell_ids)?;
+    let mut open = lock_project(state)?;
+    let project = open
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
+    validate_cell_value(input.attribute, input.value.as_deref())?;
+    let value = input.value.map(|value| value.trim().to_owned());
+    let after = CellRevisionState {
+        deleted: value.is_none(),
+        value,
+    };
+    let changes = cells
+        .into_iter()
+        .map(|(x, y)| {
+            Ok(CellEditChange {
+                x,
+                y,
+                layer: input.attribute,
+                before: latest_cell_state(&project.connection, x, y, input.attribute, input.year)?,
+                after: after.clone(),
+            })
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
+    let transaction = project.connection.transaction().map_err(AppError::from)?;
+    append_cell_batch(&transaction, input.year, &changes)?;
+    transaction
+        .execute("UPDATE world SET current_year = ?1", [input.year])
+        .map_err(AppError::from)?;
+    transaction.commit().map_err(AppError::from)?;
+    project.undo_stack.push(EditOperation::CellAttributes {
+        year: input.year,
+        changes,
+    });
+    project.redo_stack.clear();
+    project_snapshot_at(project, Some(input.year))
+}
+
+#[tauri::command]
+fn apply_cell_attributes(
+    state: tauri::State<'_, AppState>,
+    input: ApplyCellAttributesInput,
+) -> Result<ProjectSnapshot, AppError> {
+    apply_cell_attributes_in_state(state.inner(), input)
+}
+
+fn view_cell_attributes_in_state(
+    state: &AppState,
+    input: CellViewportInput,
+) -> Result<Vec<CellAttributeSnapshot>, AppError> {
+    let open = lock_project(state)?;
+    let project = open
+        .as_ref()
+        .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
+    cell_attributes_snapshot(project, input)
+}
+
+#[tauri::command]
+fn view_cell_attributes(
+    state: tauri::State<'_, AppState>,
+    input: CellViewportInput,
+) -> Result<Vec<CellAttributeSnapshot>, AppError> {
+    view_cell_attributes_in_state(state.inner(), input)
 }
 
 fn create_feature_in_state(
@@ -1695,6 +2397,35 @@ fn apply_edit_operation(
             apply_metadata(project, state)?;
             Ok(state.current_year)
         }
+        EditOperation::CellAttributes { year, changes } => {
+            let compensating = changes
+                .iter()
+                .map(|change| {
+                    let after = if forward {
+                        change.after.clone()
+                    } else {
+                        change.before.clone().unwrap_or(CellRevisionState {
+                            value: None,
+                            deleted: true,
+                        })
+                    };
+                    CellEditChange {
+                        x: change.x,
+                        y: change.y,
+                        layer: change.layer,
+                        before: None,
+                        after,
+                    }
+                })
+                .collect::<Vec<_>>();
+            let transaction = project.connection.transaction().map_err(AppError::from)?;
+            append_cell_batch(&transaction, *year, &compensating)?;
+            transaction
+                .execute("UPDATE world SET current_year = ?1", [year])
+                .map_err(AppError::from)?;
+            transaction.commit().map_err(AppError::from)?;
+            Ok(*year)
+        }
     }
 }
 
@@ -1781,6 +2512,8 @@ pub fn run() {
             open_project,
             save_project,
             view_project_year,
+            apply_cell_attributes,
+            view_cell_attributes,
             create_feature,
             revise_feature,
             delete_feature,
@@ -2337,6 +3070,199 @@ mod tests {
             )
             .unwrap();
         assert_eq!(revision_count, 3);
+    }
+
+    #[test]
+    fn cell_attribute_batch_round_trips_layers_years_and_grouped_undo() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("cells.realmmap");
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(create_project_inner(path, "Cells").unwrap());
+
+        apply_cell_attributes_in_state(
+            &state,
+            ApplyCellAttributesInput {
+                year: -10,
+                cell_ids: vec!["1:2".into(), "2:2".into(), "1:2".into()],
+                attribute: CellLayer::TerrainKind,
+                value: Some("mountain".into()),
+            },
+        )
+        .unwrap();
+        apply_cell_attributes_in_state(
+            &state,
+            ApplyCellAttributesInput {
+                year: -10,
+                cell_ids: vec!["1:2".into()],
+                attribute: CellLayer::Forest,
+                value: Some("on".into()),
+            },
+        )
+        .unwrap();
+        let current = view_cell_attributes_in_state(
+            &state,
+            CellViewportInput {
+                year: -10,
+                min_x: None,
+                max_x: None,
+                min_y: None,
+                max_y: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(current.len(), 3);
+        assert!(
+            current
+                .iter()
+                .any(|cell| cell.cell_id == "1:2" && cell.attribute == CellLayer::Forest)
+        );
+
+        apply_cell_attributes_in_state(
+            &state,
+            ApplyCellAttributesInput {
+                year: 0,
+                cell_ids: vec!["1:2".into()],
+                attribute: CellLayer::TerrainKind,
+                value: None,
+            },
+        )
+        .unwrap();
+        let cleared = view_cell_attributes_in_state(
+            &state,
+            CellViewportInput {
+                year: 0,
+                min_x: Some(1),
+                max_x: Some(1),
+                min_y: Some(2),
+                max_y: Some(2),
+            },
+        )
+        .unwrap();
+        assert_eq!(cleared.len(), 1);
+        assert_eq!(cleared[0].attribute, CellLayer::Forest);
+
+        undo_project_in_state(&state).unwrap();
+        let restored = view_cell_attributes_in_state(
+            &state,
+            CellViewportInput {
+                year: 0,
+                min_x: Some(1),
+                max_x: Some(1),
+                min_y: Some(2),
+                max_y: Some(2),
+            },
+        )
+        .unwrap();
+        assert_eq!(restored.len(), 2);
+        redo_project_in_state(&state).unwrap();
+        assert_eq!(
+            view_cell_attributes_in_state(
+                &state,
+                CellViewportInput {
+                    year: 0,
+                    min_x: Some(1),
+                    max_x: Some(1),
+                    min_y: Some(2),
+                    max_y: Some(2),
+                },
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn v1_project_migrates_to_the_cell_schema_without_losing_features() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("v1.realmmap");
+        let project = create_project_inner(path.clone(), "Legacy").unwrap();
+        let feature_id = Uuid::new_v4().to_string();
+        project
+            .connection
+            .execute(
+                "INSERT INTO features(id, feature_type) VALUES (?1, 'terrain')",
+                [&feature_id],
+            )
+            .unwrap();
+        project
+            .connection
+            .execute(
+                "INSERT INTO feature_revisions(feature_id, valid_from_year, sequence, name, geometry_json, deleted)
+                 VALUES (?1, 0, 0, 'Legacy terrain', '{\"type\":\"Polygon\",\"coordinates\":[[[0,0],[1,0],[1,1],[0,0]]]}', 0)",
+                [&feature_id],
+            )
+            .unwrap();
+        project
+            .connection
+            .execute_batch(
+                "DROP TABLE cell_attribute_revisions;
+                 DROP TABLE cell_edit_operations;
+                 DROP TABLE cell_grid;
+                 DELETE FROM schema_migrations WHERE version = 2;
+                 INSERT INTO schema_migrations(version) VALUES (1);
+                 PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        drop(project);
+
+        let migrated = open_connection(&path).unwrap();
+        let migrated_project = OpenProject {
+            path,
+            connection: migrated,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+        };
+        assert_eq!(
+            project_snapshot(&migrated_project).unwrap().features.len(),
+            1
+        );
+        let version: i32 = migrated_project
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn failed_v1_cell_migration_rolls_back_without_changing_source_version() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("v1-failure.realmmap");
+        let project = create_project_inner(path.clone(), "Legacy").unwrap();
+        project
+            .connection
+            .execute_batch(
+                "DROP TABLE cell_attribute_revisions;
+                 DROP TABLE cell_edit_operations;
+                 DROP TABLE cell_grid;
+                 CREATE TABLE cell_grid(conflict INTEGER);
+                 DELETE FROM schema_migrations WHERE version = 2;
+                 INSERT INTO schema_migrations(version) VALUES (1);
+                 PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        drop(project);
+
+        assert!(open_connection(&path).is_err());
+        let connection = Connection::open(&path).unwrap();
+        let version: i32 = connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        let recorded: i32 = connection
+            .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 1);
+        assert_eq!(recorded, 1);
+        let columns: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('cell_grid')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(columns, 1);
     }
 
     #[test]
