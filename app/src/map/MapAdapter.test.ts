@@ -182,7 +182,7 @@ describe("RealmMapAdapter", () => {
     host.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
     expect(batch).not.toHaveBeenCalled();
-    expect(error).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledWith("feature_outside_world");
     const source = (adapter.getMap().getLayers().item(2) as VectorLayer).getSource();
     expect((source?.getFeatureById("edge")?.getGeometry() as Point).getCoordinates()).toEqual([180, 0]);
     adapter.dispose();
@@ -304,13 +304,22 @@ describe("RealmMapAdapter", () => {
     expect(polygon.type).toBe("Polygon");
     expect(polygon.coordinates[0]?.at(-1)).toEqual(polygon.coordinates[0]?.[0]);
 
+    const onError = vi.fn();
+    adapter.onError(onError);
+    draw.dispatchEvent({
+      type: "drawend",
+      feature: new Feature({ geometry: new Polygon([[[0, 0], [2, 2], [0, 2], [2, 0], [0, 0]]]) }),
+    } as never);
+    expect(onError).toHaveBeenCalledWith("drawing_self_intersection");
+    expect(onDraw).toHaveBeenCalledTimes(4);
+
     adapter.setMode("river");
     draw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw) as Draw;
     const abort = vi.spyOn(draw, "abortDrawing");
     host.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(abort).toHaveBeenCalledOnce();
-    expect(() => adapter.setDrawingOptions({ gesture: "freehand", smoothingPasses: 5, snapAngleDegrees: null })).toThrow(/Smoothing passes/);
-    expect(() => adapter.setDrawingOptions({ gesture: "freehand", smoothingPasses: 0, snapAngleDegrees: 0 })).toThrow(/Angle step/);
+    expect(() => adapter.setDrawingOptions({ gesture: "freehand", smoothingPasses: 5, snapAngleDegrees: null })).toThrow("drawing_smoothing");
+    expect(() => adapter.setDrawingOptions({ gesture: "freehand", smoothingPasses: 0, snapAngleDegrees: 0 })).toThrow("drawing_angle");
     adapter.dispose();
     host.remove();
   });

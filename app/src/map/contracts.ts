@@ -1,6 +1,7 @@
 import type { CellAttributeSnapshot, FeatureType, GeoJsonGeometry, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { MapThemeId, ThemeOverrides } from "./themes";
+import type { MapErrorCode } from "./errors";
 
 export type MapAdapterOptions = {
   target: HTMLElement;
@@ -56,7 +57,7 @@ export interface RealmMapRenderer {
   onEraseFeatures(listener: (featureIds: readonly string[]) => void): () => void;
   onErase(listener: (featureId: string) => void): () => void;
   onLayerShift(listener: (direction: -1 | 1) => void): () => void;
-  onError(listener: (message: string) => void): () => void;
+  onError(listener: (code: MapErrorCode) => void): () => void;
   onZoomChange(listener: (zoom: number) => void): () => void;
   updateSize(): void;
   exportRaster(mimeType: "image/png" | "image/jpeg", scale?: number, extent?: "viewport" | "world", size?: ExportCanvasSize): Promise<MapRaster>;

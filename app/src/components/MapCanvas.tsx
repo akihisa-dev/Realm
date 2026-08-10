@@ -9,6 +9,7 @@ import {
 import type { GeoJsonGeometry, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { ExportCanvasSize } from "../map/contracts";
+import type { MapErrorCode } from "../map/errors";
 import { DEFAULT_MAP_THEME_ID, type MapThemeId, type ThemeOverrides } from "../map/themes";
 
 export type TerrainMapMode = "pan" | "terrain" | "erase" | "polygon-hole";
@@ -33,7 +34,7 @@ type MapCanvasProps = {
   onErase?: (featureId: string) => void;
   onEraseFeatures?: (featureIds: readonly string[]) => void;
   onLayerShift?: (direction: -1 | 1) => void;
-  onError?: (message: string) => void;
+  onError?: (code: MapErrorCode) => void;
   createRenderer?: RealmMapRendererFactory;
   onExporterReady?: (exporter: ((mimeType: "image/png" | "image/jpeg", scale?: number, extent?: "viewport" | "world", size?: ExportCanvasSize) => Promise<MapRaster>) | null) => void;
 };
@@ -138,7 +139,7 @@ export function MapCanvas({
       if (!onEraseFeaturesRef.current) for (const id of featureIds) onEraseRef.current?.(id);
     });
     const stopLayerShiftListener = adapter.onLayerShift((direction) => onLayerShiftRef.current?.(direction));
-    const stopErrorListener = adapter.onError((message) => onErrorRef.current?.(message));
+    const stopErrorListener = adapter.onError((code) => onErrorRef.current?.(code));
     adapter.setFeatures(features);
     adapter.setTheme(themeId);
     adapter.setThemeOverrides(themeOverrides);

@@ -1,0 +1,34 @@
+{
+  "mapErrors": {
+    "drawing_coordinate_shape": "地形の座標を正しく読み取れませんでした。もう一度描いてください。",
+    "drawing_outside_world": "地形は地図の範囲内に描いてください。",
+    "drawing_coordinate_collection": "地形の輪郭を正しく読み取れませんでした。もう一度描いてください。",
+    "drawing_too_small": "地形が小さすぎます。輪郭が分かる大きさで描いてください。",
+    "drawing_ring_open": "地形の輪郭を閉じられませんでした。もう一度描いてください。",
+    "drawing_self_intersection": "地形の輪郭が交差しています。線が交差しないように描き直してください。",
+    "drawing_zero_area": "地形の面積が小さすぎます。輪郭が分かる大きさで描いてください。",
+    "drawing_line_too_short": "線が短すぎます。始点から離れた位置まで描いてください。",
+    "drawing_ring_too_short": "地形の輪郭が短すぎます。もう少し大きく描いてください。",
+    "drawing_invalid_geometry": "描いた地形を処理できませんでした。もう一度描いてください。",
+    "drawing_gesture": "地形の描き方の設定が正しくありません。",
+    "drawing_smoothing": "地形の描画設定が正しくありません。",
+    "drawing_unsupported_geometry": "この形状は地形として使用できません。",
+    "drawing_missing_ring": "地形の輪郭がありません。もう一度描いてください。",
+    "drawing_angle": "角度補正の設定が正しくありません。",
+    "drawing_zero_length": "線の長さがありません。始点から離れた位置まで描いてください。",
+    "feature_outside_world": "地形を地図の範囲外へ移動できません。"
+  },
+  "backendErrors": {
+    "corrupt_project": "世界データが壊れているか、Realmのデータではありません。",
+    "feature_locked": "ロックされている地形は変更できません。",
+    "invalid_input": "入力内容が正しくありません。",
+    "invalid_path": "指定された場所を使用できません。",
+    "no_open_project": "開いている世界がありません。",
+    "not_found": "対象が見つかりません。",
+    "nothing_to_redo": "やり直せる操作がありません。",
+    "nothing_to_undo": "元に戻せる操作がありません。",
+    "state_unavailable": "世界データを一時的に操作できません。もう一度お試しください。",
+    "storage_constraint": "世界データを更新できませんでした。",
+    "storage_error": "世界データを読み書きできませんでした。"
+  }
+}

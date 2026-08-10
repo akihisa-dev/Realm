@@ -1,5 +1,6 @@
 import { MemoryRealmBackend } from "./memoryRealmBackend";
 import { chooseTauriArtifactPath, chooseTauriTransferPath, tauriRealmBackend } from "./tauriRealmBackend";
+import { localizedErrorMessage } from "../locales/ja";
 
 export type {
   ApplyCellAttributesInput,
@@ -45,11 +46,4 @@ export const chooseTransferPath = async (mode: "import" | "export", suggestedNam
 export const chooseArtifactPath = async (format: "png" | "jpg" | "pdf", suggestedName: string): Promise<string | null> =>
   isTauriRuntime() ? chooseTauriArtifactPath(format, suggestedName) : null;
 
-export const errorMessage = (cause: unknown, fallback: string): string => {
-  if (cause instanceof Error && cause.message.trim()) return cause.message;
-  if (typeof cause === "object" && cause !== null && "message" in cause) {
-    const message = Reflect.get(cause, "message");
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return fallback;
-};
+export const errorMessage = localizedErrorMessage;

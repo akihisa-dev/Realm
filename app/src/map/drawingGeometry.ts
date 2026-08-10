@@ -1,4 +1,5 @@
 import type { FeatureType, GeoJsonGeometry, Position } from "../backend/types";
+import { DrawingGeometryError } from "./errors";
 
 /** Maximum number of coordinates retained for one line or polygon ring. */
 export const MAX_DRAW_COORDINATES = 4096;
@@ -24,7 +25,7 @@ const distanceSquared = (a: Position, b: Position): number => {
 
 const assertPosition = (value: unknown): Position => {
   if (!Array.isArray(value) || value.length !== 2) {
-    throw new Error("Geometry coordinates must contain longitude and latitude.");
+    throw new DrawingGeometryError("drawing_coordinate_shape");
   }
   const longitude = value[0];
   const latitude = value[1];
@@ -32,13 +33,13 @@ const assertPosition = (value: unknown): Position => {
     || !Number.isFinite(longitude) || !Number.isFinite(latitude)
     || longitude < WORLD_MIN_X || longitude > WORLD_MAX_X
     || latitude < WORLD_MIN_Y || latitude > WORLD_MAX_Y) {
-    throw new Error("Geometry coordinates must be finite and within the bounded world.");
+    throw new DrawingGeometryError("drawing_outside_world");
   }
   return [longitude, latitude];
 };
 
 const assertPositions = (values: unknown): Position[] => {
-  if (!Array.isArray(values)) throw new Error("Geometry coordinates must be an array.");
+  if (!Array.isArray(values)) throw new DrawingGeometryError("drawing_coordinate_collection");
   return values.map(assertPosition);
 };
 
@@ -92,7 +93,7 @@ const simplifyRamerDouglasPeucker = (positions: readonly Position[], tolerance: 
 const capCoordinates = (positions: readonly Position[], closed: boolean): Position[] => {
   if (positions.length <= MAX_DRAW_COORDINATES) return positions.map(([x, y]) => [x, y]);
   const target = closed ? MAX_DRAW_COORDINATES - 1 : MAX_DRAW_COORDINATES;
-  if (target < (closed ? 3 : 2)) throw new Error("The drawn geometry is too small to retain safely.");
+  if (target < (closed ? 3 : 2)) throw new DrawingGeometryError("drawing_too_small");
   const result: Position[] = [];
   for (let index = 0; index < target; index += 1) {
     const sourceIndex = Math.round((index * (positions.length - 1)) / (target - 1));
@@ -162,26 +163,26 @@ const segmentsIntersect = (a: Position, b: Position, c: Position, d: Position): 
 
 const assertRing = (ring: readonly Position[]): void => {
   if (ring.length < 4 || !samePosition(ring[0]!, ring[ring.length - 1]!)) {
-    throw new Error("Polygon rings must contain at least three points and be closed.");
+    throw new DrawingGeometryError("drawing_ring_open");
   }
   for (let first = 0; first < ring.length - 1; first += 1) {
     for (let second = first + 1; second < ring.length - 1; second += 1) {
       if (second === first + 1 || (first === 0 && second === ring.length - 2)) continue;
       if (segmentsIntersect(ring[first]!, ring[first + 1]!, ring[second]!, ring[second + 1]!)) {
-        throw new Error("Polygon rings must not self-intersect.");
+        throw new DrawingGeometryError("drawing_self_intersection");
       }
     }
   }
   if (Math.abs(signedArea(ring)) < MIN_POLYGON_AREA) {
-    throw new Error("Polygon rings must have a non-zero minimum area.");
+    throw new DrawingGeometryError("drawing_zero_area");
   }
 };
 
 const refineLine = (positions: readonly Position[], resolution: number, smoothingPasses: number): Position[] => {
-  if (positions.length < 2) throw new Error("LineString geometry must contain at least two points.");
+  if (positions.length < 2) throw new DrawingGeometryError("drawing_line_too_short");
   const simplified = simplifyRamerDouglasPeucker(positions, toleranceForResolution(resolution));
   if (simplified.length < 2 || samePosition(simplified[0]!, simplified[simplified.length - 1]!)) {
-    throw new Error("LineString geometry must contain two distinct points.");
+    throw new DrawingGeometryError("drawing_line_too_short");
   }
   let refined = simplified;
   for (let pass = 0; pass < smoothingPasses; pass += 1) refined = smoothOpenLine(refined);
@@ -189,13 +190,13 @@ const refineLine = (positions: readonly Position[], resolution: number, smoothin
 };
 
 const refineRing = (ring: readonly Position[], resolution: number, smoothingPasses: number): Position[] => {
-  if (ring.length < 3) throw new Error("Polygon rings must contain at least three points.");
+  if (ring.length < 3) throw new DrawingGeometryError("drawing_ring_too_short");
   const closed = ring.length > 1 && samePosition(ring[0]!, ring[ring.length - 1]!)
     ? ring.map(([x, y]) => [x, y] as Position)
     : [...ring, [...ring[0]!] as Position];
   assertRing(closed);
   const open = simplifyRamerDouglasPeucker(closed, toleranceForResolution(resolution)).slice(0, -1);
-  if (open.length < 3) throw new Error("Polygon rings must contain at least three distinct points.");
+  if (open.length < 3) throw new DrawingGeometryError("drawing_ring_too_short");
   let refined = [...open, open[0]!] as Position[];
   for (let pass = 0; pass < smoothingPasses; pass += 1) refined = smoothClosedRing(refined);
   const capped = capCoordinates(refined, true);
@@ -205,7 +206,7 @@ const refineRing = (ring: readonly Position[], resolution: number, smoothingPass
 
 const assertGeometryObject = (geometry: GeoJsonGeometry): void => {
   if (!geometry || typeof geometry !== "object" || !("type" in geometry)) {
-    throw new Error("Geometry must be a GeoJSON geometry object.");
+    throw new DrawingGeometryError("drawing_invalid_geometry");
   }
 };
 
@@ -217,7 +218,7 @@ const defaultSmoothingPasses = (featureType: FeatureType): number =>
 const resolveSmoothingPasses = (featureType: FeatureType, options?: DrawingRefinementOptions): number => {
   const smoothingPasses = options?.smoothingPasses ?? defaultSmoothingPasses(featureType);
   if (!Number.isInteger(smoothingPasses) || smoothingPasses < 0 || smoothingPasses > MAX_SMOOTHING_PASSES) {
-    throw new Error(`Smoothing passes must be an integer between 0 and ${MAX_SMOOTHING_PASSES}.`);
+    throw new DrawingGeometryError("drawing_smoothing");
   }
   return smoothingPasses;
 };
@@ -239,9 +240,9 @@ export const refineDrawnGeometry = (
     const positions = assertPositions(geometry.coordinates);
     return { type: "LineString", coordinates: refineLine(positions, resolution, smoothingPasses) };
   }
-  if (geometry.type !== "Polygon") throw new Error("Unsupported GeoJSON geometry type.");
+  if (geometry.type !== "Polygon") throw new DrawingGeometryError("drawing_unsupported_geometry");
   const rings = geometry.coordinates;
-  if (!Array.isArray(rings) || rings.length === 0) throw new Error("A polygon must contain at least one ring.");
+  if (!Array.isArray(rings) || rings.length === 0) throw new DrawingGeometryError("drawing_missing_ring");
   const coordinates = rings.map((rawRing) => refineRing(assertPositions(rawRing), resolution, smoothingPasses));
   return { type: "Polygon", coordinates };
 };
@@ -251,12 +252,12 @@ export const snapPositionToAngle = (previous: Position, next: Position, stepDegr
   const start = assertPosition(previous);
   const end = assertPosition(next);
   if (!Number.isFinite(stepDegrees) || stepDegrees <= 0 || stepDegrees > 360) {
-    throw new Error("Angle step must be finite and greater than 0 and at most 360 degrees.");
+    throw new DrawingGeometryError("drawing_angle");
   }
   const dx = end[0] - start[0];
   const dy = end[1] - start[1];
   const length = Math.hypot(dx, dy);
-  if (length === 0) throw new Error("Cannot snap a zero-length segment.");
+  if (length === 0) throw new DrawingGeometryError("drawing_zero_length");
   const stepRadians = stepDegrees * Math.PI / 180;
   const snappedAngle = Math.round(Math.atan2(dy, dx) / stepRadians) * stepRadians;
   const snapped: Position = [start[0] + Math.cos(snappedAngle) * length, start[1] + Math.sin(snappedAngle) * length];

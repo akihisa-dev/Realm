@@ -8,9 +8,9 @@ describe("refineDrawnGeometry", () => {
   });
 
   it("rejects non-finite and out-of-world coordinates", () => {
-    expect(() => refineDrawnGeometry("city", { type: "Point", coordinates: [Number.NaN, 0] }, 1)).toThrow(/finite/);
-    expect(() => refineDrawnGeometry("city", { type: "Point", coordinates: [181, 0] }, 1)).toThrow(/bounded world/);
-    expect(() => refineDrawnGeometry("river", { type: "LineString", coordinates: [[0, 0], [Infinity, 1]] }, 1)).toThrow(/finite/);
+    expect(() => refineDrawnGeometry("city", { type: "Point", coordinates: [Number.NaN, 0] }, 1)).toThrow("drawing_outside_world");
+    expect(() => refineDrawnGeometry("city", { type: "Point", coordinates: [181, 0] }, 1)).toThrow("drawing_outside_world");
+    expect(() => refineDrawnGeometry("river", { type: "LineString", coordinates: [[0, 0], [Infinity, 1]] }, 1)).toThrow("drawing_outside_world");
   });
 
   it("uses resolution-based RDP while preserving line endpoints", () => {
@@ -49,9 +49,9 @@ describe("refineDrawnGeometry", () => {
 
   it("rejects degenerate, tiny, and self-intersecting polygons", () => {
     expect(MIN_POLYGON_AREA).toBeGreaterThan(0);
-    expect(() => refineDrawnGeometry("country", { type: "Polygon", coordinates: [[[0, 0], [1, 0], [2, 0], [0, 0]]] }, 1)).toThrow(/area/);
-    expect(() => refineDrawnGeometry("country", { type: "Polygon", coordinates: [[[0, 0], [1e-6, 0], [0, 1e-6], [0, 0]]] }, 1)).toThrow(/area/);
-    expect(() => refineDrawnGeometry("country", { type: "Polygon", coordinates: [[[0, 0], [2, 2], [0, 2], [2, 0], [0, 0]]] }, 0.000_001)).toThrow(/self-intersect/);
+    expect(() => refineDrawnGeometry("country", { type: "Polygon", coordinates: [[[0, 0], [1, 0], [2, 0], [0, 0]]] }, 1)).toThrow("drawing_zero_area");
+    expect(() => refineDrawnGeometry("country", { type: "Polygon", coordinates: [[[0, 0], [1e-6, 0], [0, 1e-6], [0, 0]]] }, 1)).toThrow("drawing_zero_area");
+    expect(() => refineDrawnGeometry("country", { type: "Polygon", coordinates: [[[0, 0], [2, 2], [0, 2], [2, 0], [0, 0]]] }, 0.000_001)).toThrow("drawing_self_intersection");
   });
 
   it("caps large paths deterministically and retains the closure", () => {
@@ -69,8 +69,8 @@ describe("refineDrawnGeometry", () => {
   });
 
   it("rejects degenerate lines", () => {
-    expect(() => refineDrawnGeometry("river", { type: "LineString", coordinates: [[1, 1], [1, 1]] }, 1)).toThrow(/distinct/);
-    expect(() => refineDrawnGeometry("river", { type: "LineString", coordinates: [[1, 1]] }, 1)).toThrow(/two/);
+    expect(() => refineDrawnGeometry("river", { type: "LineString", coordinates: [[1, 1], [1, 1]] }, 1)).toThrow("drawing_line_too_short");
+    expect(() => refineDrawnGeometry("river", { type: "LineString", coordinates: [[1, 1]] }, 1)).toThrow("drawing_line_too_short");
   });
 
   it("allows corner-preserving smoothing and keeps the default equivalent", () => {
@@ -102,9 +102,9 @@ describe("refineDrawnGeometry", () => {
   it("rejects non-integer or unbounded smoothing passes", () => {
     expect(MAX_SMOOTHING_PASSES).toBeGreaterThan(0);
     const line: GeoJsonGeometry = { type: "LineString", coordinates: [[0, 0], [1, 1]] };
-    expect(() => refineDrawnGeometry("river", line, 1, { smoothingPasses: -1 })).toThrow(/integer/);
-    expect(() => refineDrawnGeometry("river", line, 1, { smoothingPasses: 1.5 })).toThrow(/integer/);
-    expect(() => refineDrawnGeometry("river", line, 1, { smoothingPasses: MAX_SMOOTHING_PASSES + 1 })).toThrow(/integer/);
+    expect(() => refineDrawnGeometry("river", line, 1, { smoothingPasses: -1 })).toThrow("drawing_smoothing");
+    expect(() => refineDrawnGeometry("river", line, 1, { smoothingPasses: 1.5 })).toThrow("drawing_smoothing");
+    expect(() => refineDrawnGeometry("river", line, 1, { smoothingPasses: MAX_SMOOTHING_PASSES + 1 })).toThrow("drawing_smoothing");
   });
 
   it("snaps an endpoint to the nearest requested angle without mutating inputs", () => {
@@ -119,11 +119,11 @@ describe("refineDrawnGeometry", () => {
   });
 
   it("rejects invalid, zero-length, and out-of-world angle snaps", () => {
-    expect(() => snapPositionToAngle([0, 0], [1, 1], 0)).toThrow(/Angle step/);
-    expect(() => snapPositionToAngle([0, 0], [1, 1], Number.NaN)).toThrow(/Angle step/);
-    expect(() => snapPositionToAngle([0, 0], [1, 1], 361)).toThrow(/Angle step/);
-    expect(() => snapPositionToAngle([0, 0], [0, 0], 45)).toThrow(/zero-length/);
-    expect(() => snapPositionToAngle([179, 89], [180, 90], 90)).toThrow(/bounded world/);
-    expect(() => snapPositionToAngle([Number.NaN, 0], [1, 1], 45)).toThrow(/finite/);
+    expect(() => snapPositionToAngle([0, 0], [1, 1], 0)).toThrow("drawing_angle");
+    expect(() => snapPositionToAngle([0, 0], [1, 1], Number.NaN)).toThrow("drawing_angle");
+    expect(() => snapPositionToAngle([0, 0], [1, 1], 361)).toThrow("drawing_angle");
+    expect(() => snapPositionToAngle([0, 0], [0, 0], 45)).toThrow("drawing_zero_length");
+    expect(() => snapPositionToAngle([179, 89], [180, 90], 90)).toThrow("drawing_outside_world");
+    expect(() => snapPositionToAngle([Number.NaN, 0], [1, 1], 45)).toThrow("drawing_outside_world");
   });
 });

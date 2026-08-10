@@ -26,6 +26,7 @@ import type { MapRaster } from "../exportArtifacts";
 import { CELL_BRUSH_RADII, cellCenter as gridCellCenter, cellIdsWithinBrushPath as gridCellIdsWithinBrushPath, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
 import { MAX_SMOOTHING_PASSES, refineDrawnGeometry, snapPositionToAngle } from "./drawingGeometry";
+import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
 import { createCellStyle, createFeatureStyle, MAP_LABEL_FONT } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
 import { paintMapTexture } from "./mapTexture";
@@ -290,7 +291,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly eraseFeaturesListeners = new Set<(featureIds: readonly string[]) => void>();
   private readonly eraseListeners = new Set<(featureId: string) => void>();
   private readonly layerShiftListeners = new Set<(direction: -1 | 1) => void>();
-  private readonly errorListeners = new Set<(message: string) => void>();
+  private readonly errorListeners = new Set<(code: MapErrorCode) => void>();
   private baseZoom = 0;
   private temporaryPan = false;
   private lassoPoints: Position[] = [];
@@ -567,13 +568,13 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   setDrawingOptions(options: DrawingOptions): void {
     if (options.gesture !== "freehand" && options.gesture !== "vertices") {
-      throw new Error("Drawing gesture must be freehand or vertices.");
+      throw new DrawingGeometryError("drawing_gesture");
     }
     if (!Number.isInteger(options.smoothingPasses) || options.smoothingPasses < 0 || options.smoothingPasses > MAX_SMOOTHING_PASSES) {
-      throw new Error(`Smoothing passes must be an integer between 0 and ${MAX_SMOOTHING_PASSES}.`);
+      throw new DrawingGeometryError("drawing_smoothing");
     }
     if (options.snapAngleDegrees !== null && (!Number.isFinite(options.snapAngleDegrees) || options.snapAngleDegrees <= 0 || options.snapAngleDegrees > 360)) {
-      throw new Error("Angle step must be null or finite, greater than 0, and at most 360 degrees.");
+      throw new DrawingGeometryError("drawing_angle");
     }
     this.drawingGesture = options.gesture;
     this.drawingSmoothingPasses = options.smoothingPasses;
@@ -690,8 +691,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
         const snapAngle = this.drawingSnapAngleDegrees ?? this.modifierSnapAngleDegrees;
         encoded = snapAngle === null ? shaped : snapFinalSegment(shaped, snapAngle);
       } catch (cause) {
-        const message = cause instanceof Error && cause.message ? cause.message : "描画した形状を保存できません。";
-        for (const listener of this.errorListeners) listener(message);
+        const code = mapErrorCode(cause);
+        for (const listener of this.errorListeners) listener(code);
         return;
       }
       for (const listener of this.drawListeners) listener(encoded);
@@ -710,7 +711,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
         assertGeometryWithinWorld(nextGeometry);
         changes.push({ id, geometry: nextGeometry });
       } catch {
-        for (const listener of this.errorListeners) listener("地物を世界境界の外へ移動できません。");
+        for (const listener of this.errorListeners) listener("feature_outside_world");
         return false;
       }
     }
@@ -964,7 +965,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     return () => this.layerShiftListeners.delete(listener);
   }
 
-  onError(listener: (message: string) => void): () => void {
+  onError(listener: (code: MapErrorCode) => void): () => void {
     this.errorListeners.add(listener);
     return () => this.errorListeners.delete(listener);
   }

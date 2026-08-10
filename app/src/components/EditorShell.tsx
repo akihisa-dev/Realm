@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { errorMessage, type GeoJsonGeometry, type RealmBackend, type RealmFeature, type RealmSnapshot } from "../backend";
 import { GlobeHemisphereWest } from "@phosphor-icons/react/dist/csr/GlobeHemisphereWest";
 import { MapCanvas } from "./MapCanvas";
+import { mapErrorMessage } from "../locales/ja";
 
 const TERRAIN_TYPE = "terrain" as const;
 type Tool = "pan" | "terrain" | "erase";
@@ -164,7 +165,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
               void run(() => backend.deleteFeaturesBatch({ ids: terrainIds }), "地形を削除できませんでした。");
             }}
             onLayerShift={shiftTerrain}
-            onError={setError}
+            onError={(code) => setError(mapErrorMessage(code))}
             onZoomChange={setZoom}
             zoom={zoom}
           />

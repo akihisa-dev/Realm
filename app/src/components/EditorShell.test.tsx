@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRealmBackend, type GeoJsonGeometry, type RealmSnapshot } from "../backend";
+import type { MapErrorCode } from "../map/errors";
 import { EditorShell } from "./EditorShell";
 
 vi.mock("./MapCanvas", () => ({
@@ -11,12 +12,14 @@ vi.mock("./MapCanvas", () => ({
     onSelectFeatures?: (ids: string[]) => void;
     onModifyFeatures?: (changes: { id: string; geometry: GeoJsonGeometry }[]) => void;
     onEraseFeatures?: (ids: string[]) => void;
+    onError?: (code: MapErrorCode) => void;
   }) => <div role="region" aria-label="世界地図" data-mode={props.mode}>
     <output aria-label="描画対象">{props.features?.map(({ featureType }) => featureType).join(",")}</output>
     <button type="button" onClick={() => props.onDraw?.({ type: "Polygon", coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] })}>テスト地形描画</button>
     <button type="button" onClick={() => props.onSelectFeatures?.(props.features?.[0]?.id ? [props.features[0].id] : [])}>テスト選択</button>
     <button type="button" onClick={() => props.selectedFeatureIds?.[0] && props.onModifyFeatures?.([{ id: props.selectedFeatureIds[0], geometry: { type: "Polygon", coordinates: [[[1, 1], [11, 1], [11, 11], [1, 11], [1, 1]]] } }])}>テスト変形</button>
     <button type="button" onClick={() => props.features?.[0] && props.onEraseFeatures?.([props.features[0].id])}>テスト消去</button>
+    <button type="button" onClick={() => props.onError?.("drawing_self_intersection")}>テスト描画エラー</button>
   </div>,
 }));
 
@@ -69,6 +72,16 @@ it("creates a terrain polygon with the fixed terrain name", async () => {
   await waitFor(async () => expect((await backend.getOpenProject())?.features).toEqual([
     expect.objectContaining({ featureType: "terrain", name: "地形", geometry: expect.objectContaining({ type: "Polygon" }) }),
   ]));
+});
+
+it("shows a localized drawing error from the message catalog", async () => {
+  const backend = new MemoryRealmBackend();
+  const snapshot = await backend.createProject({ path: "browser://error.realmmap", name: "Error" });
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テスト描画エラー" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("地形の輪郭が交差しています。線が交差しないように描き直してください。");
+  expect(screen.getByRole("alert")).not.toHaveTextContent("self-intersect");
 });
 
 it("edits terrain directly on the canvas while hiding legacy objects", async () => {

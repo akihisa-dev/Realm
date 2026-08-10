@@ -9,6 +9,7 @@ describe("MapCanvas", () => {
     let drawListener: ((geometry: never) => void) | null = null;
     let selectFeaturesListener: ((ids: readonly string[]) => void) | null = null;
     let modifyFeaturesListener: ((changes: readonly { id: string; geometry: never }[]) => void) | null = null;
+    let errorListener: ((code: "drawing_self_intersection") => void) | null = null;
     const renderer: RealmMapRenderer = {
       getZoom: vi.fn(() => zoom),
       setZoom: vi.fn((nextZoom) => { zoom = nextZoom; }),
@@ -36,7 +37,7 @@ describe("MapCanvas", () => {
       onEraseFeatures: vi.fn(() => vi.fn()),
       onErase: vi.fn(() => vi.fn()),
       onLayerShift: vi.fn(() => vi.fn()),
-      onError: vi.fn(() => vi.fn()),
+      onError: vi.fn((listener) => { errorListener = listener as typeof errorListener; return vi.fn(); }),
       onZoomChange: vi.fn((listener) => {
         zoomListener = listener;
         return vi.fn();
@@ -47,8 +48,9 @@ describe("MapCanvas", () => {
     };
     const createRenderer = vi.fn(() => renderer);
     const onZoomChange = vi.fn();
+    const onError = vi.fn();
     const { rerender, unmount } = render(
-      <MapCanvas zoom={3} onZoomChange={onZoomChange} createRenderer={createRenderer} />,
+      <MapCanvas zoom={3} onZoomChange={onZoomChange} onError={onError} createRenderer={createRenderer} />,
     );
 
     expect(createRenderer).toHaveBeenCalledOnce();
@@ -62,6 +64,8 @@ describe("MapCanvas", () => {
     (drawListener as ((geometry: never) => void) | null)?.({} as never);
     (selectFeaturesListener as ((ids: readonly string[]) => void) | null)?.([]);
     (modifyFeaturesListener as ((changes: readonly { id: string; geometry: never }[]) => void) | null)?.([{ id: "id", geometry: {} as never }]);
+    (errorListener as ((code: "drawing_self_intersection") => void) | null)?.("drawing_self_intersection");
+    expect(onError).toHaveBeenCalledWith("drawing_self_intersection");
     act(() => { zoomListener?.(4); });
     expect(onZoomChange).toHaveBeenLastCalledWith(4);
 
