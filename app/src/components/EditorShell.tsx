@@ -14,14 +14,13 @@ import {
 import { MapCanvas, MapZoomControls } from "./MapCanvas";
 import { CaretLeft } from "@phosphor-icons/react/dist/csr/CaretLeft";
 import { CaretRight } from "@phosphor-icons/react/dist/csr/CaretRight";
-import { File } from "@phosphor-icons/react/dist/csr/File";
-import { FloppyDisk } from "@phosphor-icons/react/dist/csr/FloppyDisk";
 import { FolderOpen } from "@phosphor-icons/react/dist/csr/FolderOpen";
 import { GlobeHemisphereWest } from "@phosphor-icons/react/dist/csr/GlobeHemisphereWest";
 import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
 import { SkipBack } from "@phosphor-icons/react/dist/csr/SkipBack";
 import { X } from "@phosphor-icons/react/dist/csr/X";
+import { pdfFromJpeg, type MapRaster } from "../exportArtifacts";
 
 type EditableEra = Omit<EraInput, "startYear" | "endYear"> & {
   editorKey: string;
@@ -108,10 +107,10 @@ type EditorShellProps = {
   snapshot: RealmSnapshot;
   backend: RealmBackend;
   busy: boolean;
-  onCreate: () => void;
-  onOpen: () => void;
   onClose: () => void;
   onSaved: (snapshot: RealmSnapshot) => void;
+  onExportTransfer: () => Promise<void>;
+  onExportArtifact: (format: "png" | "pdf", bytes: number[]) => Promise<void>;
 };
 
 const editableEras = (snapshot: RealmSnapshot): EditableEra[] =>
@@ -133,7 +132,7 @@ const editableEvents = (snapshot: RealmSnapshot): EditableTimelineEvent[] =>
     editorKey: event.id,
   }));
 
-export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose, onSaved }: EditorShellProps) {
+export function EditorShell({ snapshot, backend, busy, onClose, onSaved, onExportTransfer, onExportArtifact }: EditorShellProps) {
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
   const [worldName, setWorldName] = useState(snapshot.world.name);
   const [currentYearDraft, setCurrentYearDraft] = useState(String(snapshot.world.currentYear));
@@ -155,6 +154,7 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
   const [saveError, setSaveError] = useState<string | null>(null);
   const viewSequence = useRef(0);
   const cellAttributeSequence = useRef(0);
+  const mapExporter = useRef<((mimeType: "image/png" | "image/jpeg") => Promise<MapRaster>) | null>(null);
 
   useLayoutEffect(() => {
     const nextEras = editableEras(snapshot);
@@ -274,17 +274,10 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
     }
   };
 
-  const confirmDiscard = (): boolean =>
-    !dirty || window.confirm("保存していない変更を破棄しますか？");
-
-  const navigate = (action: () => void) => {
-    if (confirmDiscard()) action();
-  };
-
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (validationError || parsedCurrentYear === null) {
       setSaveError(validationError ?? "表示年を確認してください。");
-      return;
+      return false;
     }
     setSaving(true);
     setSaveError(null);
@@ -296,12 +289,20 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
         timelineEvents: normalizedEventResult.events,
       });
       onSaved(saved);
+      return true;
     } catch (cause) {
-      setSaveError(errorMessage(cause, "保存に失敗しました。"));
+      setSaveError(errorMessage(cause, "自動保存に失敗しました。"));
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  useEffect(() => {
+    if (!dirty || validationError || saving || operating) return undefined;
+    const timer = window.setTimeout(() => { void save(); }, 600);
+    return () => window.clearTimeout(timer);
+  });
 
   const addEra = () => {
     const editorKey = crypto.randomUUID();
@@ -359,6 +360,7 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
   };
 
   const runMutation = async (action: () => Promise<RealmSnapshot>, fallback: string) => {
+    if (dirty && !(await save())) return;
     setOperating(true);
     setSaveError(null);
     try {
@@ -373,10 +375,6 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
 
   const createDrawnFeature = (geometry: GeoJsonGeometry) => {
     if (activeTool === "pan" || activeTool === "cell-select" || parsedCurrentYear === null) return;
-    if (dirty) {
-      setSaveError("地物を編集する前に世界と年表の変更を保存してください。");
-      return;
-    }
     const name = featureName.trim();
     if (!name) {
       setSaveError("地物の名前を入力してください。");
@@ -408,10 +406,6 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
       setSaveError("先に地図上でセルを選択してください。");
       return;
     }
-    if (dirty) {
-      setSaveError("セルを編集する前に世界と年表の変更を保存してください。");
-      return;
-    }
     void runMutation(
       () => backend.applyCellAttributes({ year: parsedCurrentYear, cellIds: [...selectedCellIds], attribute: cellAttribute, value }),
       "セル属性を変更できませんでした。",
@@ -419,7 +413,7 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
   };
 
   const reviseFeature = (feature: RealmFeature, geometry = feature.geometry) => {
-    if (parsedCurrentYear === null || dirty) return;
+    if (parsedCurrentYear === null) return;
     const name = featureName.trim();
     if (!name) {
       setSaveError("地物の名前を入力してください。");
@@ -440,13 +434,44 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
   };
 
   const undo = () => {
-    if (dirty) return;
     void runMutation(() => backend.undoProject(), "操作を元に戻せませんでした。");
   };
 
   const redo = () => {
-    if (dirty) return;
     void runMutation(() => backend.redoProject(), "操作をやり直せませんでした。");
+  };
+
+  const exportTransfer = async () => {
+    if (dirty && !(await save())) return;
+    setOperating(true);
+    setSaveError(null);
+    try {
+      await onExportTransfer();
+    } catch (cause) {
+      setSaveError(errorMessage(cause, "移行データを書き出せませんでした。"));
+    } finally {
+      setOperating(false);
+    }
+  };
+
+  const exportMap = async (format: "png" | "pdf") => {
+    if (dirty && !(await save())) return;
+    if (!mapExporter.current) return;
+    setOperating(true);
+    setSaveError(null);
+    try {
+      const raster = await mapExporter.current(format === "png" ? "image/png" : "image/jpeg");
+      await onExportArtifact(format, format === "png" ? raster.bytes : pdfFromJpeg(raster));
+    } catch (cause) {
+      setSaveError(errorMessage(cause, "地図を書き出せませんでした。"));
+    } finally {
+      setOperating(false);
+    }
+  };
+
+  const returnToLibrary = async () => {
+    if (dirty && !(await save())) return;
+    onClose();
   };
 
   return (
@@ -455,14 +480,15 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
         <div className="app-mark" data-tauri-drag-region><strong>Realm</strong></div>
         <div className="toolbar-separator" data-tauri-drag-region />
         <nav className="document-actions" aria-label="ファイル操作">
-          <button type="button" onClick={() => navigate(onCreate)} disabled={locked}><File aria-hidden="true" size={21} weight="regular" /><span>新規</span></button>
-          <button type="button" onClick={() => navigate(onOpen)} disabled={locked}><FolderOpen aria-hidden="true" size={21} weight="regular" /><span>開く</span></button>
-          <button type="button" onClick={() => { void save(); }} disabled={locked || !dirty || validationError !== null}><FloppyDisk aria-hidden="true" size={21} weight="regular" /><span>{saving ? "保存中…" : "保存"}</span></button>
-          <button type="button" onClick={() => navigate(onClose)} disabled={locked}><X aria-hidden="true" size={20} weight="regular" /><span>閉じる</span></button>
+          <button type="button" onClick={() => { void returnToLibrary(); }} disabled={locked}><FolderOpen aria-hidden="true" size={21} weight="regular" /><span>ライブラリ</span></button>
+          <button type="button" onClick={() => { void exportMap("png"); }} disabled={locked || validationError !== null}>PNG</button>
+          <button type="button" onClick={() => { void exportMap("pdf"); }} disabled={locked || validationError !== null}>PDF</button>
+          <button type="button" onClick={() => { void exportTransfer(); }} disabled={locked || validationError !== null}>移行データ</button>
+          <button type="button" onClick={() => { void returnToLibrary(); }} disabled={locked} aria-label="世界を閉じる"><X aria-hidden="true" size={20} weight="regular" /></button>
         </nav>
         <nav className="history-actions" aria-label="編集履歴">
-          <button type="button" onClick={undo} disabled={locked || dirty || !viewedSnapshot.canUndo}>元に戻す</button>
-          <button type="button" onClick={redo} disabled={locked || dirty || !viewedSnapshot.canRedo}>やり直す</button>
+          <button type="button" onClick={undo} disabled={locked || !viewedSnapshot.canUndo}>元に戻す</button>
+          <button type="button" onClick={redo} disabled={locked || !viewedSnapshot.canRedo}>やり直す</button>
         </nav>
         <div className="toolbar-separator" data-tauri-drag-region />
         <label className="world-name-input">
@@ -472,16 +498,16 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
         </label>
         <div className="toolbar-spacer" data-tauri-drag-region />
         <span className={`save-state ${dirty ? "save-state-dirty" : ""}`} aria-live="polite">
-          {validationError ? "入力を確認" : dirty ? "未保存" : "保存済み"}
+          {validationError ? "入力を確認" : saving || dirty ? "自動保存中…" : "自動保存済み"}
         </span>
       </header>
 
       <div className="editor-body">
         <aside className="left-rail" aria-label="主要ナビゲーション">
           <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => { setActiveTool("pan"); setSelectedCellIds([]); }} disabled={locked}><GlobeHemisphereWest aria-hidden="true" size={25} weight="regular" /><span>移動</span></button>
-          <button className={activeTool === "cell-select" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "cell-select"} onClick={() => { setActiveTool("cell-select"); setSelectedCellIds([]); setSelectedFeatureId(null); }} disabled={locked || dirty}><span className="feature-tool-mark" aria-hidden="true" /><span>セル選択</span></button>
+          <button className={activeTool === "cell-select" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "cell-select"} onClick={() => { setActiveTool("cell-select"); setSelectedCellIds([]); setSelectedFeatureId(null); }} disabled={locked}><span className="feature-tool-mark" aria-hidden="true" /><span>セル選択</span></button>
           {FEATURE_TYPES.map(({ type, label }) => (
-            <button key={type} className={activeTool === type ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === type} onClick={() => { setActiveTool(type); setSelectedCellIds([]); setFeatureName(`新しい${label}`); setSelectedFeatureId(null); }} disabled={locked || dirty}><span className="feature-tool-mark" aria-hidden="true" /> <span>{label}</span></button>
+            <button key={type} className={activeTool === type ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === type} onClick={() => { setActiveTool(type); setSelectedCellIds([]); setFeatureName(`新しい${label}`); setSelectedFeatureId(null); }} disabled={locked}><span className="feature-tool-mark" aria-hidden="true" /> <span>{label}</span></button>
           ))}
         </aside>
         <aside className="world-sidebar" aria-label="世界の構成">
@@ -505,7 +531,7 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
                   ? `地形の上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}の領域を描いてください。`
                 : `地図上で押したままドラッグして${FEATURE_TYPES.find((item) => item.type === activeTool)?.label}を描いてください。`}</p>
             ) : null}
-            {selectedFeature ? <div className="feature-editor-actions"><button type="button" onClick={() => reviseFeature(selectedFeature)} disabled={locked || dirty}>名前を保存</button><button type="button" className="danger-action" onClick={() => { if (parsedCurrentYear !== null && window.confirm("この年以降から地物を削除しますか？")) void runMutation(() => backend.deleteFeature({ id: selectedFeature.id, validFromYear: parsedCurrentYear }), "地物を削除できませんでした。"); }} disabled={locked || dirty}>削除</button></div> : null}
+            {selectedFeature ? <div className="feature-editor-actions"><button type="button" onClick={() => reviseFeature(selectedFeature)} disabled={locked}>名前を保存</button><button type="button" className="danger-action" onClick={() => { if (parsedCurrentYear !== null && window.confirm("この年以降から地物を削除しますか？")) void runMutation(() => backend.deleteFeature({ id: selectedFeature.id, validFromYear: parsedCurrentYear }), "地物を削除できませんでした。"); }} disabled={locked}>削除</button></div> : null}
           </section>
           <section className="cell-inspector" aria-label="選択セルの属性編集">
             <h3>選択セル</h3>
@@ -518,8 +544,8 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
             </CellAttributeSelect></label>
             <label>値<input value={cellAttributeValue} onChange={(event) => setCellAttributeValue(event.target.value)} disabled={locked || cellAttribute === "terrain_kind" || cellAttribute === "forest"} maxLength={200} /></label>
             <div className="feature-editor-actions">
-              <button type="button" onClick={() => applyCellAttribute(effectiveCellAttributeValue || null)} disabled={locked || dirty || selectedCellIds.length === 0 || !effectiveCellAttributeValue}>適用</button>
-              <button type="button" className="danger-action" onClick={() => applyCellAttribute(null)} disabled={locked || dirty || selectedCellIds.length === 0}>解除</button>
+              <button type="button" onClick={() => applyCellAttribute(effectiveCellAttributeValue || null)} disabled={locked || selectedCellIds.length === 0 || !effectiveCellAttributeValue}>適用</button>
+              <button type="button" className="danger-action" onClick={() => applyCellAttribute(null)} disabled={locked || selectedCellIds.length === 0}>解除</button>
             </div>
           </section>
           <section className="era-list" aria-labelledby="era-list-title">
@@ -566,7 +592,7 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
             onZoomChange={setZoom}
             zoom={zoom}
             features={viewedSnapshot.features}
-            mode={dirty ? "pan" : activeTool}
+            mode={locked ? "pan" : activeTool}
             selectedFeatureId={selectedFeatureId}
             selectedCellIds={selectedCellIds}
             cellAttributes={cellAttributes}
@@ -577,6 +603,7 @@ export function EditorShell({ snapshot, backend, busy, onCreate, onOpen, onClose
               const feature = viewedSnapshot.features.find((candidate) => candidate.id === featureId);
               if (feature) reviseFeature(feature, geometry);
             }}
+            onExporterReady={(exporter) => { mapExporter.current = exporter; }}
           />
           {validationError ? <p className="save-error" role="alert">{validationError}</p> : saveError ? <p className="save-error" role="alert">{saveError}</p> : null}
         </section>

@@ -7,6 +7,7 @@ import type {
   CellAttributeSnapshot,
   CellViewportInput,
   RealmFeature,
+  ProjectSummary,
   RealmSnapshot,
   ReviseFeatureInput,
   SaveProjectInput,
@@ -123,22 +124,49 @@ export class MemoryRealmBackend implements RealmBackend {
     return snapshot;
   }
 
-  async createProject(input: { path: string; name: string }): Promise<RealmSnapshot> {
-    if (this.projects.has(input.path)) throw new Error("同じ場所に世界がすでにあります。");
-    const project = storedProject(makeSnapshot(input.path, input.name));
-    this.projects.set(input.path, project);
-    this.openPath = input.path;
+  async listProjects(): Promise<ProjectSummary[]> {
+    return [...this.projects.values()]
+      .map((project) => ({
+        libraryId: project.snapshot.path,
+        name: project.snapshot.world.name,
+        currentYear: project.snapshot.world.currentYear,
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  async createProject(input: { name: string; path?: string }): Promise<RealmSnapshot> {
+    const path = input.path ?? `browser://${crypto.randomUUID()}.realmmap`;
+    if (this.projects.has(path)) throw new Error("同じ場所に世界がすでにあります。");
+    const project = storedProject(makeSnapshot(path, input.name));
+    this.projects.set(path, project);
+    this.openPath = path;
     return this.result(project);
   }
 
-  async openProject(input: { path: string }): Promise<RealmSnapshot> {
-    const project = this.projects.get(input.path);
+  async openProject(input: { libraryId?: string; path?: string }): Promise<RealmSnapshot> {
+    const path = input.libraryId ?? input.path ?? "";
+    const project = this.projects.get(path);
     if (!project) throw new Error("指定した世界が見つかりません。");
-    this.openPath = input.path;
-    this.undo.set(input.path, []);
-    this.redo.set(input.path, []);
+    this.openPath = path;
+    this.undo.set(path, []);
+    this.redo.set(path, []);
     return this.result(project);
   }
+
+  async importProject(input: { path: string }): Promise<RealmSnapshot> {
+    const source = this.projects.get(input.path);
+    if (!source) throw new Error("移行データを読み込めません。");
+    const path = `browser://${crypto.randomUUID()}.realmmap`;
+    const project = cloneProject(source);
+    project.snapshot.path = path;
+    this.projects.set(path, project);
+    this.openPath = path;
+    return this.result(project);
+  }
+
+  async exportProject(_input: { path: string }): Promise<void> {}
+
+  async writeArtifact(_input: { path: string; bytes: number[] }): Promise<void> {}
 
   async saveProject(input: SaveProjectInput): Promise<RealmSnapshot> {
     const project = this.openProjectState();

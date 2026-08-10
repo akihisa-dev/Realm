@@ -40,6 +40,7 @@ describe("MapZoomControls", () => {
         return vi.fn();
       }),
       updateSize: vi.fn(),
+      exportRaster: vi.fn(async () => ({ bytes: [1], width: 1, height: 1 })),
       dispose: vi.fn(),
     };
     const createRenderer = vi.fn(() => renderer);

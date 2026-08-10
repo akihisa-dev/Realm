@@ -6,7 +6,7 @@ use std::{
     ffi::CString,
     fs,
     fs::{File, OpenOptions},
-    io::{self, Read},
+    io::{self, Read, Write},
     os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
     sync::{Mutex, MutexGuard, PoisonError},
@@ -15,6 +15,7 @@ use std::{
 use rusqlite::{Connection, Error as SqlError, ErrorCode, OpenFlags, Transaction, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tauri::Manager;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -23,6 +24,7 @@ const GRID_VERSION: i32 = 1;
 const GRID_COLUMNS: i32 = 512;
 const GRID_ROWS: i32 = 256;
 const PROJECT_EXTENSION: &str = "realmmap";
+const MAX_ARTIFACT_BYTES: usize = 50 * 1024 * 1024;
 
 #[derive(Clone, Copy)]
 struct ColumnExpectation {
@@ -288,6 +290,14 @@ pub struct ProjectSnapshot {
     pub feature_count: i64,
     pub can_undo: bool,
     pub can_redo: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSummary {
+    pub library_id: String,
+    pub name: String,
+    pub current_year: i32,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -1601,29 +1611,7 @@ fn migrate_schema(connection: &mut Connection, from_version: i32) -> Result<(), 
 }
 
 fn open_connection(path: &Path) -> Result<Connection, AppError> {
-    let path = path_with_canonical_parent(path)?;
-    let mut header = [0_u8; 16];
-    File::open(&path)
-        .and_then(|mut file| file.read_exact(&mut header))
-        .map_err(|_| AppError::new("corrupt_project", "The project file could not be read."))?;
-    if &header != b"SQLite format 3\0" {
-        return Err(AppError::new(
-            "corrupt_project",
-            "The project file is corrupt or not a Realm project.",
-        ));
-    }
-    let read_only = Connection::open_with_flags(
-        &path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX
-            | OpenFlags::SQLITE_OPEN_NOFOLLOW,
-    )
-    .map_err(AppError::from)?;
-    validate_existing_schema(&read_only)?;
-    let existing_version: i32 = read_only
-        .pragma_query_value(None, "user_version", |row| row.get(0))
-        .map_err(AppError::from)?;
-    drop(read_only);
+    let (path, existing_version) = preflight_existing_project(path)?;
 
     let mut connection = Connection::open_with_flags(
         &path,
@@ -1649,6 +1637,49 @@ fn remove_unpublished_project(path: &Path) {
     for suffix in ["-journal", "-wal", "-shm"] {
         let _ = fs::remove_file(path_with_suffix(path, suffix));
     }
+}
+
+fn preflight_existing_project(path: &Path) -> Result<(PathBuf, i32), AppError> {
+    let path = path_with_canonical_parent(path)?;
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|_| AppError::new("not_found", "The project file could not be found."))?;
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(AppError::new(
+            "invalid_path",
+            "The project path is not a regular file.",
+        ));
+    }
+    let mut header = [0_u8; 16];
+    File::open(&path)
+        .and_then(|mut file| file.read_exact(&mut header))
+        .map_err(|_| AppError::new("corrupt_project", "The project file could not be read."))?;
+    if &header != b"SQLite format 3\0" {
+        return Err(AppError::new(
+            "corrupt_project",
+            "The project file is corrupt or not a Realm project.",
+        ));
+    }
+    let read_only = Connection::open_with_flags(
+        &path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX
+            | OpenFlags::SQLITE_OPEN_NOFOLLOW,
+    )
+    .map_err(AppError::from)?;
+    validate_existing_schema(&read_only)?;
+    let world_count: i64 = read_only
+        .query_row("SELECT COUNT(*) FROM world", [], |row| row.get(0))
+        .map_err(AppError::from)?;
+    if world_count != 1 {
+        return Err(AppError::new(
+            "corrupt_project",
+            "The project must contain exactly one world record.",
+        ));
+    }
+    let version: i32 = read_only
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(AppError::from)?;
+    Ok((path, version))
 }
 
 fn publish_new_project(staged_path: &Path, destination: &Path) -> Result<(), AppError> {
@@ -1735,14 +1766,139 @@ fn create_project_inner(path: PathBuf, name: &str) -> Result<OpenProject, AppErr
     created
 }
 
+fn app_library_directory(app: &tauri::AppHandle) -> Result<PathBuf, AppError> {
+    let app_data = app.path().app_data_dir().map_err(|_| {
+        AppError::new(
+            "invalid_path",
+            "The application data folder is unavailable.",
+        )
+    })?;
+    fs::create_dir_all(&app_data).map_err(|_| {
+        AppError::new(
+            "invalid_path",
+            "The application data folder is unavailable.",
+        )
+    })?;
+    let app_data_metadata = fs::symlink_metadata(&app_data).map_err(|_| {
+        AppError::new(
+            "invalid_path",
+            "The application data folder is unavailable.",
+        )
+    })?;
+    if !app_data_metadata.file_type().is_dir() || app_data_metadata.file_type().is_symlink() {
+        return Err(AppError::new(
+            "invalid_path",
+            "The application data folder is unavailable.",
+        ));
+    }
+    let worlds = app_data.join("worlds");
+    fs::create_dir_all(&worlds)
+        .map_err(|_| AppError::new("invalid_path", "The project library is unavailable."))?;
+    let worlds_metadata = fs::symlink_metadata(&worlds)
+        .map_err(|_| AppError::new("invalid_path", "The project library is unavailable."))?;
+    if !worlds_metadata.file_type().is_dir() || worlds_metadata.file_type().is_symlink() {
+        return Err(AppError::new(
+            "invalid_path",
+            "The project library is unavailable.",
+        ));
+    }
+    worlds
+        .canonicalize()
+        .map_err(|_| AppError::new("invalid_path", "The project library is unavailable."))
+}
+
+fn library_project_path(
+    app: &tauri::AppHandle,
+    library_id: &str,
+) -> Result<(String, PathBuf), AppError> {
+    let id = Uuid::parse_str(library_id.trim())
+        .map_err(|_| AppError::invalid("The library project identifier is invalid."))?;
+    let canonical_id = id.to_string();
+    let path = app_library_directory(app)?.join(format!("{canonical_id}.{PROJECT_EXTENSION}"));
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if metadata.file_type().is_file() && !metadata.file_type().is_symlink() => {}
+        Ok(_) => {
+            return Err(AppError::new(
+                "invalid_path",
+                "The library project is not a regular file.",
+            ));
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            return Err(AppError::new(
+                "not_found",
+                "The library project could not be found.",
+            ));
+        }
+        Err(_) => {
+            return Err(AppError::new(
+                "invalid_path",
+                "The library project could not be accessed.",
+            ));
+        }
+    }
+    Ok((canonical_id, path))
+}
+
+fn project_summary_from_path(path: &Path) -> Result<ProjectSummary, AppError> {
+    let library_id = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .map(|value| value.to_string())
+        .ok_or_else(|| AppError::invalid("The library project identifier is invalid."))?;
+    let (path, _) = preflight_existing_project(path)?;
+    let connection = Connection::open_with_flags(
+        &path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX
+            | OpenFlags::SQLITE_OPEN_NOFOLLOW,
+    )
+    .map_err(AppError::from)?;
+    let (name, current_year): (String, i32) = connection
+        .query_row("SELECT name, current_year FROM world LIMIT 1", [], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .map_err(AppError::from)?;
+    Ok(ProjectSummary {
+        library_id,
+        name,
+        current_year,
+    })
+}
+
+fn copy_synced_file(source: &Path, destination: &Path, prefix: &str) -> Result<(), AppError> {
+    let parent = destination
+        .parent()
+        .ok_or_else(|| AppError::new("invalid_path", "The destination folder is unavailable."))?;
+    let staged_path = parent.join(format!(".{prefix}-{}.staging", Uuid::new_v4()));
+    let result = (|| {
+        fs::copy(source, &staged_path)
+            .map_err(|_| AppError::new("storage_error", "The project file could not be copied."))?;
+        File::open(&staged_path)
+            .and_then(|file| file.sync_all())
+            .map_err(|_| {
+                AppError::new(
+                    "storage_error",
+                    "The project file could not be synchronized.",
+                )
+            })?;
+        publish_new_project(&staged_path, destination)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&staged_path);
+    }
+    result
+}
+
 #[tauri::command]
 fn create_project(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-    path: String,
     name: String,
 ) -> Result<ProjectSnapshot, AppError> {
     validate_name(&name)?;
-    let path = validated_path(&path, false)?;
+    let path =
+        app_library_directory(&app)?.join(format!("{}.{}", Uuid::new_v4(), PROJECT_EXTENSION));
     let project = create_project_inner(path, &name)?;
     let snapshot = project_snapshot(&project)?;
     let mut open = lock_project(state.inner())?;
@@ -1752,10 +1908,11 @@ fn create_project(
 
 #[tauri::command]
 fn open_project(
+    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-    path: String,
+    library_id: String,
 ) -> Result<ProjectSnapshot, AppError> {
-    let path = validated_path(&path, true)?;
+    let (_, path) = library_project_path(&app, &library_id)?;
     let connection = open_connection(&path)?;
     let project = OpenProject {
         path,
@@ -1767,6 +1924,194 @@ fn open_project(
     let mut open = lock_project(state.inner())?;
     *open = Some(project);
     Ok(snapshot)
+}
+
+#[tauri::command]
+fn list_projects(app: tauri::AppHandle) -> Result<Vec<ProjectSummary>, AppError> {
+    let directory = app_library_directory(&app)?;
+    let mut projects = Vec::new();
+    let entries = fs::read_dir(&directory)
+        .map_err(|_| AppError::new("storage_error", "The project library could not be read."))?;
+    for entry in entries {
+        let Ok(entry) = entry else { continue };
+        let path = entry.path();
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+            continue;
+        }
+        if !path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case(PROJECT_EXTENSION))
+        {
+            continue;
+        }
+        // Ignore unrelated or corrupt files in the managed directory. A single bad file must
+        // not prevent the library from showing the projects that can still be opened.
+        if let Ok(summary) = project_summary_from_path(&path) {
+            projects.push(summary);
+        }
+    }
+    projects.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| left.library_id.cmp(&right.library_id))
+    });
+    Ok(projects)
+}
+
+#[tauri::command]
+fn import_project(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    path: String,
+) -> Result<ProjectSnapshot, AppError> {
+    let source = validated_path(&path, true)?;
+    // This is intentionally read-only: importing must never migrate or otherwise mutate the
+    // selected external file. The copied internal file is migrated by open_connection below.
+    let (source, _) = preflight_existing_project(&source)?;
+    let destination =
+        app_library_directory(&app)?.join(format!("{}.{}", Uuid::new_v4(), PROJECT_EXTENSION));
+    copy_synced_file(&source, &destination, "realm-import")?;
+    let project = match create_open_project(destination.clone()) {
+        Ok(project) => project,
+        Err(error) => {
+            remove_unpublished_project(&destination);
+            return Err(error);
+        }
+    };
+    let snapshot = match project_snapshot(&project) {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            let project_path = project.path.clone();
+            drop(project);
+            remove_unpublished_project(&project_path);
+            return Err(error);
+        }
+    };
+    let mut open = lock_project(state.inner())?;
+    *open = Some(project);
+    Ok(snapshot)
+}
+
+fn create_open_project(path: PathBuf) -> Result<OpenProject, AppError> {
+    let connection = open_connection(&path)?;
+    Ok(OpenProject {
+        path,
+        connection,
+        undo_stack: Vec::new(),
+        redo_stack: Vec::new(),
+    })
+}
+
+#[tauri::command]
+fn export_project(state: tauri::State<'_, AppState>, path: String) -> Result<(), AppError> {
+    let destination = validated_path(&path, false)?;
+    let open = lock_project(state.inner())?;
+    let project = open
+        .as_ref()
+        .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
+    // Ensure a WAL-backed connection has checkpointed its committed pages before copying the
+    // main database file. The command is a no-op for the normal DELETE journal mode.
+    project
+        .connection
+        .execute_batch("PRAGMA wal_checkpoint(FULL)")
+        .map_err(AppError::from)?;
+    File::open(&project.path)
+        .and_then(|file| file.sync_all())
+        .map_err(|_| {
+            AppError::new(
+                "storage_error",
+                "The project file could not be synchronized.",
+            )
+        })?;
+    copy_synced_file(&project.path, &destination, "realm-export")
+}
+
+fn validated_artifact_path(raw: &str) -> Result<PathBuf, AppError> {
+    let input = raw.trim();
+    if input.is_empty() {
+        return Err(AppError::invalid("An artifact path is required."));
+    }
+    let path = Path::new(input);
+    if !path
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("png") || value.eq_ignore_ascii_case("pdf"))
+    {
+        return Err(AppError::invalid(
+            "Artifacts must use the .png or .pdf extension.",
+        ));
+    }
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let metadata = fs::metadata(parent)
+        .map_err(|_| AppError::new("invalid_path", "The artifact folder does not exist."))?;
+    if !metadata.is_dir() {
+        return Err(AppError::new(
+            "invalid_path",
+            "The artifact folder is not a directory.",
+        ));
+    }
+    let candidate = path_with_canonical_parent(path)?;
+    match fs::symlink_metadata(&candidate) {
+        Ok(_) => Err(AppError::new(
+            "already_exists",
+            "An artifact already exists at that path.",
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(candidate),
+        Err(_) => Err(AppError::new(
+            "invalid_path",
+            "The artifact path could not be accessed.",
+        )),
+    }
+}
+
+#[tauri::command]
+fn write_artifact(path: String, bytes: Vec<u8>) -> Result<(), AppError> {
+    if bytes.len() > MAX_ARTIFACT_BYTES {
+        return Err(AppError::invalid("The artifact is too large."));
+    }
+    let destination = validated_artifact_path(&path)?;
+    let extension = destination
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    let valid_bytes = if extension.eq_ignore_ascii_case("png") {
+        bytes.starts_with(b"\x89PNG\r\n\x1a\n")
+    } else {
+        bytes.starts_with(b"%PDF-")
+    };
+    if !valid_bytes {
+        return Err(AppError::invalid(
+            "The artifact content does not match its file extension.",
+        ));
+    }
+    let parent = destination
+        .parent()
+        .ok_or_else(|| AppError::new("invalid_path", "The artifact folder is unavailable."))?;
+    let staged_path = parent.join(format!(".realm-artifact-{}.staging", Uuid::new_v4()));
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staged_path)
+            .map_err(|_| AppError::new("invalid_path", "The artifact could not be created."))?;
+        file.write_all(&bytes)
+            .map_err(|_| AppError::new("storage_error", "The artifact could not be written."))?;
+        file.sync_all().map_err(|_| {
+            AppError::new("storage_error", "The artifact could not be synchronized.")
+        })?;
+        publish_new_project(&staged_path, &destination)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&staged_path);
+    }
+    result
 }
 
 fn metadata_state(project: &OpenProject) -> Result<MetadataState, AppError> {
@@ -2509,7 +2854,11 @@ pub fn run() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             create_project,
+            list_projects,
             open_project,
+            import_project,
+            export_project,
+            write_artifact,
             save_project,
             view_project_year,
             apply_cell_attributes,
@@ -2606,6 +2955,52 @@ mod tests {
         publish_new_project(&staged, &destination).unwrap();
         assert_eq!(fs::read(&destination).unwrap(), b"complete project");
         assert!(!staged.exists());
+    }
+
+    #[test]
+    fn artifact_publication_validates_extension_size_and_no_replace() {
+        let directory = tempdir().unwrap();
+        let artifact = directory.path().join("map.png");
+        let png = b"\x89PNG\r\n\x1a\nsynthetic".to_vec();
+        write_artifact(artifact.to_string_lossy().into_owned(), png.clone()).unwrap();
+        assert_eq!(fs::read(&artifact).unwrap(), png);
+
+        let error = write_artifact(artifact.to_string_lossy().into_owned(), vec![9]).unwrap_err();
+        assert_eq!(error.code, "already_exists");
+        assert_eq!(fs::read(&artifact).unwrap(), b"\x89PNG\r\n\x1a\nsynthetic");
+
+        let error = write_artifact(
+            directory
+                .path()
+                .join("map.txt")
+                .to_string_lossy()
+                .into_owned(),
+            vec![1],
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "invalid_input");
+
+        let error = write_artifact(
+            directory
+                .path()
+                .join("wrong.pdf")
+                .to_string_lossy()
+                .into_owned(),
+            b"\x89PNG\r\n\x1a\nsynthetic".to_vec(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "invalid_input");
+
+        let error = write_artifact(
+            directory
+                .path()
+                .join("large.pdf")
+                .to_string_lossy()
+                .into_owned(),
+            vec![0; MAX_ARTIFACT_BYTES + 1],
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "invalid_input");
     }
 
     #[test]

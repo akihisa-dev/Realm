@@ -21,6 +21,11 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .startup-panel { width: min(600px, 100%); margin-top: -34px; text-align: center; }
 .startup-panel h1 { margin: 0; color: #121820; font-size: clamp(3.5rem, 8vw, 5.5rem); font-weight: 760; letter-spacing: -0.06em; line-height: 1; }
 .startup-panel p { margin: 32px 0 64px; color: #30363d; font-size: clamp(1.15rem, 2.5vw, 1.55rem); letter-spacing: .01em; }
+.startup-panel .library-empty { margin: -28px 0 32px; color: #747b82; font-size: 1rem; }
+.project-library { display: grid; max-height: 280px; gap: 8px; margin: -28px 0 28px; overflow-y: auto; text-align: left; }
+.project-library button { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 54px; padding: 10px 14px; border: 1px solid #d0d5d8; border-radius: 6px; background: #fff; color: #20262b; text-align: left; }
+.project-library button:hover { border-color: #7d878e; background: #f7f9fa; }
+.project-library button span { flex: 0 0 auto; color: #697178; font-size: 13px; }
 .startup-actions { display: grid; gap: 24px; }
 .startup-button { min-height: 74px; border: 1px solid #8c9197; border-radius: 6px; background: #fff; color: #282d33; font-size: 1.35rem; font-weight: 700; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
 .startup-button:hover { border-color: #3f4850; background: #f8fafb; }

@@ -1,5 +1,5 @@
 import { MemoryRealmBackend } from "./memoryRealmBackend";
-import { chooseTauriProjectPath, tauriRealmBackend } from "./tauriRealmBackend";
+import { chooseTauriArtifactPath, chooseTauriTransferPath, tauriRealmBackend } from "./tauriRealmBackend";
 
 export type {
   ApplyCellAttributesInput,
@@ -14,6 +14,7 @@ export type {
   RealmBackend,
   RealmFeature,
   RealmSnapshot,
+  ProjectSummary,
   ReviseFeatureInput,
   SaveProjectInput,
   TimelineEvent,
@@ -31,15 +32,11 @@ const memoryBackend = new MemoryRealmBackend();
 
 export const defaultBackend = isTauriRuntime() ? tauriRealmBackend : memoryBackend;
 
-export const chooseProjectPath = async (mode: "create" | "open"): Promise<string | null> => {
-  if (isTauriRuntime()) return chooseTauriProjectPath(mode);
-  return mode === "create" ? "browser://無題の世界.realmmap" : "browser://opened.realmmap";
-};
+export const chooseTransferPath = async (mode: "import" | "export", suggestedName?: string): Promise<string | null> =>
+  isTauriRuntime() ? chooseTauriTransferPath(mode, suggestedName) : null;
 
-export const projectNameFromPath = (path: string): string => {
-  const filename = path.split(/[\\/]/u).pop() ?? "無題の世界.realmmap";
-  return filename.replace(/\.realmmap$/iu, "") || "無題の世界";
-};
+export const chooseArtifactPath = async (format: "png" | "pdf", suggestedName: string): Promise<string | null> =>
+  isTauriRuntime() ? chooseTauriArtifactPath(format, suggestedName) : null;
 
 export const errorMessage = (cause: unknown, fallback: string): string => {
   if (cause instanceof Error && cause.message.trim()) return cause.message;

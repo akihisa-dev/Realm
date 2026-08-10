@@ -6,9 +6,11 @@ Realm is a local editor for a world map whose geography and political boundaries
 
 ## 0.1 series scope
 
-The first release targets macOS on Apple Silicon and one local `.realmmap` SQLite file per map. Its storage contract covers terrain, forests, rivers, coastlines, countries, regions, boundaries, cities, and towns. Every feature can have year-scoped revisions; eras are names attached to a year range and do not replace the underlying revisions.
+The first release targets macOS on Apple Silicon and an app-managed local library. Each world remains one SQLite database and covers terrain, forests, rivers, coastlines, countries, regions, boundaries, cities, and towns. Every feature can have year-scoped revisions; eras are names attached to a year range and do not replace the underlying revisions.
 
-The editor creates, opens, saves, and closes map projects; moves and zooms the bounded world canvas; and edits the world name, current year, named eras, and timeline events. Its map tools manually draw, select, rename, reshape, and delete every initial feature class. A dedicated cell-selection tool also lets the user loosely encircle fine map cells and assign mountain terrain, forest, country, or region attributes to the resulting area. A year change reconstructs the visible map from the latest revision at or before that year. Undo and redo are available while a project remains open and create compensating revisions instead of erasing history.
+The editor creates and opens worlds from that library and automatically saves valid edits. It moves and zooms the bounded world canvas and edits the world name, current year, named eras, and timeline events. Its map tools manually draw, select, rename, reshape, and delete every initial feature class. A dedicated cell-selection tool also lets the user loosely encircle fine map cells and assign mountain terrain, forest, country, or region attributes to the resulting area. A year change reconstructs the visible map from the latest revision at or before that year. Undo and redo are available while a project remains open and create compensating revisions instead of erasing history.
+
+PNG and PDF are presentation artifacts and cannot be reopened for editing. Moving editable work to another Mac uses the dedicated `.realmmap` transfer export and import actions; normal editing never asks the user to choose a database path.
 
 There is no required account, hosted backend, cloud synchronization, procedural generation, or image import. Geography is entered and edited manually.
 
@@ -16,7 +18,8 @@ There is no required account, hosted backend, cloud synchronization, procedural 
 
 | Term | Meaning |
 | --- | --- |
-| Map project | One `.realmmap` SQLite file and its local lock/journal state. |
+| World | One app-managed SQLite database and its year-scoped editable content. |
+| Transfer data | A `.realmmap` copy used only to move or back up editable data outside the app library. |
 | Feature | A manually edited map object such as a river, boundary, or city. |
 | Cell | One stable element of the fixed 512 by 256 world grid, identified by its column and row. |
 | Cell attribute | A year-scoped terrain, forest, country, or region value; different attribute layers may overlap on one cell. |
@@ -34,7 +37,7 @@ The map is an authoring tool, not a GIS data exchange service. External network 
 - Each initial feature class can be drawn manually with its required geometry: a click places a point, while a press-and-drag gesture traces a line or polygon. The resulting feature can then be selected, renamed, reshaped, and deleted at the view year.
 - Country and region polygons can be drawn over terrain to express political and administrative divisions. They remain independent of terrain geometry so that either physical geography or political areas can change on its own year-scoped history.
 - In cell-selection mode, a freehand enclosure selects cells by their center points. Applying or clearing one attribute affects the whole selection as one undoable batch and does not remove other attribute layers on those cells.
-- Existing version-1 projects open as version 2 without losing or converting their vector feature revisions.
-- Saving and reopening the single project file preserves world metadata, eras, timeline events, and all feature revisions.
+- Valid edits are automatically saved, and reopening a world from the app library preserves world metadata, eras, timeline events, and all feature revisions.
+- A world exports as a PNG or single-page PDF map artifact, and a transfer export can be imported as an independently editable library world on another Mac.
 - Moving before and after a revision or deletion deterministically reconstructs the corresponding visible state, including negative years and the full signed 32-bit year range.
 - A failed validation or transaction leaves the prior project state intact. Undo and redo never update or delete an existing feature revision row.

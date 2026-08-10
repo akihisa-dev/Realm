@@ -1,10 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, CellViewportInput, RealmBackend, RealmSnapshot } from "./types";
+import type { ApplyCellAttributesInput, CellAttributeSnapshot, CellViewportInput, ProjectSummary, RealmBackend, RealmSnapshot } from "./types";
 
 export const tauriRealmBackend: RealmBackend = {
-  createProject: (input) => invoke<RealmSnapshot>("create_project", { path: input.path, name: input.name }),
-  openProject: (input) => invoke<RealmSnapshot>("open_project", { path: input.path }),
+  listProjects: () => invoke<ProjectSummary[]>("list_projects"),
+  createProject: (input) => invoke<RealmSnapshot>("create_project", { name: input.name }),
+  openProject: (input) => invoke<RealmSnapshot>("open_project", { libraryId: input.libraryId }),
+  importProject: (input) => invoke<RealmSnapshot>("import_project", { path: input.path }),
+  exportProject: (input) => invoke<void>("export_project", { path: input.path }),
+  writeArtifact: (input) => invoke<void>("write_artifact", { path: input.path, bytes: input.bytes }),
   saveProject: (input) => invoke<RealmSnapshot>("save_project", { input }),
   viewProjectYear: (year) => invoke<RealmSnapshot>("view_project_year", { year }),
   applyCellAttributes: (input: ApplyCellAttributesInput) => invoke<RealmSnapshot>("apply_cell_attributes", { input }),
@@ -21,11 +25,11 @@ export const tauriRealmBackend: RealmBackend = {
 const withRealmExtension = (path: string): string =>
   path.toLocaleLowerCase("en-US").endsWith(".realmmap") ? path : `${path}.realmmap`;
 
-export const chooseTauriProjectPath = async (mode: "create" | "open"): Promise<string | null> => {
-  if (mode === "create") {
+export const chooseTauriTransferPath = async (mode: "import" | "export", suggestedName = "Realm移行データ.realmmap"): Promise<string | null> => {
+  if (mode === "export") {
     const selected = await saveDialog({
-      defaultPath: "無題の世界.realmmap",
-      filters: [{ name: "Realm map", extensions: ["realmmap"] }],
+      defaultPath: suggestedName,
+      filters: [{ name: "Realm移行データ", extensions: ["realmmap"] }],
     });
     return selected ? withRealmExtension(selected) : null;
   }
@@ -33,7 +37,16 @@ export const chooseTauriProjectPath = async (mode: "create" | "open"): Promise<s
   const selected = await openDialog({
     multiple: false,
     directory: false,
-    filters: [{ name: "Realm map", extensions: ["realmmap"] }],
+    filters: [{ name: "Realm移行データ", extensions: ["realmmap"] }],
   });
   return typeof selected === "string" ? selected : null;
+};
+
+export const chooseTauriArtifactPath = async (format: "png" | "pdf", suggestedName: string): Promise<string | null> => {
+  const selected = await saveDialog({
+    defaultPath: `${suggestedName}.${format}`,
+    filters: [{ name: format === "png" ? "PNG画像" : "PDF", extensions: [format] }],
+  });
+  if (!selected) return null;
+  return selected.toLocaleLowerCase("en-US").endsWith(`.${format}`) ? selected : `${selected}.${format}`;
 };

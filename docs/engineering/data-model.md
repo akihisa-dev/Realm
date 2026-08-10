@@ -2,7 +2,9 @@
 
 ## File contract
 
-Each map project is one SQLite file ending in `.realmmap`. The file is the portable project artifact. SQLite journal/WAL sidecars may exist while the project is open and are not separate user documents.
+Each library world is one SQLite database stored below Realm's macOS application-data directory under a UUID filename. The internal path is implementation state, not a user document. SQLite journal/WAL sidecars may exist while the world is open and are not separate artifacts.
+
+The same single-database representation is copied to a `.realmmap` file only for explicit transfer export. Import validates the selected source read-only, publishes a new UUID-named copy inside the library, and opens that copy. PNG and PDF exports are derived presentation artifacts and contain no editable Realm database.
 
 Schema version 2 records the same value in `PRAGMA user_version` and `schema_migrations`; disagreement is corruption. Version 1 is the first supported format, so no implicit version-0 migration exists. Opening a valid version-1 project adds the version-2 cell tables in one transaction without rewriting its feature revisions. A read-only preflight rejects newer versions, partial SQLite files, integrity failures, and schema objects whose columns, declared types, nullability, keys, indexes, foreign keys, checks, or append-only triggers do not preserve the declared version before opening a read/write connection. Migrations use explicit old-version fixtures and leave the source untouched on failure.
 
@@ -37,6 +39,6 @@ Manual edits append or supersede revisions inside a transaction. Database trigge
 
 Feature and cell-batch undo and redo append compensating revisions through the same transaction boundary. Metadata undo and redo restore the prior world, era, and event state transactionally. Undo stacks belong to the open Rust project session and are cleared when a project is opened again; they are not a second persisted history format.
 
-## Compatibility
+## Internal schema evolution
 
-Schema changes require: a migration, fixtures for an old and new database, a rollback-safe failure test, and an update to the release checklist if the file compatibility policy changes.
+Schema changes to app-managed worlds require a migration, fixtures for the relevant internal versions, and a rollback-safe failure test. Transfer data has no independent long-term compatibility promise; accepting an older transfer is an explicit tested capability of the receiving release, not the normal document-opening model.

@@ -11,20 +11,20 @@ React / OpenLayers
 Rust command boundary ── validation ── revision service
         │                         │
         ▼                         ▼
-  local file path            rusqlite connection
+ app library / export       rusqlite connection
                                     │
                                     ▼
-                         one project.realmmap SQLite file
+                      one internal SQLite file per world
 ```
 
 ## State ownership
 
-- Rust owns the opened project path, SQLite transaction, migration state, stable identifiers, persisted revision data, and session undo/redo stacks.
-- React owns transient selection, viewport, tool mode, and unsaved form state.
+- Rust owns the app-data library path, opened database, SQLite transaction, migration state, stable identifiers, persisted revision data, and session undo/redo stacks.
+- React owns transient selection, viewport, tool mode, and form drafts awaiting the short automatic-save debounce.
 - OpenLayers owns only rendering and interaction objects derived from the current view year; map objects are not an additional source of truth. Completed feature draw and modify gestures cross the renderer boundary as GeoJSON geometry. A completed cell lasso crosses as stable cell IDs, while the lasso and selection remain transient React/OpenLayers state.
 - A view-year change reads a consistent snapshot and replaces derived layers atomically from the UI's perspective.
 
-The coarse IPC surface creates, opens, saves, closes, and reads a project; reads a complete feature snapshot for a view year; creates, revises, and deletes one completed feature edit; applies one cell-attribute batch; reads active cell attributes for a year and optional grid viewport; and performs undo or redo. Save replaces the editable world fields and complete era and timeline-event lists in one Rust transaction and returns the authoritative snapshot, including Rust-generated IDs. Feature commands accept complete validated GeoJSON geometry, while cell commands accept bounded stable IDs rather than SQL-shaped or per-coordinate calls.
+The coarse IPC surface lists, creates, opens, saves, closes, imports, and exports library worlds; writes validated PNG/PDF artifact bytes; reads a complete feature snapshot for a view year; creates, revises, and deletes one completed feature edit; applies one cell-attribute batch; reads active cell attributes for a year and optional grid viewport; and performs undo or redo. Automatic save replaces the editable world fields and complete era and timeline-event lists in one Rust transaction and returns the authoritative snapshot, including Rust-generated IDs. Feature commands accept complete validated GeoJSON geometry, while cell commands accept bounded stable IDs rather than SQL-shaped or per-coordinate calls.
 
 Tauri imports are isolated in `app/src/backend/tauriRealmBackend.ts`. The browser-only memory backend implements the same interface for deterministic UI tests without pretending to be a second persistence format.
 
@@ -32,9 +32,10 @@ OpenLayers imports are isolated in `app/src/map/MapAdapter.ts`. `RealmMapRendere
 
 ## Safety invariants
 
-- Resolve and validate a project path before opening it; never concatenate user input into SQL or filesystem paths.
+- Resolve the app-data directory in Rust, address library entries by validated UUID, and validate user-selected import/export paths; never concatenate user input into SQL or filesystem paths.
 - Use parameterized queries and transactions for revision writes.
-- Never write half a `.realmmap`: create schema and initial world data in one SQLite transaction, synchronize a hidden sibling staging file, and publish it with macOS's atomic no-replace rename. Later writes remain transactional and preserve the journal/WAL semantics selected by the storage implementation.
+- Never write half a database or export: create schema and initial world data in one SQLite transaction, synchronize hidden sibling staging files, and publish them with macOS's atomic no-replace rename. Later writes remain transactional and preserve the journal/WAL semantics selected by the storage implementation.
+- PNG/PDF bytes originate from the current OpenLayers rendering and are size- and extension-bounded at the Rust write boundary. Transfer imports are inspected read-only before being copied into the library; the selected source is never modified.
 - Do not send database contents or telemetry over the network in the 0.1 series; image import is not a product capability.
 - Existing files are inspected through a read-only connection before any read/write connection is opened. Future versions, mismatched version markers, incomplete schema, and failed integrity checks leave the original file and its journal mode untouched.
 

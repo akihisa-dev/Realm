@@ -52,6 +52,12 @@ export type RealmSnapshot = {
   canRedo: boolean;
 };
 
+export type ProjectSummary = {
+  libraryId: string;
+  name: string;
+  currentYear: number;
+};
+
 export type CellAttributeSnapshot = {
   cellId: string;
   attribute: CellAttribute;
@@ -91,8 +97,12 @@ export type CreateFeatureInput = {
 export type ReviseFeatureInput = Omit<CreateFeatureInput, "featureType"> & { id: string };
 
 export interface RealmBackend {
-  createProject(input: { path: string; name: string }): Promise<RealmSnapshot>;
-  openProject(input: { path: string }): Promise<RealmSnapshot>;
+  listProjects(): Promise<ProjectSummary[]>;
+  createProject(input: { name: string; path?: string }): Promise<RealmSnapshot>;
+  openProject(input: { libraryId?: string; path?: string }): Promise<RealmSnapshot>;
+  importProject(input: { path: string }): Promise<RealmSnapshot>;
+  exportProject(input: { path: string }): Promise<void>;
+  writeArtifact(input: { path: string; bytes: number[] }): Promise<void>;
   saveProject(input: SaveProjectInput): Promise<RealmSnapshot>;
   viewProjectYear(year: number): Promise<RealmSnapshot>;
   createFeature(input: CreateFeatureInput): Promise<RealmSnapshot>;

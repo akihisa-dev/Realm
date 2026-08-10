@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MemoryRealmBackend, type FeatureType, type GeoJsonGeometry, type RealmSnapshot } from "../backend";
 
 vi.mock("./MapCanvas", () => ({
@@ -11,6 +11,7 @@ vi.mock("./MapCanvas", () => ({
     onSelect,
     onCellSelect,
     onModify,
+    onExporterReady,
   }: {
     mode: "pan" | "cell-select" | FeatureType;
     features: RealmSnapshot["features"];
@@ -19,7 +20,16 @@ vi.mock("./MapCanvas", () => ({
     onSelect: (id: string | null) => void;
     onCellSelect: (ids: readonly string[]) => void;
     onModify: (id: string, geometry: GeoJsonGeometry) => void;
+    onExporterReady?: (exporter: ((mimeType: "image/png" | "image/jpeg") => Promise<{ bytes: number[]; width: number; height: number }>) | null) => void;
   }) => {
+    useEffect(() => {
+      onExporterReady?.(async (mimeType) => ({
+        bytes: mimeType === "image/png" ? [1, 2, 3] : [0xff, 0xd8, 0xff, 0xd9],
+        width: 16,
+        height: 9,
+      }));
+      return () => onExporterReady?.(null);
+    }, [onExporterReady]);
     const geometry = mode === "city" || mode === "town"
       ? { type: "Point" as const, coordinates: [1, 2] as [number, number] }
       : mode === "river" || mode === "coastline" || mode === "boundary"
@@ -37,9 +47,19 @@ vi.mock("./MapCanvas", () => ({
 
 import { EditorShell } from "./EditorShell";
 
-function Harness({ backend, initial }: { backend: MemoryRealmBackend; initial: RealmSnapshot }) {
+function Harness({
+  backend,
+  initial,
+  onExportTransfer = vi.fn(),
+  onExportArtifact = vi.fn(),
+}: {
+  backend: MemoryRealmBackend;
+  initial: RealmSnapshot;
+  onExportTransfer?: () => Promise<void>;
+  onExportArtifact?: (format: "png" | "pdf", bytes: number[]) => Promise<void>;
+}) {
   const [snapshot, setSnapshot] = useState(initial);
-  return <EditorShell snapshot={snapshot} backend={backend} busy={false} onCreate={vi.fn()} onOpen={vi.fn()} onClose={vi.fn()} onSaved={setSnapshot} />;
+  return <EditorShell snapshot={snapshot} backend={backend} busy={false} onClose={vi.fn()} onSaved={setSnapshot} onExportTransfer={onExportTransfer} onExportArtifact={onExportArtifact} />;
 }
 
 describe("EditorShell feature workflow", () => {
@@ -115,6 +135,30 @@ describe("EditorShell feature workflow", () => {
     expect(screen.getByText("地形の上で押したままドラッグして地域の領域を描いてください。")).toBeInTheDocument();
   });
 
+  it("exports the current map as PNG, PDF, and editable transfer data", async () => {
+    const backend = new MemoryRealmBackend();
+    const initial = await backend.createProject({ path: "browser://exports.realmmap", name: "Exports" });
+    const onExportTransfer = vi.fn(async () => undefined);
+    const onExportArtifact = vi.fn(async () => undefined);
+    render(<Harness backend={backend} initial={initial} onExportTransfer={onExportTransfer} onExportArtifact={onExportArtifact} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "PNG" }));
+    await waitFor(() => expect(onExportArtifact).toHaveBeenCalledWith("png", [1, 2, 3]));
+    fireEvent.click(screen.getByRole("button", { name: "PDF" }));
+    await waitFor(() => expect(onExportArtifact).toHaveBeenCalledWith("pdf", expect.arrayContaining([0xff, 0xd8, 0xd9])));
+    fireEvent.click(screen.getByRole("button", { name: "移行データ" }));
+    await waitFor(() => expect(onExportTransfer).toHaveBeenCalledOnce());
+  });
+
+  it("reports export failures without discarding the open world", async () => {
+    const backend = new MemoryRealmBackend();
+    const initial = await backend.createProject({ path: "browser://export-error.realmmap", name: "Export error" });
+    render(<Harness backend={backend} initial={initial} onExportTransfer={async () => { throw new Error("書き出しテストエラー"); }} />);
+    fireEvent.click(screen.getByRole("button", { name: "移行データ" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("書き出しテストエラー");
+    expect(screen.getByRole("region", { name: "世界地図" })).toBeInTheDocument();
+  });
+
   it("validates, saves, and removes chronology forms", async () => {
     const backend = new MemoryRealmBackend();
     const initial = await backend.createProject({ path: "browser://chronology.realmmap", name: "Chronology" });
@@ -132,8 +176,7 @@ describe("EditorShell feature workflow", () => {
     fireEvent.change(eventEnds[1]!, { target: { value: "14" } });
     expect(screen.getByRole("alert")).toHaveTextContent("出来事の終了年");
     fireEvent.change(eventEnds[1]!, { target: { value: "16" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(screen.getByText("保存済み")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("自動保存済み")).toBeInTheDocument());
     expect((await backend.getOpenProject())?.timelineEvents).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "この時代を削除" }));

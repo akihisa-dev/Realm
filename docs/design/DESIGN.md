@@ -6,8 +6,8 @@ Realm's editing surface stays quiet so the map remains the dominant object. The 
 
 ## Initial states
 
-- [Startup concept](concepts/initial-startup.png): no project is open; only create and open are available.
-- [Editor concept](concepts/initial-editor.png): a project is open; pan, zoom, year selection, era and event editing, feature drawing and selection, undo, redo, save, close, create, and open are available.
+- [Startup concept](concepts/initial-startup.png): no world is open; the app-managed library, create action, and transfer-data import are available.
+- [Editor concept](concepts/initial-editor.png): a world is open; pan, zoom, year selection, era and event editing, feature drawing and selection, undo, redo, library return, PNG/PDF export, and transfer export are available. Valid edits save automatically.
 
 The concept images define composition and density. Visible controls remain code-native. The primary rail exposes the nine manual feature classes; the sidebar lists visible features and edits the selected feature, named eras, and timeline events.
 
@@ -26,7 +26,7 @@ The editor uses one native overlay title bar with a compact file toolbar, a narr
 
 ## Allowed initial copy
 
-The startup state uses `Realm`, `創作世界の地図と歴史を、ひとつのファイルに。`, `新しい世界を作成`, and `既存の世界を開く`. The editor uses the project name, `新規`, `開く`, `保存`, `閉じる`, `元に戻す`, `やり直す`, `世界`, feature class names, the feature count, named eras, timeline events, the current year, the current era or `時代未設定`, and the zoom value. Controls for unavailable layers, settings, or menus are not shown.
+The startup state uses `Realm`, `創作世界の地図と歴史を、アプリ内で安全に管理。`, `新しい世界を作成`, and `移行データを読み込む`, together with the library worlds. The editor uses the world name, `ライブラリ`, `PNG`, `PDF`, `移行データ`, `自動保存中…`, `自動保存済み`, `元に戻す`, `やり直す`, `世界`, feature class names, the feature count, named eras, timeline events, the current year, the current era or `時代未設定`, and the zoom value. Controls for unavailable layers, settings, or menus are not shown.
 
 ## Renderer boundary
 

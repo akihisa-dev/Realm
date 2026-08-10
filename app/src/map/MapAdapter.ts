@@ -21,6 +21,7 @@ import Text from "ol/style/Text";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, FeatureType, GeoJsonGeometry, RealmFeature } from "../backend";
+import type { MapRaster } from "../exportArtifacts";
 
 export type MapAdapterOptions = {
   target: HTMLElement;
@@ -65,6 +66,7 @@ export interface RealmMapRenderer {
   onModify(listener: (featureId: string, geometry: GeoJsonGeometry) => void): () => void;
   onZoomChange(listener: (zoom: number) => void): () => void;
   updateSize(): void;
+  exportRaster(mimeType: "image/png" | "image/jpeg"): Promise<MapRaster>;
   dispose(): void;
 }
 
@@ -429,6 +431,26 @@ export class RealmMapAdapter implements RealmMapRenderer {
   updateSize(): void {
     this.map.updateSize();
     this.rebaseZoom();
+  }
+
+  async exportRaster(mimeType: "image/png" | "image/jpeg"): Promise<MapRaster> {
+    this.map.renderSync();
+    const [width = 0, height = 0] = this.map.getSize() ?? [];
+    if (width <= 0 || height <= 0) throw new Error("地図のサイズを取得できません。");
+    const output = document.createElement("canvas");
+    output.width = width;
+    output.height = height;
+    const context = output.getContext("2d");
+    if (!context) throw new Error("地図画像を作成できません。");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    for (const canvas of this.target.querySelectorAll<HTMLCanvasElement>("canvas")) {
+      if (canvas.width > 0 && canvas.height > 0) context.drawImage(canvas, 0, 0, width, height);
+    }
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      output.toBlob((value) => value ? resolve(value) : reject(new Error("地図画像を作成できません。")), mimeType, 0.92);
+    });
+    return { bytes: [...new Uint8Array(await blob.arrayBuffer())], width, height };
   }
 
   private rebaseZoom(): void {

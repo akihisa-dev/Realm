@@ -1,19 +1,19 @@
 # Realm
 
-Realm is a local, editable world-map application for macOS on Apple Silicon. It is designed for people who want to maintain a geographic world as a durable file, with deliberate historical revisions rather than a cloud account or a generated dataset.
+Realm is a local, editable world-map application for macOS on Apple Silicon. It keeps editable worlds in an app-managed library, with deliberate historical revisions rather than a cloud account or a generated dataset.
 
 > Status: initial 0.1 series development
 
 ## What Realm stores
 
-Realm uses one SQLite database file with the `.realmmap` extension as the project artifact. The file contains the map's editable source data, including:
+Realm uses one SQLite database per world inside its app-managed library. Each database contains the map's editable source data, including:
 
 - terrain, forests, rivers, coastlines, countries, regions, boundaries, cities, and towns;
 - hand-edited geometry and metadata for every feature;
 - a year-based revision history, chronology events, and named eras;
 - feature changes that can be inspected at any supported year.
 
-The database is local and portable. Realm does not generate map content, import images, synchronize to a cloud service, or require a hosted account.
+The database remains local. Normal editing is automatically saved without asking the user to manage a project file. A map can be exported as PNG or PDF, while a dedicated `.realmmap` transfer export carries editable data to another Mac. Realm does not generate map content, import images, synchronize to a cloud service, or require a hosted account.
 
 ## Platform and stack
 
@@ -21,7 +21,7 @@ The database is local and portable. Realm does not generate map content, import 
 - Tauri 2 with Rust for the desktop boundary;
 - React with strict TypeScript for the interface;
 - OpenLayers for map rendering;
-- SQLite through `rusqlite`, with one `.realmmap` database per map project.
+- SQLite through `rusqlite`, with one app-managed database per world.
 
 The 0.1 series scope is intentionally local-first. Network access, cloud storage, generated content, and multi-platform packaging are out of scope until a separate decision is recorded in the engineering documents.
 
@@ -54,6 +54,6 @@ Security reports must not contain secrets or exploit details in a public issue. 
 
 ## Japanese
 
-Realmは、Apple Silicon搭載macOS向けのローカル世界地図アプリです。地形、森林、河川、海岸線、国境、地域、境界、都市、町を手動で編集し、年単位のリビジョンと名前付き時代で変化を管理します。地図は単一のSQLite `.realmmap`ファイルに保存し、生成、画像取込、クラウド同期は行いません。
+Realmは、Apple Silicon搭載macOS向けのローカル世界地図アプリです。地形、森林、河川、海岸線、国、地域、境界、都市、町を手動で編集し、年単位のリビジョンと名前付き時代で変化を管理します。編集データはアプリ内ライブラリへ自動保存し、成果物はPNG・PDF、別Macへの移行は専用`.realmmap`データとして書き出します。生成、画像取込、クラウド同期は行いません。
 
 詳細な正本は[文書索引](docs/INDEX.md)から参照してください。Realmはowner-ledで運用し、AGPL-3.0-or-laterで公開します。

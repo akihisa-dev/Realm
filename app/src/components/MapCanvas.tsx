@@ -10,6 +10,7 @@ import { Hand } from "@phosphor-icons/react/dist/csr/Hand";
 import { Minus } from "@phosphor-icons/react/dist/csr/Minus";
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
 import type { CellAttributeSnapshot, GeoJsonGeometry, RealmFeature } from "../backend";
+import type { MapRaster } from "../exportArtifacts";
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;
@@ -24,6 +25,7 @@ type MapCanvasProps = {
   onCellSelect?: (cellIds: readonly string[]) => void;
   onModify?: (featureId: string, geometry: GeoJsonGeometry) => void;
   createRenderer?: RealmMapRendererFactory;
+  onExporterReady?: (exporter: ((mimeType: "image/png" | "image/jpeg") => Promise<MapRaster>) | null) => void;
 };
 
 export function MapCanvas({
@@ -39,6 +41,7 @@ export function MapCanvas({
   onCellSelect,
   onModify,
   createRenderer = createRealmMapRenderer,
+  onExporterReady,
 }: MapCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<RealmMapRenderer | null>(null);
@@ -47,6 +50,7 @@ export function MapCanvas({
   const onSelectRef = useRef(onSelect);
   const onCellSelectRef = useRef(onCellSelect);
   const onModifyRef = useRef(onModify);
+  const onExporterReadyRef = useRef(onExporterReady);
   const mapHelp = mode === "pan"
     ? "ドラッグまたは矢印キーで移動し、ホイールまたはプラス・マイナスキーで拡大縮小できます。"
     : mode === "cell-select"
@@ -63,6 +67,7 @@ export function MapCanvas({
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
   useEffect(() => { onCellSelectRef.current = onCellSelect; }, [onCellSelect]);
   useEffect(() => { onModifyRef.current = onModify; }, [onModify]);
+  useEffect(() => { onExporterReadyRef.current = onExporterReady; }, [onExporterReady]);
 
   useEffect(() => {
     if (zoom === undefined || !adapterRef.current) return;
@@ -80,6 +85,7 @@ export function MapCanvas({
     if (!host) return undefined;
     const adapter = createRenderer({ target: host });
     adapterRef.current = adapter;
+    onExporterReadyRef.current?.((mimeType) => adapter.exportRaster(mimeType));
     if (zoom !== undefined && Math.abs(adapter.getZoom() - zoom) > 0.01) adapter.setZoom(zoom);
     const stopZoomListener = adapter.onZoomChange((nextZoom) => onZoomChangeRef.current(nextZoom));
     const stopDrawListener = adapter.onDraw((geometry) => onDrawRef.current?.(geometry));
@@ -105,6 +111,7 @@ export function MapCanvas({
       stopModifyListener();
       adapter.dispose();
       adapterRef.current = null;
+      onExporterReadyRef.current?.(null);
     };
   }, [createRenderer]);
 
