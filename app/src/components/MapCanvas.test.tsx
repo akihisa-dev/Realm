@@ -24,7 +24,6 @@ describe("MapZoomControls", () => {
     let zoomListener: ((nextZoom: number) => void) | null = null;
     let drawListener: ((geometry: never) => void) | null = null;
     let selectFeaturesListener: ((ids: readonly string[]) => void) | null = null;
-    let cellListener: ((ids: readonly string[]) => void) | null = null;
     let modifyFeaturesListener: ((changes: readonly { id: string; geometry: never }[]) => void) | null = null;
     const renderer: RealmMapRenderer = {
       getZoom: vi.fn(() => zoom),
@@ -47,7 +46,7 @@ describe("MapZoomControls", () => {
       onDraw: vi.fn((listener) => { drawListener = listener as typeof drawListener; return vi.fn(); }),
       onSelectFeatures: vi.fn((listener) => { selectFeaturesListener = listener as typeof selectFeaturesListener; return vi.fn(); }),
       onSelect: vi.fn(() => vi.fn()),
-      onCellSelect: vi.fn((listener) => { cellListener = listener; return vi.fn(); }),
+      onCellSelect: vi.fn(() => vi.fn()),
       onModifyFeatures: vi.fn((listener) => { modifyFeaturesListener = listener as typeof modifyFeaturesListener; return vi.fn(); }),
       onModify: vi.fn(() => vi.fn()),
       onEraseFeatures: vi.fn(() => vi.fn()),
@@ -80,7 +79,6 @@ describe("MapZoomControls", () => {
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveFocus();
     (drawListener as ((geometry: never) => void) | null)?.({} as never);
     (selectFeaturesListener as ((ids: readonly string[]) => void) | null)?.([]);
-    (cellListener as ((ids: readonly string[]) => void) | null)?.([]);
     (modifyFeaturesListener as ((changes: readonly { id: string; geometry: never }[]) => void) | null)?.([{ id: "id", geometry: {} as never }]);
     fireEvent.click(screen.getByRole("button", { name: "表示を中央に戻す" }));
     expect(renderer.resetView).toHaveBeenCalledOnce();
@@ -96,39 +94,18 @@ describe("MapZoomControls", () => {
     rerender(<MapCanvas themeOverrides={{ land: "#aabbcc" }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setThemeOverrides).toHaveBeenLastCalledWith({ land: "#aabbcc" });
 
-    rerender(<MapCanvas mode="river" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("地図上で押したまま線または領域を描きます。続けて複数の地物を描けます。Escapeで描画中の線を取り消せます。")).toBeInTheDocument();
+    rerender(<MapCanvas mode="terrain" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(screen.getByText("地図上で押したまま地形を描きます。続けて複数の地形を描けます。Escapeで描画中の輪郭を取り消せます。")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
-    expect(renderer.setMode).toHaveBeenLastCalledWith("river");
+    expect(renderer.setMode).toHaveBeenLastCalledWith("terrain");
 
-    const onToolWheel = vi.fn();
-    rerender(<MapCanvas mode="river" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} onToolWheel={onToolWheel} />);
+    rerender(<MapCanvas mode="terrain" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setDrawingOptions).toHaveBeenLastCalledWith({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
-    expect(screen.getByText("地図上を順にクリックして線または領域を描きます。Altで直線化、Alt+Shiftで45°に揃え、右クリックまたはダブルクリックで確定、Escapeで取り消せます。")).toBeInTheDocument();
-    fireEvent.wheel(screen.getByRole("region", { name: "世界地図" }), { deltaY: -1, shiftKey: true });
-    expect(onToolWheel).toHaveBeenCalledWith(1, true);
+    expect(screen.getByText("地図上を順にクリックして地形を描きます。Altで直線化、Alt+Shiftで45°に揃え、右クリックまたはダブルクリックで確定、Escapeで取り消せます。")).toBeInTheDocument();
 
-    rerender(<MapCanvas mode="cell-select" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("地図上で押したまま筆のように塗り、通過したセルへ属性を付けます。クリックでも円形に塗れます。Escapeで選択を解除できます。")).toBeInTheDocument();
-    expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
-    rerender(<MapCanvas mode="cell-select" selectedCellIds={["256:128"]} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(renderer.setSelectedCells).toHaveBeenLastCalledWith(["256:128"]);
-    rerender(<MapCanvas mode="cell-select" cellBrushRadius={4} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(renderer.setCellBrushRadius).toHaveBeenLastCalledWith(4);
-    const canvas = screen.getByRole("region", { name: "世界地図" });
-    Object.defineProperty(canvas, "getBoundingClientRect", { configurable: true, value: () => ({ left: 0, top: 0, width: 512, height: 256, right: 512, bottom: 256, x: 0, y: 0, toJSON: () => ({}) }) });
-    const pointerMove = new Event("pointermove", { bubbles: true });
-    Object.defineProperties(pointerMove, { clientX: { value: 120 }, clientY: { value: 80 }, pointerType: { value: "pen" }, pressure: { value: 0.5 } });
-    fireEvent(canvas, pointerMove);
-    const preview = document.querySelector<HTMLElement>(".brush-preview");
-    expect(preview).not.toBeNull();
-    expect(preview?.style.width).toBe("64px");
-    fireEvent.pointerLeave(canvas);
-    expect(document.querySelector(".brush-preview")).toBeNull();
-
-    rerender(<MapCanvas mode="city" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("地図上をクリックして点を配置します。角括弧またはホイールで大きさ、カンマ・ピリオドで回転、Fで左右反転します。")).toBeInTheDocument();
-    expect(renderer.setMode).toHaveBeenLastCalledWith("city");
+    rerender(<MapCanvas mode="polygon-hole" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(screen.getByText("選択した地形の内側を描いて穴を追加します。右クリックまたはダブルクリックで確定し、Escapeで取り消せます。")).toBeInTheDocument();
+    expect(renderer.setMode).toHaveBeenLastCalledWith("polygon-hole");
     unmount();
     expect(renderer.dispose).toHaveBeenCalledOnce();
   });

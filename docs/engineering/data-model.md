@@ -11,19 +11,25 @@ Schema version 7 is the current single-state format. It records the same value i
 ## Identity and current state
 
 - A world has one stable identifier, one current name, and one bounded project-settings object.
-- A feature has one stable identifier, one feature class, one current name, one current geometry, and one current JSON properties object.
-- Creating, revising, deleting, or explicitly locking a feature changes its current row transactionally. Bounded multi-feature revisions, deletions, and lock changes validate the complete request before one transaction and one undo step.
-- A bounded multi-feature create validates every feature first and commits the complete batch as one undoable transaction. It is used for explicit symbol scatter; generated candidates do not remain an implicit renderer layer.
-- Feature properties hold bounded renderer-independent values such as line width, symbol scale, or rotation. The command boundary accepts only JSON objects of at most 32 KiB; OpenLayers objects, viewport state, and external paths are never stored there.
+- An editable terrain has one stable identifier, the `terrain` class, one current name, one current polygon, and one current JSON properties object.
+- Creating, revising, deleting, or explicitly locking terrain changes its current row transactionally. Bounded multi-terrain revisions, deletions, and lock changes validate the complete request before one transaction and one undo step.
+- A bounded multi-terrain create validates every polygon first and commits the complete batch as one undoable transaction. It is used only for explicit terrain copy, paste, and duplicate operations.
+- Terrain properties hold bounded renderer-independent visibility, opacity, lock, and order values. The command boundary accepts only JSON objects of at most 32 KiB; OpenLayers objects, viewport state, and external paths are never stored there.
 - Project settings preserve only the selected renderer theme, bounded project-local color overrides, grid visibility/kind/color/width/spacing, raster export scale and extent, and integer canvas width and height from 512 through 8192 pixels. Theme overrides accept only the documented palette keys and `#RRGGBB` values; grid kind is geographic, square, or hexagonal. The command boundary accepts exactly the documented keys and values. Viewport, zoom, active tool, selection, drawing gesture, and per-class visibility remain transient.
 - Undo and redo are session state, not persisted map history. They restore the complete before or after state of one edit operation while the project remains open.
 - Reopening a project clears the undo and redo stacks without changing the saved map.
 
 Realm does not persist years, named eras, timeline events, feature revisions, deletion revisions, or same-year ordering. These concepts require a new product decision before they can return.
 
-## Feature classes
+## Terrain and compatibility classes
 
-The feature classes and their required GeoJSON geometry are:
+The active editor creates, displays, selects, edits, and exports only the following class:
+
+| Geometry | Editable class |
+| --- | --- |
+| `Polygon` | `terrain` |
+
+The version 7 SQLite `features` table still recognizes the following retired classes so existing projects can open without destructive migration:
 
 | Geometry | Feature classes |
 | --- | --- |
@@ -33,21 +39,21 @@ The feature classes and their required GeoJSON geometry are:
 
 Coordinates are EPSG:4326 longitude/latitude pairs within the bounded world, lines contain at least two distinct consecutive positions, and polygon rings contain at least four positions with equal first and last positions. New writes are limited to 4096 coordinates and 512 KiB of encoded geometry; zero-area or self-intersecting rings are rejected. Polygon holes must be strictly inside the outer ring and may not touch, intersect, or contain one another. The legacy read validator remains compatible with already stored version 6 geometry while every create or revise command uses the strict write validator. No class is populated by a generator.
 
-Terrain is a single polygon class. Realm does not store flat-land, mountain, or another terrain-kind value. A `mountain` is a separately placed point feature whose appearance is derived by the renderer. Country and region polygons are independent political overlays on the same world plane as terrain polygons. They do not store a parent terrain identifier and are not clipped to one terrain feature.
+Terrain is a single polygon class. Realm does not store flat-land, mountain, biome, or another terrain-kind value. Rows of retired classes remain byte-for-byte current-state compatibility data when terrain is edited. The terrain editor excludes them from renderer input, selection, counts, mutation callbacks, and creation controls.
 
-## Embedded assets
+## Legacy embedded assets
 
-Version 5 introduced validated image assets in an `assets` table inside the same database. Each row has a stable identifier, unique SHA-256 digest, MIME type, byte length, dimensions, metadata JSON object, and bytes. Import accepts PNG, JPEG, or WebP only, with an 8 MiB byte limit and a 32768-pixel limit per dimension. SVG is not accepted because safe offline rendering would require complete active-content and external-reference sanitization.
+Version 5 introduced validated image assets in an `assets` table inside the same database. The terrain-only editor has no asset import, placement, management, rendering, or deletion entry. Existing rows remain local compatibility data and are preserved during terrain edits and transfer.
 
 Project snapshots expose only bounded asset manifests. Bytes cross the command boundary only through an explicit single-asset read. Identical bytes deduplicate by SHA-256. A feature refers to an asset by identifier in its validated properties; deletion and undo refuse to remove an asset while any feature still references it. Absolute paths and network locations are never persisted.
 
 A bounded asset-pack import validates 1 through 256 images and at most 64 MiB before one transaction. Newly inserted assets receive a generated pack identifier, the user-supplied pack name, and a stable zero-based ordinal in reserved metadata fields. Existing SHA-identical assets are reused without rewriting their metadata. Pack deletion validates every identifier and reference before one transaction; import and deletion are each one undoable operation.
 
-## Cell grid and attributes
+## Legacy cell grid and attributes
 
-The schema contains a fixed EPSG:4326 grid of 512 columns by 256 rows. A cell has no stored GeoJSON: its stable `x:y` identifier and grid version derive its center coordinate and bounds. The brush converts pointer coordinates into grid coordinates and includes every cell center within the selected radius of each stroke segment. This produces a zoom-independent round stamp for a click and a continuous thick path for a drag.
+The schema retains the fixed EPSG:4326 grid and cell-attribute tables for compatibility with existing version 7 files. The terrain-only editor has no cell brush, cell selection, cell rendering, or cell mutation entry.
 
-Cell attributes are current independent layers. `forest`, `country`, and `region` may coexist on one cell; changing or clearing one layer does not replace the others. There is no `terrain_kind` cell layer. Each completed brush stroke upserts or deletes the affected current rows in one transaction. Undo and redo restore the complete before or after cell set for the stroke.
+Existing `forest`, `country`, and `region` cell rows are preserved unchanged while terrain is edited. There is no `terrain_kind` cell layer, and the editor does not reinterpret compatibility rows as terrain.
 
 ## Internal schema evolution
 
