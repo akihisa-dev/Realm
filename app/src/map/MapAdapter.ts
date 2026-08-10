@@ -10,6 +10,7 @@ import Translate from "ol/interaction/Translate";
 import * as SelectModule from "ol/interaction/Select";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
+import MouseWheelZoom from "ol/interaction/MouseWheelZoom";
 import Graticule from "ol/layer/Graticule";
 import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
@@ -17,7 +18,7 @@ import Fill from "ol/style/Fill";
 import Stroke from "ol/style/Stroke";
 import Style from "ol/style/Style";
 import Text from "ol/style/Text";
-import { singleClick } from "ol/events/condition";
+import { platformModifierKeyOnly, singleClick } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, Position, RealmFeature } from "../backend";
@@ -227,6 +228,10 @@ const snapFinalSegment = (geometry: GeoJsonGeometry, stepDegrees: number): GeoJs
   return { type: "Polygon", coordinates };
 };
 
+const straightenLine = (geometry: GeoJsonGeometry): GeoJsonGeometry => geometry.type === "LineString" && geometry.coordinates.length > 2
+  ? { type: "LineString", coordinates: [geometry.coordinates[0]!, geometry.coordinates.at(-1)!] }
+  : geometry;
+
 const nudgeGeometry = (geometry: GeoJsonGeometry, offset: Position): GeoJsonGeometry => {
   const move = ([longitude, latitude]: Position): Position => [longitude + offset[0], latitude + offset[1]];
   if (geometry.type === "Point") return { type: "Point", coordinates: move(geometry.coordinates) };
@@ -263,6 +268,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private drawingGesture: DrawingOptions["gesture"] = "freehand";
   private drawingSmoothingPasses: number | undefined;
   private drawingSnapAngleDegrees: number | null = null;
+  private modifierSnapAngleDegrees: number | null = null;
+  private modifierStraighten = false;
   private gridOptions: GridOptions = { ...DEFAULT_GRID_OPTIONS };
   private gridVisible = true;
   private cellBrushRadius: number = CELL_BRUSH_RADII.medium;
@@ -282,6 +289,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly modifyListeners = new Set<(featureId: string, geometry: GeoJsonGeometry) => void>();
   private readonly eraseFeaturesListeners = new Set<(featureIds: readonly string[]) => void>();
   private readonly eraseListeners = new Set<(featureId: string) => void>();
+  private readonly layerShiftListeners = new Set<(direction: -1 | 1) => void>();
   private readonly errorListeners = new Set<(message: string) => void>();
   private baseZoom = 0;
   private temporaryPan = false;
@@ -431,7 +439,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
         enableRotation: false,
       }),
       controls: defaultControls({ zoom: false, rotate: false, attribution: false }),
-      interactions: defaultInteractions({ altShiftDragRotate: false, pinchRotate: false }),
+      interactions: defaultInteractions({ altShiftDragRotate: false, pinchRotate: false, mouseWheelZoom: false }).extend([
+        new MouseWheelZoom({ condition: platformModifierKeyOnly }),
+      ]),
     });
     this.map.addInteraction(this.selection);
     this.map.addInteraction(this.modify);
@@ -659,7 +669,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
     if (mode === "pan") return;
     const drawType = drawTypeForMode(mode);
-    const drawingFeatureType = mode === "polygon-hole" ? "terrain" : mode;
+    const drawingFeatureType = mode === "polygon-hole" ? "terrain" : mode === "label-path" ? "boundary" : mode;
     this.draw = new Draw({ type: drawType, style: this.featureStyle(new Feature({ featureType: drawingFeatureType, name: "", properties: {} })) });
     // Lines and areas follow the pointer continuously from press to release.
     // Point features remain a single click because they have no path to trace.
@@ -676,7 +686,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
           this.map.getView().getResolution() ?? 1,
           this.drawingSmoothingPasses === undefined ? undefined : { smoothingPasses: this.drawingSmoothingPasses },
         );
-        encoded = this.drawingSnapAngleDegrees === null ? refined : snapFinalSegment(refined, this.drawingSnapAngleDegrees);
+        const shaped = this.modifierStraighten ? straightenLine(refined) : refined;
+        const snapAngle = this.drawingSnapAngleDegrees ?? this.modifierSnapAngleDegrees;
+        encoded = snapAngle === null ? shaped : snapFinalSegment(shaped, snapAngle);
       } catch (cause) {
         const message = cause instanceof Error && cause.message ? cause.message : "描画した形状を保存できません。";
         for (const listener of this.errorListeners) listener(message);
@@ -714,6 +726,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    this.modifierSnapAngleDegrees = event.altKey && event.shiftKey ? 45 : null;
+    this.modifierStraighten = event.altKey && !event.shiftKey;
     if ((event.metaKey || event.ctrlKey) && event.key === "0") {
       this.resetView();
       event.preventDefault();
@@ -732,8 +746,14 @@ export class RealmMapAdapter implements RealmMapRenderer {
       event.preventDefault();
       return;
     }
-    if (this.activeMode === "pan" && event.shiftKey
-      && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
+    if (this.activeMode === "pan" && event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown") && this.selectedFeatureIds().length > 0) {
+      for (const listener of this.layerShiftListeners) listener(event.key === "ArrowUp" ? 1 : -1);
+      event.preventDefault();
+      return;
+    }
+    if (this.activeMode === "pan" && !event.shiftKey && !event.metaKey && !event.ctrlKey
+      && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")
+      && this.selectedFeatureIds().length > 0) {
       const distance = event.altKey ? 0.05 : 0.25;
       const offset: Position = event.key === "ArrowLeft" ? [-distance, 0]
         : event.key === "ArrowRight" ? [distance, 0]
@@ -771,6 +791,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
   };
 
   private readonly handleKeyUp = (event: KeyboardEvent): void => {
+    if (!(event.altKey && event.shiftKey)) this.modifierSnapAngleDegrees = null;
+    if (!event.altKey) this.modifierStraighten = false;
     if (event.code !== "Space" || !this.temporaryPan) return;
     this.temporaryPan = false;
     this.setNavigationActive(false);
@@ -937,6 +959,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
     return () => this.eraseListeners.delete(listener);
   }
 
+  onLayerShift(listener: (direction: -1 | 1) => void): () => void {
+    this.layerShiftListeners.add(listener);
+    return () => this.layerShiftListeners.delete(listener);
+  }
+
   onError(listener: (message: string) => void): () => void {
     this.errorListeners.add(listener);
     return () => this.errorListeners.delete(listener);
@@ -1069,6 +1096,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.modifyListeners.clear();
     this.eraseFeaturesListeners.clear();
     this.eraseListeners.clear();
+    this.layerShiftListeners.clear();
     this.errorListeners.clear();
     this.selection.getFeatures().clear();
     this.featureSource.clear();

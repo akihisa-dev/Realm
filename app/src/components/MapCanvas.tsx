@@ -41,6 +41,8 @@ type MapCanvasProps = {
   onModifyFeatures?: (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void;
   onErase?: (featureId: string) => void;
   onEraseFeatures?: (featureIds: readonly string[]) => void;
+  onLayerShift?: (direction: -1 | 1) => void;
+  onToolWheel?: (direction: -1 | 1, cycleVariant: boolean) => void;
   onError?: (message: string) => void;
   createRenderer?: RealmMapRendererFactory;
   onExporterReady?: (exporter: ((mimeType: "image/png" | "image/jpeg", scale?: number, extent?: "viewport" | "world", size?: ExportCanvasSize) => Promise<MapRaster>) | null) => void;
@@ -71,6 +73,8 @@ export function MapCanvas({
   onModifyFeatures,
   onErase,
   onEraseFeatures,
+  onLayerShift,
+  onToolWheel,
   onError,
   createRenderer = createRealmMapRenderer,
   onExporterReady,
@@ -87,20 +91,23 @@ export function MapCanvas({
   const onModifyFeaturesRef = useRef(onModifyFeatures);
   const onEraseRef = useRef(onErase);
   const onEraseFeaturesRef = useRef(onEraseFeatures);
+  const onLayerShiftRef = useRef(onLayerShift);
   const onErrorRef = useRef(onError);
   const onExporterReadyRef = useRef(onExporterReady);
   const mapHelp = mode === "pan"
-    ? "クリックで地物を選択し、Shiftクリックで追加・解除できます。ShiftまたはCommandを押しながら地図上を囲むと複数選択します。何もない場所のドラッグまたは矢印キーで移動し、ホイールで拡大縮小できます。"
+    ? "クリックで選択、Shiftクリックで追加・解除、修飾キーを押しながら囲むと複数選択します。矢印で地物を微移動、Shift+上下で描画順、Command+C/X/Vでコピー・切り取り・貼り付けできます。Command+ホイールで拡大縮小します。"
     : mode === "erase"
       ? "消したい地物をクリックします。削除した地物は元に戻す操作で復元できます。"
     : mode === "cell-select"
       ? "地図上で押したまま筆のように塗り、通過したセルへ属性を付けます。クリックでも円形に塗れます。Escapeで選択を解除できます。"
       : mode === "polygon-hole"
         ? "選択した領域の内側を描いて穴を追加します。右クリックまたはダブルクリックで確定し、Escapeで取り消せます。"
+      : mode === "label-path"
+        ? "選択したラベルを沿わせる曲線を描きます。右クリックまたはダブルクリックで確定し、Escapeで取り消せます。"
       : mode === "city" || mode === "town" || mode === "mountain" || mode === "tree" || mode === "symbol" || mode === "label" || mode === "scale"
-      ? "地図上をクリックして点を配置します。"
+      ? "地図上をクリックして点を配置します。角括弧またはホイールで大きさ、カンマ・ピリオドで回転、Fで左右反転します。"
       : drawingOptions.gesture === "vertices"
-        ? "地図上を順にクリックして線または領域を描きます。右クリックまたはダブルクリックで確定し、Escapeで取り消せます。"
+        ? "地図上を順にクリックして線または領域を描きます。Altで直線化、Alt+Shiftで45°に揃え、右クリックまたはダブルクリックで確定、Escapeで取り消せます。"
         : "地図上で押したまま線または領域を描きます。続けて複数の地物を描けます。Escapeで描画中の線を取り消せます。";
 
   useEffect(() => {
@@ -115,6 +122,7 @@ export function MapCanvas({
   useEffect(() => { onModifyFeaturesRef.current = onModifyFeatures; }, [onModifyFeatures]);
   useEffect(() => { onEraseRef.current = onErase; }, [onErase]);
   useEffect(() => { onEraseFeaturesRef.current = onEraseFeatures; }, [onEraseFeatures]);
+  useEffect(() => { onLayerShiftRef.current = onLayerShift; }, [onLayerShift]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
   useEffect(() => { onExporterReadyRef.current = onExporterReady; }, [onExporterReady]);
 
@@ -166,6 +174,7 @@ export function MapCanvas({
       onEraseFeaturesRef.current?.(featureIds);
       if (!onEraseFeaturesRef.current) for (const id of featureIds) onEraseRef.current?.(id);
     });
+    const stopLayerShiftListener = adapter.onLayerShift((direction) => onLayerShiftRef.current?.(direction));
     const stopErrorListener = adapter.onError((message) => onErrorRef.current?.(message));
     adapter.setFeatures(features);
     adapter.setTheme(themeId);
@@ -193,6 +202,7 @@ export function MapCanvas({
       stopCellSelectListener();
       stopModifyListener();
       stopEraseListener();
+      stopLayerShiftListener();
       stopErrorListener();
       adapter.dispose();
       adapterRef.current = null;
@@ -203,7 +213,11 @@ export function MapCanvas({
   return (
     <>
       <p id="map-help" className="sr-only">{mapHelp}</p>
-      <div ref={hostRef} className={mode === "pan" ? "map-canvas" : "map-canvas map-canvas-draw"} role="region" tabIndex={0} aria-label="世界地図" aria-describedby="map-help" onPointerMove={(event) => {
+      <div ref={hostRef} className={mode === "pan" ? "map-canvas" : "map-canvas map-canvas-draw"} role="region" tabIndex={0} aria-label="世界地図" aria-describedby="map-help" onWheel={(event) => {
+        if (event.metaKey || event.ctrlKey || mode === "pan" || mode === "erase" || mode === "polygon-hole" || mode === "label-path") return;
+        event.preventDefault();
+        onToolWheel?.(event.deltaY > 0 ? -1 : 1, event.shiftKey);
+      }} onPointerMove={(event) => {
         if (mode !== "cell-select") return;
         const bounds = event.currentTarget.getBoundingClientRect();
         const pressure = event.pointerType === "pen" && event.pressure > 0 ? event.pressure : 1;

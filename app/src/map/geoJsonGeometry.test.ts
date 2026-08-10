@@ -82,6 +82,31 @@ describe("map geometry modules", () => {
     expect(mountainAfter).not.toBe(mountainBefore);
   });
 
+  it("renders smooth, rough, and angular river profiles distinctly", () => {
+    const featureStyle = createFeatureStyle();
+    const river = new Feature({ featureType: "river", name: "River", properties: { lineProfile: "smooth" } });
+    const smooth = featureStyle(river) as Style[];
+    expect(smooth[1]?.getStroke()?.getLineDash()).toBeNull();
+    river.set("properties", { lineProfile: "rough", roughness: 0.9 });
+    const rough = featureStyle(river) as Style[];
+    expect(rough[1]?.getStroke()?.getLineDash()).toHaveLength(4);
+    river.set("properties", { lineProfile: "angular" });
+    const angular = featureStyle(river) as Style[];
+    expect(angular[1]?.getStroke()?.getLineCap()).toBe("butt");
+    expect(angular[1]?.getStroke()?.getLineJoin()).toBe("bevel");
+  });
+
+  it("renders project-defined territory fills and borders", () => {
+    const featureStyle = createFeatureStyle();
+    const region = new Feature({ featureType: "region", name: "March", properties: { fillColor: "#123456", fillOpacity: 0.4, strokeColor: "#654321", lineStyle: "dotted" } });
+    const styled = featureStyle(region) as Style;
+    expect(styled.getFill()?.getColor()).toContain("rgba(18, 52, 86, 0.4)");
+    expect(styled.getStroke()?.getColor()).toBe("#654321");
+    expect(styled.getStroke()?.getLineDash()).toEqual([2, 5]);
+    region.set("properties", { fillColor: "#abcdef", fillOpacity: 0.2, strokeColor: "#654321", lineStyle: "solid" });
+    expect(featureStyle(region)).not.toBe(styled);
+  });
+
   it("invalidates feature and cell style caches when theme overrides change", () => {
     let overrides: { river?: string; grid?: string } = { river: "#102030", grid: "#203040" };
     const featureStyle = createFeatureStyle(() => "ink", () => true, () => undefined, () => overrides);
@@ -122,6 +147,13 @@ describe("map geometry modules", () => {
     expect(labelText?.getStroke()?.getWidth()).toBe(5);
     expect(labelText?.getRotation()).toBe(0.5);
 
+    label.set("properties", { fontSize: 18, labelPlacement: "line", labelPath: [[0, 0], [2, 1], [4, 0]], labelRepeat: 128, labelMaxAngle: Math.PI / 3 });
+    const curvedStyle = featureStyle(label) as Style;
+    expect(curvedStyle.getGeometry()).toBeInstanceOf(LineString);
+    expect(curvedStyle.getText()?.getPlacement()).toBe("line");
+    expect(curvedStyle.getText()?.getRepeat()).toBe(128);
+    expect(curvedStyle.getText()?.getMaxAngle()).toBeCloseTo(Math.PI / 3);
+
     const road = new Feature({ featureType: "road", name: "Road" });
     const roadStyle = featureStyle(road);
     const roadText = (Array.isArray(roadStyle) ? roadStyle[1] : roadStyle)?.getText();
@@ -131,11 +163,12 @@ describe("map geometry modules", () => {
   it("renders project-embedded image assets for symbol features", () => {
     const url = "data:image/png;base64,iVBORw0KGgo=";
     const featureStyle = createFeatureStyle(() => "ink", () => true, (assetId) => assetId === "asset-1" ? url : undefined);
-    const symbol = new Feature({ featureType: "symbol", name: "Marker", properties: { assetId: "asset-1", scale: 1.5, rotation: 0.2 } });
+    const symbol = new Feature({ featureType: "symbol", name: "Marker", properties: { assetId: "asset-1", scale: 1.5, rotation: 0.2, flipX: true } });
     const styled = featureStyle(symbol);
     const image = (Array.isArray(styled) ? styled[0] : styled)?.getImage();
     expect(image).toBeInstanceOf(Icon);
     expect((image as Icon).getSrc()).toBe(url);
+    expect((image as Icon).getScale()).toEqual([-1.5, 1.5]);
   });
 
   it("renders distinct built-in compass and north-arrow symbols", () => {
@@ -151,7 +184,7 @@ describe("map geometry modules", () => {
   it("renders local overlay assets in a bbox renderer and keeps a safe fallback", () => {
     const url = "data:image/png;base64,iVBORw0KGgo=";
     const featureStyle = createFeatureStyle(() => "ink", () => true, (assetId) => assetId === "asset-1" ? url : undefined);
-    const overlay = new Feature({ featureType: "overlay", name: "Trace", properties: { assetId: "asset-1", opacity: 0.6, rotation: 0.25, blendMode: "multiply" } });
+    const overlay = new Feature({ featureType: "overlay", name: "Trace", properties: { assetId: "asset-1", opacity: 0.6, rotation: 0.25, blendMode: "multiply", cropLeft: 0.1 } });
     const rendered = featureStyle(overlay);
     const style = Array.isArray(rendered) ? rendered[0] : rendered;
     expect(style?.getImage()).toBeInstanceOf(Icon);
@@ -159,8 +192,23 @@ describe("map geometry modules", () => {
     expect(style?.getZIndex()).toBe(24);
     expect(style).toBe(featureStyle(overlay));
 
-    overlay.set("properties", { assetId: "asset-1", opacity: 0.35, rotation: 0.25, blendMode: "screen" });
+    overlay.set("properties", { assetId: "asset-1", opacity: 0.35, rotation: 0.25, blendMode: "screen", cropLeft: 0.2 });
     expect(featureStyle(overlay)).not.toBe(rendered);
+
+    const icon = style?.getImage() as Icon;
+    const getImageSize = vi.spyOn(icon, "getImageSize").mockReturnValue([100, 80]);
+    const getImage = vi.spyOn(icon, "getImage").mockReturnValue({} as HTMLImageElement);
+    const calls: string[] = [];
+    const context = {
+      globalAlpha: 1, globalCompositeOperation: "source-over", fillStyle: "", strokeStyle: "", lineWidth: 0,
+      save: () => calls.push("save"), restore: () => calls.push("restore"), translate: () => calls.push("translate"), rotate: () => calls.push("rotate"),
+      beginPath: () => calls.push("beginPath"), moveTo: () => calls.push("moveTo"), lineTo: () => calls.push("lineTo"), closePath: () => calls.push("closePath"), clip: () => calls.push("clip"),
+      transform: () => calls.push("transform"), drawImage: () => calls.push("drawImage"), fillRect: () => calls.push("fillRect"), strokeRect: () => calls.push("strokeRect"), setLineDash: () => calls.push("setLineDash"),
+    } as unknown as CanvasRenderingContext2D;
+    style?.getRenderer()?.([[[0, 0], [90, 5], [80, 70], [10, 60], [0, 0]]], { context, pixelRatio: 1, feature: overlay, geometry: new Polygon([]), resolution: 1, rotation: 0 });
+    expect(calls.filter((call) => call === "transform")).toHaveLength(2);
+    expect(calls.filter((call) => call === "drawImage")).toHaveLength(2);
+    getImageSize.mockRestore(); getImage.mockRestore();
 
     const remoteOverlay = new Feature({ featureType: "overlay", name: "Remote", properties: { assetId: "remote", opacity: 0.6 } });
     const fallbackStyle = featureStyle(remoteOverlay);

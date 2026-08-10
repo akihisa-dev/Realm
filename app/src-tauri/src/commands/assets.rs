@@ -74,18 +74,6 @@ pub(crate) fn import_asset_in_state(
         input.sha256.as_deref(),
     )?;
     let sha256 = crate::domain::assets::sha256_hex(&input.bytes);
-    let pack_id = Uuid::new_v4().to_string();
-    let prepared = prepared
-        .into_iter()
-        .map(
-            |(ordinal, sha256, mime, bytes, width, height, metadata_json)| {
-                let metadata_json =
-                    enrich_pack_metadata(&metadata_json, &pack_id, &pack_name, ordinal)?;
-                Ok((ordinal, sha256, mime, bytes, width, height, metadata_json))
-            },
-        )
-        .collect::<Result<Vec<_>, AppError>>()?;
-
     let mut open = lock_project(state)?;
     let project = open
         .as_mut()
@@ -184,6 +172,17 @@ pub(crate) fn import_assets_batch_in_state(
             metadata_json,
         ));
     }
+    let pack_id = Uuid::new_v4().to_string();
+    let prepared = prepared
+        .into_iter()
+        .map(
+            |(ordinal, sha256, mime, bytes, width, height, metadata_json)| {
+                let metadata_json =
+                    enrich_pack_metadata(&metadata_json, &pack_id, &pack_name, ordinal)?;
+                Ok((sha256, mime, bytes, width, height, metadata_json))
+            },
+        )
+        .collect::<Result<Vec<_>, AppError>>()?;
 
     let mut open = lock_project(state)?;
     let project = open
@@ -191,7 +190,7 @@ pub(crate) fn import_assets_batch_in_state(
         .ok_or_else(|| AppError::new("no_open_project", "No project is open."))?;
     let transaction = project.connection.transaction().map_err(AppError::from)?;
     let mut changes = Vec::with_capacity(prepared.len());
-    for (ordinal, sha256, mime, bytes, width, height, metadata_json) in prepared {
+    for (sha256, mime, bytes, width, height, metadata_json) in prepared {
         let existing: Option<String> = transaction
             .query_row(
                 "SELECT id FROM assets WHERE sha256 = ?1",

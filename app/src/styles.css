@@ -126,6 +126,11 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .feature-layer-controls .feature-opacity { display: grid; grid-column: 1 / -1; grid-template-columns: auto 1fr auto; }
 .feature-layer-controls .feature-opacity input { width: 100%; }
 .feature-layer-controls .feature-opacity output { grid-column: auto; }
+.label-path-controls { display: grid; gap: 8px; padding: 9px; border: 1px solid #d7dcdf; border-radius: 6px; }
+.label-path-controls label { display: grid; gap: 4px; }
+.label-path-controls textarea { width: 100%; resize: vertical; }
+.overlay-crop-controls { display: grid; gap: 7px; margin: 0; padding: 9px; border: 1px solid #d7dcdf; border-radius: 6px; }
+.overlay-crop-controls legend { padding: 0 4px; color: #525a61; font-size: 12px; }
 .map-region { position: relative; grid-column: 3; grid-row: 1; min-width: 0; min-height: 0; background: #fff; }
 .map-canvas { width: 100%; height: 100%; }
 .map-canvas:focus-visible { outline: 2px solid #078c98; outline-offset: -3px; }

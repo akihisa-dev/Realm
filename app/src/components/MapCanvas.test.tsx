@@ -52,6 +52,7 @@ describe("MapZoomControls", () => {
       onModify: vi.fn(() => vi.fn()),
       onEraseFeatures: vi.fn(() => vi.fn()),
       onErase: vi.fn(() => vi.fn()),
+      onLayerShift: vi.fn(() => vi.fn()),
       onError: vi.fn(() => vi.fn()),
       onZoomChange: vi.fn((listener) => {
         zoomListener = listener;
@@ -100,9 +101,12 @@ describe("MapZoomControls", () => {
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
     expect(renderer.setMode).toHaveBeenLastCalledWith("river");
 
-    rerender(<MapCanvas mode="river" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    const onToolWheel = vi.fn();
+    rerender(<MapCanvas mode="river" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} onToolWheel={onToolWheel} />);
     expect(renderer.setDrawingOptions).toHaveBeenLastCalledWith({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
-    expect(screen.getByText("地図上を順にクリックして線または領域を描きます。右クリックまたはダブルクリックで確定し、Escapeで取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("地図上を順にクリックして線または領域を描きます。Altで直線化、Alt+Shiftで45°に揃え、右クリックまたはダブルクリックで確定、Escapeで取り消せます。")).toBeInTheDocument();
+    fireEvent.wheel(screen.getByRole("region", { name: "世界地図" }), { deltaY: -1, shiftKey: true });
+    expect(onToolWheel).toHaveBeenCalledWith(1, true);
 
     rerender(<MapCanvas mode="cell-select" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("地図上で押したまま筆のように塗り、通過したセルへ属性を付けます。クリックでも円形に塗れます。Escapeで選択を解除できます。")).toBeInTheDocument();
@@ -123,7 +127,7 @@ describe("MapZoomControls", () => {
     expect(document.querySelector(".brush-preview")).toBeNull();
 
     rerender(<MapCanvas mode="city" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("地図上をクリックして点を配置します。")).toBeInTheDocument();
+    expect(screen.getByText("地図上をクリックして点を配置します。角括弧またはホイールで大きさ、カンマ・ピリオドで回転、Fで左右反転します。")).toBeInTheDocument();
     expect(renderer.setMode).toHaveBeenLastCalledWith("city");
     unmount();
     expect(renderer.dispose).toHaveBeenCalledOnce();

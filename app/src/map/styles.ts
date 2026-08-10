@@ -1,4 +1,5 @@
 import type { FeatureLike } from "ol/Feature";
+import LineString from "ol/geom/LineString";
 import Fill from "ol/style/Fill";
 import CircleStyle from "ol/style/Circle";
 import RegularShape from "ol/style/RegularShape";
@@ -46,6 +47,8 @@ type LabelOptions = {
   placement: "point" | "line";
   offsetX: number;
   offsetY: number;
+  repeat: number | undefined;
+  maxAngle: number;
 };
 
 const labelOptions = (feature: FeatureLike, type: FeatureType | undefined, themeId: MapThemeId, overrides: ThemeOverrides = {}): LabelOptions => {
@@ -67,7 +70,22 @@ const labelOptions = (feature: FeatureLike, type: FeatureType | undefined, theme
     placement,
     offsetX: labelNumber(feature, ["labelOffsetX", "offsetX"], 0, -256, 256),
     offsetY: labelNumber(feature, ["labelOffsetY", "offsetY"], type === "city" ? -13 : type === "town" ? -11 : 0, -256, 256),
+    repeat: labelNumber(feature, ["labelRepeat"], 0, 0, 512) || undefined,
+    maxAngle: labelNumber(feature, ["labelMaxAngle"], Math.PI / 4, Math.PI / 12, Math.PI / 2),
   };
+};
+
+const labelPathGeometry = (feature: FeatureLike): LineString | undefined => {
+  const value = (feature.get("properties") as Record<string, unknown> | undefined)?.labelPath;
+  if (!Array.isArray(value) || value.length < 2 || value.length > 4_096) return undefined;
+  const coordinates: [number, number][] = [];
+  for (const position of value) {
+    if (!Array.isArray(position) || position.length !== 2 || !position.every(Number.isFinite)) return undefined;
+    const [longitude, latitude] = position as [number, number];
+    if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) return undefined;
+    coordinates.push([longitude, latitude]);
+  }
+  return new LineString(coordinates);
 };
 
 const featureLabel = (feature: FeatureLike, type: FeatureType | undefined, value: unknown, themeId: MapThemeId, opacity = 1, overrides: ThemeOverrides = {}): Text | undefined => {
@@ -82,6 +100,9 @@ const featureLabel = (feature: FeatureLike, type: FeatureType | undefined, value
     offsetY: options.offsetY,
     rotation: options.rotation,
     rotateWithView: false,
+    repeat: options.repeat,
+    maxAngle: options.maxAngle,
+    keepUpright: true,
     fill: new Fill({ color: colorWithOpacity(options.color, opacity) }),
     stroke: new Stroke({ color: colorWithOpacity(options.haloColor, opacity), width: options.haloWidth }),
   });
@@ -162,7 +183,46 @@ const pixelBounds = (coordinates: unknown): [number, number, number, number] | u
     : undefined;
 };
 
-const overlayImageRenderer = (image: Icon, opacity: number, rotation: number, blendMode: OverlayBlendMode, placeholder: string) => (coordinates: unknown, state: { context: CanvasRenderingContext2D; pixelRatio: number }): void => {
+type PixelPoint = [number, number];
+const firstPixelRing = (coordinates: unknown): PixelPoint[] | undefined => {
+  if (!Array.isArray(coordinates)) return undefined;
+  if (coordinates.length >= 4 && coordinates.every((value) => Array.isArray(value) && typeof value[0] === "number" && typeof value[1] === "number")) {
+    const points = (coordinates as number[][]).filter((value) => Number.isFinite(value[0]) && Number.isFinite(value[1])).map((value) => [value[0]!, value[1]!] as PixelPoint);
+    if (points.length > 1 && points[0]![0] === points.at(-1)![0] && points[0]![1] === points.at(-1)![1]) points.pop();
+    return points.length === 4 ? points : undefined;
+  }
+  for (const child of coordinates) {
+    const ring = firstPixelRing(child);
+    if (ring) return ring;
+  }
+  return undefined;
+};
+
+const rotatePixelPoint = (point: PixelPoint, center: PixelPoint, radians: number): PixelPoint => {
+  if (radians === 0) return point;
+  const cosine = Math.cos(radians); const sine = Math.sin(radians);
+  const x = point[0] - center[0]; const y = point[1] - center[1];
+  return [center[0] + x * cosine - y * sine, center[1] + x * sine + y * cosine];
+};
+
+const drawImageTriangle = (context: CanvasRenderingContext2D, image: CanvasImageSource, source: readonly [PixelPoint, PixelPoint, PixelPoint], destination: readonly [PixelPoint, PixelPoint, PixelPoint], sourceRect: readonly [number, number, number, number]): void => {
+  const [a, b, c] = source; const [x, y, z] = destination;
+  const denominator = a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]);
+  if (Math.abs(denominator) < 1e-9) return;
+  const linearX = (first: number, second: number, third: number) => (first * (b[1] - c[1]) + second * (c[1] - a[1]) + third * (a[1] - b[1])) / denominator;
+  const linearY = (first: number, second: number, third: number) => (first * (c[0] - b[0]) + second * (a[0] - c[0]) + third * (b[0] - a[0])) / denominator;
+  const translate = (first: number, second: number, third: number) => (first * (b[0] * c[1] - c[0] * b[1]) + second * (c[0] * a[1] - a[0] * c[1]) + third * (a[0] * b[1] - b[0] * a[1])) / denominator;
+  context.save();
+  context.beginPath(); context.moveTo(x[0], x[1]); context.lineTo(y[0], y[1]); context.lineTo(z[0], z[1]); context.closePath(); context.clip();
+  context.transform(linearX(x[0], y[0], z[0]), linearX(x[1], y[1], z[1]), linearY(x[0], y[0], z[0]), linearY(x[1], y[1], z[1]), translate(x[0], y[0], z[0]), translate(x[1], y[1], z[1]));
+  const [sourceX, sourceY, sourceWidth, sourceHeight] = sourceRect;
+  context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, sourceX, sourceY, sourceWidth, sourceHeight);
+  context.restore();
+};
+
+type OverlayCrop = { left: number; top: number; right: number; bottom: number };
+
+const overlayImageRenderer = (image: Icon, opacity: number, rotation: number, blendMode: OverlayBlendMode, placeholder: string, crop: OverlayCrop) => (coordinates: unknown, state: { context: CanvasRenderingContext2D; pixelRatio: number }): void => {
   const bounds = pixelBounds(coordinates);
   if (!bounds) return;
   const [minX, minY, maxX, maxY] = bounds;
@@ -178,8 +238,21 @@ const overlayImageRenderer = (image: Icon, opacity: number, rotation: number, bl
   try {
     const size = image.getImageSize();
     const imageElement = image.getImage(state.pixelRatio);
-    if ((size?.[0] ?? 0) > 0 && (size?.[1] ?? 0) > 0 && imageElement) {
-      context.drawImage(imageElement, -width / 2, -height / 2, width, height);
+    const imageWidth = size?.[0] ?? 0;
+    const imageHeight = size?.[1] ?? 0;
+    if (imageWidth > 0 && imageHeight > 0 && imageElement) {
+      const ring = firstPixelRing(coordinates);
+      if (ring) {
+        context.restore();
+        const center: PixelPoint = [minX + width / 2, minY + height / 2];
+        const destination = ring.map((point) => rotatePixelPoint(point, center, rotation)) as [PixelPoint, PixelPoint, PixelPoint, PixelPoint];
+        const sourceX = imageWidth * crop.left; const sourceY = imageHeight * crop.top;
+        const sourceWidth = imageWidth * (1 - crop.left - crop.right); const sourceHeight = imageHeight * (1 - crop.top - crop.bottom);
+        const source: [PixelPoint, PixelPoint, PixelPoint, PixelPoint] = [[sourceX, sourceY], [sourceX + sourceWidth, sourceY], [sourceX + sourceWidth, sourceY + sourceHeight], [sourceX, sourceY + sourceHeight]];
+        context.save(); context.globalAlpha *= opacity; context.globalCompositeOperation = blendMode;
+        drawImageTriangle(context, imageElement, [source[0], source[1], source[2]], [destination[0], destination[1], destination[2]], [sourceX, sourceY, sourceWidth, sourceHeight]);
+        drawImageTriangle(context, imageElement, [source[0], source[2], source[3]], [destination[0], destination[2], destination[3]], [sourceX, sourceY, sourceWidth, sourceHeight]);
+      } else context.drawImage(imageElement, -width / 2, -height / 2, width, height);
       drawn = true;
     }
   } catch {
@@ -212,7 +285,18 @@ const applyFeatureOpacity = (styles: Style | Style[], opacity: number): void => 
 
 const lineDashProperty = (feature: FeatureLike): number[] | undefined => {
   const style = (feature.get("properties") as Record<string, unknown> | undefined)?.lineStyle;
-  return style === "dashed" ? [9, 6] : style === "dotted" ? [2, 5] : undefined;
+  if (style === "dashed") return [9, 6];
+  if (style === "dotted") return [2, 5];
+  const profile = lineProfileProperty(feature);
+  if (profile !== "rough") return undefined;
+  const roughness = numericProperty(feature, "roughness", 0.55, 0, 1);
+  return [Math.max(2.5, 7 - roughness * 3), 0.8 + roughness * 2.2, 1.2, 0.8 + roughness * 1.4];
+};
+
+type LineProfile = "smooth" | "rough" | "angular";
+const lineProfileProperty = (feature: FeatureLike): LineProfile => {
+  const value = (feature.get("properties") as Record<string, unknown> | undefined)?.lineProfile;
+  return value === "rough" || value === "angular" ? value : "smooth";
 };
 
 type FrameStyle = "solid" | "double" | "dashed";
@@ -282,8 +366,12 @@ const presentationPropertiesKey = (feature: FeatureLike, type: FeatureType | und
     scale: numericProperty(feature, "scale", 1, 0.25, 8),
     rotation: numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2),
     strokeColor: stringProperty(feature, ["strokeColor"], ""),
+    fillColor: stringProperty(feature, ["fillColor"], ""),
+    fillOpacity: numericProperty(feature, "fillOpacity", 0.18, 0, 1),
     casingColor: stringProperty(feature, ["casingColor"], ""),
     lineDash: lineDashProperty(feature),
+    lineProfile: lineProfileProperty(feature),
+    roughness: numericProperty(feature, "roughness", 0.55, 0, 1),
     frameWidth: numericProperty(feature, "frameWidth", 3, 0.5, 32),
     frameColor: stringProperty(feature, ["frameColor"], ""),
     frameStyle: frameStyleProperty(feature),
@@ -291,12 +379,18 @@ const presentationPropertiesKey = (feature: FeatureLike, type: FeatureType | und
     segments: Math.round(numericProperty(feature, "segments", 4, 1, 12)),
     unit: stringProperty(feature, ["unit"], "単位"),
     symbolKind: stringProperty(feature, ["symbolKind"], "marker"),
+    flipX: (feature.get("properties") as Record<string, unknown> | undefined)?.flipX === true,
     unitsPerDegree: numericProperty(feature, "unitsPerDegree", 1, 0.0001, 1_000_000),
     zIndex: numericProperty(feature, "zIndex", 0, -1000, 1000),
     visible: (feature.get("properties") as Record<string, unknown> | undefined)?.visible !== false,
     opacity: featureOpacity(feature),
     blendMode: overlayBlendMode(feature),
+    cropLeft: numericProperty(feature, "cropLeft", 0, 0, 0.49),
+    cropTop: numericProperty(feature, "cropTop", 0, 0, 0.49),
+    cropRight: numericProperty(feature, "cropRight", 0, 0, 0.49),
+    cropBottom: numericProperty(feature, "cropBottom", 0, 0, 0.49),
     label: options,
+    labelPath: labelPathGeometry(feature)?.getCoordinates() ?? null,
   });
 };
 
@@ -331,13 +425,15 @@ export const createFeatureStyle = (
     } else if (type === "river") {
       const width = numericProperty(feature, "width", 2.4, 0.5, 24);
       const dash = lineDashProperty(feature);
-      styles = [new Style({ stroke: new Stroke({ color: stringProperty(feature, ["casingColor"], theme.labelHalo), width: width + 2.6, lineCap: "round", lineJoin: "round", lineDash: dash }), zIndex: 51 }), new Style({ stroke: new Stroke({ color: stringProperty(feature, ["strokeColor"], theme.river), width, lineCap: "round", lineJoin: "round", lineDash: dash }), text: label, zIndex: 52 })];
+      const angular = lineProfileProperty(feature) === "angular";
+      styles = [new Style({ stroke: new Stroke({ color: stringProperty(feature, ["casingColor"], theme.labelHalo), width: width + 2.6, lineCap: angular ? "butt" : "round", lineJoin: angular ? "bevel" : "round", lineDash: dash }), zIndex: 51 }), new Style({ stroke: new Stroke({ color: stringProperty(feature, ["strokeColor"], theme.river), width, lineCap: angular ? "butt" : "round", lineJoin: angular ? "bevel" : "round", lineDash: dash }), text: label, zIndex: 52 })];
     } else if (type === "coastline") {
       styles = [new Style({ stroke: new Stroke({ color: theme.coastGlow, width: 6, lineCap: "round", lineJoin: "round" }), zIndex: 49 }), new Style({ stroke: new Stroke({ color: theme.landInk, width: 1.5, lineCap: "round", lineJoin: "round" }), zIndex: 50 })];
     } else if (type === "road") {
       const width = numericProperty(feature, "width", 2.2, 0.5, 24);
       const dash = lineDashProperty(feature);
-      styles = [new Style({ stroke: new Stroke({ color: stringProperty(feature, ["casingColor"], theme.labelHalo), width: width + 3, lineCap: "round", lineJoin: "round", lineDash: dash }), zIndex: 53 }), new Style({ stroke: new Stroke({ color: stringProperty(feature, ["strokeColor"], theme.boundary), width, lineCap: "round", lineJoin: "round", lineDash: dash }), text: label, zIndex: 54 })];
+      const angular = lineProfileProperty(feature) === "angular";
+      styles = [new Style({ stroke: new Stroke({ color: stringProperty(feature, ["casingColor"], theme.labelHalo), width: width + 3, lineCap: angular ? "butt" : "round", lineJoin: angular ? "bevel" : "round", lineDash: dash }), zIndex: 53 }), new Style({ stroke: new Stroke({ color: stringProperty(feature, ["strokeColor"], theme.boundary), width, lineCap: angular ? "butt" : "round", lineJoin: angular ? "bevel" : "round", lineDash: dash }), text: label, zIndex: 54 })];
     } else if (type === "lake") {
       styles = [new Style({ fill: new Fill({ color: theme.canvas }), stroke: new Stroke({ color: theme.coastGlow, width: 5 }), zIndex: 21 }), new Style({ stroke: new Stroke({ color: theme.river, width: 1.5 }), text: label, zIndex: 22 })];
     } else if (type === "scale") {
@@ -353,9 +449,10 @@ export const createFeatureStyle = (
     } else if (type === "mountain" || type === "tree" || type === "symbol" || type === "label") {
       const scale = numericProperty(feature, "scale", 1, 0.25, 8);
       const rotation = numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2);
+      const flipX = (feature.get("properties") as Record<string, unknown> | undefined)?.flipX === true;
       const symbolKind = stringProperty(feature, ["symbolKind"], "marker");
       const image = assetUrl && (type === "mountain" || type === "tree" || type === "symbol")
-        ? new Icon({ src: assetUrl, scale, rotation })
+        ? new Icon({ src: assetUrl, scale: [flipX ? -scale : scale, scale], rotation })
         : type === "mountain"
         ? new RegularShape({ points: 3, radius: 9 * scale, angle: rotation, fill: new Fill({ color: theme.land }), stroke: new Stroke({ color: theme.landInk, width: 1.6 }) })
         : type === "tree"
@@ -367,7 +464,7 @@ export const createFeatureStyle = (
                 ? new RegularShape({ points: 3, radius: 10 * scale, angle: rotation, fill: new Fill({ color: theme.settlement }), stroke: new Stroke({ color: theme.labelHalo, width: 1 }) })
                 : new RegularShape({ points: 5, radius: 6 * scale, radius2: 2.8 * scale, angle: rotation, fill: new Fill({ color: theme.settlement }), stroke: new Stroke({ color: theme.labelHalo, width: 1 }) })
             : new CircleStyle({ radius: 1, fill: new Fill({ color: "rgba(0,0,0,0)" }) });
-      styles = new Style({ image, text: type === "label" ? featureLabel(feature, "label", name, themeId, opacity, overrides) : label, zIndex: type === "label" ? 82 : 75 });
+      styles = new Style({ geometry: type === "label" ? labelPathGeometry(feature) : undefined, image, text: type === "label" ? featureLabel(feature, "label", name, themeId, opacity, overrides) : label, zIndex: type === "label" ? 82 : 75 });
     } else if (type === "overlay") {
       const overlayStroke = theme.country;
       const overlayFill = `${theme.country}12`;
@@ -378,10 +475,14 @@ export const createFeatureStyle = (
         // image loading and schedules a redraw when decoding completes.
         const image = new Icon({ src: assetUrl, opacity: 1 });
         const blendMode = overlayBlendMode(feature);
+        const crop: OverlayCrop = {
+          left: numericProperty(feature, "cropLeft", 0, 0, 0.49), top: numericProperty(feature, "cropTop", 0, 0, 0.49),
+          right: numericProperty(feature, "cropRight", 0, 0, 0.49), bottom: numericProperty(feature, "cropBottom", 0, 0, 0.49),
+        };
         styles = new Style({
           image,
-          renderer: overlayImageRenderer(image, opacity, numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2), blendMode, theme.country),
-          hitDetectionRenderer: overlayImageRenderer(image, opacity, numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2), "source-over", theme.country),
+          renderer: overlayImageRenderer(image, opacity, numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2), blendMode, theme.country, crop),
+          hitDetectionRenderer: overlayImageRenderer(image, opacity, numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2), "source-over", theme.country, crop),
           zIndex: 24,
         });
       } else {
@@ -404,10 +505,13 @@ export const createFeatureStyle = (
     } else {
       const area = type === "country" || type === "region";
       const color = type === "country" ? theme.country : type === "region" ? theme.region : type === "boundary" ? theme.boundary : theme.settlement;
+      const strokeColor = area ? stringProperty(feature, ["strokeColor"], color) : color;
+      const fillColor = area ? stringProperty(feature, ["fillColor"], color) : color;
+      const fillOpacity = numericProperty(feature, "fillOpacity", type === "country" ? 0.18 : 0.12, 0, 1);
       const zIndex = type === "country" ? 30 : type === "region" ? 40 : type === "boundary" ? 60 : 70;
       styles = new Style({
-        fill: area ? new Fill({ color: `${color}${type === "country" ? "22" : "16"}` }) : undefined,
-        stroke: new Stroke({ color, width: type === "region" ? 1.5 : type === "boundary" ? 2 : 2.2, lineDash: type === "region" ? [5, 4] : type === "boundary" ? [8, 4] : undefined }),
+        fill: area ? new Fill({ color: colorWithOpacity(fillColor, fillOpacity) }) : undefined,
+        stroke: new Stroke({ color: strokeColor, width: type === "region" ? 1.5 : type === "boundary" ? 2 : 2.2, lineDash: area ? lineDashProperty(feature) ?? (type === "region" ? [5, 4] : undefined) : type === "boundary" ? [8, 4] : undefined }),
         image: new CircleStyle({ radius: type === "city" ? 6 : 4.5, fill: new Fill({ color }), stroke: new Stroke({ color: theme.labelHalo, width: 1.5 }) }),
         text: label,
         zIndex,

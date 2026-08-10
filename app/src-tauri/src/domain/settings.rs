@@ -1,7 +1,10 @@
 use crate::error::AppError;
-use crate::storage::schema::{DEFAULT_SETTINGS_JSON, SETTINGS_MAX_BYTES};
+#[cfg(test)]
+use crate::storage::schema::DEFAULT_SETTINGS_JSON;
+use crate::storage::schema::SETTINGS_MAX_BYTES;
 use serde_json::Value;
 
+#[cfg(test)]
 pub(crate) fn default_settings() -> Value {
     serde_json::from_str(DEFAULT_SETTINGS_JSON).expect("default settings JSON is valid")
 }

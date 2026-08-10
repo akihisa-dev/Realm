@@ -33,7 +33,11 @@ const CUSTOM_THEME_COLORS: readonly [ThemeColorKey, string][] = [
   ["canvas", "海・背景"], ["land", "陸地"], ["landInk", "海岸線"], ["river", "河川"], ["forest", "森林"],
   ["country", "国"], ["region", "地域"], ["boundary", "境界"], ["settlement", "都市・記号"], ["label", "ラベル"],
 ];
-type Tool = "pan" | "cell-select" | "erase" | "polygon-hole" | typeof FEATURE_TYPES[number][0];
+type Tool = "pan" | "cell-select" | "erase" | "polygon-hole" | "label-path" | typeof FEATURE_TYPES[number][0];
+const TOOL_SHORTCUTS: Readonly<Partial<Record<string, Tool>>> = {
+  c: "terrain", z: "terrain", x: "erase", r: "river", g: "cell-select", m: "mountain", t: "tree",
+  p: "road", w: "lake", l: "label", s: "symbol", e: "erase",
+};
 const defaultFeatureProperties = (featureType: typeof FEATURE_TYPES[number][0]): Record<string, unknown> => featureType === "river"
   ? { width: 2.4 }
   : featureType === "road"
@@ -111,12 +115,21 @@ export function EditorShell(props: EditorShellProps) {
   const [drawingSnapAngleDegrees, setDrawingSnapAngleDegrees] = useState<number | null>(null);
   const [featureName, setFeatureName] = useState("新しい地物");
   const [featureQuery, setFeatureQuery] = useState("");
+  const [featureClipboard, setFeatureClipboard] = useState<readonly RealmFeature[]>([]);
+  const clipboardPasteCount = useRef(0);
   const [featureWidth, setFeatureWidth] = useState(2.4);
   const [featureStrokeColor, setFeatureStrokeColor] = useState("#357da5");
   const [featureCasingColor, setFeatureCasingColor] = useState("#ffffff");
   const [featureLineStyle, setFeatureLineStyle] = useState<"solid" | "dashed" | "dotted">("solid");
+  const [lineProfile, setLineProfile] = useState<"smooth" | "rough" | "angular">("smooth");
+  const [lineRoughness, setLineRoughness] = useState(0.55);
+  const [areaFillColor, setAreaFillColor] = useState("#c99b67");
+  const [areaBorderColor, setAreaBorderColor] = useState("#a97949");
+  const [areaFillOpacity, setAreaFillOpacity] = useState(0.18);
+  const [areaBorderStyle, setAreaBorderStyle] = useState<"solid" | "dashed" | "dotted">("solid");
   const [featureScale, setFeatureScale] = useState(1);
   const [featureRotation, setFeatureRotation] = useState(0);
+  const [featureFlipX, setFeatureFlipX] = useState(false);
   const [symbolKind, setSymbolKind] = useState<"marker" | "compass" | "north">("marker");
   const [labelFontSize, setLabelFontSize] = useState(18);
   const [labelFontFamily, setLabelFontFamily] = useState<MapLabelFontFamily>("system");
@@ -124,6 +137,8 @@ export function EditorShell(props: EditorShellProps) {
   const [labelHaloColor, setLabelHaloColor] = useState("#ffffff");
   const [labelHaloWidth, setLabelHaloWidth] = useState(3);
   const [labelPlacement, setLabelPlacement] = useState<"point" | "line">("point");
+  const [labelRepeat, setLabelRepeat] = useState(0);
+  const [labelMaxAngle, setLabelMaxAngle] = useState(45);
   const [zoom, setZoom] = useState(1);
   const [themeId, setThemeId] = useState<MapThemeId>(snapshot.settings.themeId ?? DEFAULT_MAP_THEME_ID);
   const [exportScale, setExportScale] = useState(snapshot.settings.exportScale ?? 2);
@@ -149,6 +164,7 @@ export function EditorShell(props: EditorShellProps) {
   const [featureZIndex, setFeatureZIndex] = useState(0);
   const [featureOpacity, setFeatureOpacity] = useState(1);
   const [overlayBlendMode, setOverlayBlendMode] = useState<"source-over" | "multiply" | "screen" | "overlay" | "soft-light">("source-over");
+  const [overlayCrop, setOverlayCrop] = useState({ left: 0, top: 0, right: 0, bottom: 0 });
   const [scaleUnit, setScaleUnit] = useState("単位");
   const [scaleUnitsPerDegree, setScaleUnitsPerDegree] = useState(1);
   const [scaleBarLength, setScaleBarLength] = useState(160);
@@ -343,7 +359,40 @@ export function EditorShell(props: EditorShellProps) {
       setActiveTool("pan");
       return;
     }
+    if (activeTool === "label-path") {
+      if (!selectedFeature || selectedFeature.featureType !== "label" || geometry.type !== "LineString") {
+        setError("曲線を設定するラベルを1件選択してください。");
+        setActiveTool("pan");
+        return;
+      }
+      void run(() => backend.reviseFeature({
+        id: selectedFeature.id,
+        name: selectedFeature.name,
+        geometry: selectedFeature.geometry,
+        properties: { ...selectedFeature.properties, labelPath: geometry.coordinates, labelPlacement: "line", labelRepeat, labelMaxAngle: labelMaxAngle * Math.PI / 180 },
+      }), "ラベルの曲線を保存できませんでした。");
+      setActiveTool("pan");
+      return;
+    }
     const properties = defaultFeatureProperties(activeTool);
+    if (activeTool === "river" || activeTool === "road") Object.assign(properties, {
+      width: featureWidth, strokeColor: featureStrokeColor, casingColor: featureCasingColor, lineStyle: featureLineStyle,
+      lineProfile, roughness: lineRoughness,
+      fontSize: labelFontSize, fontFamily: labelFontFamily, textColor: labelTextColor, haloColor: labelHaloColor,
+      haloWidth: labelHaloWidth, labelPlacement,
+    });
+    if (activeTool === "country" || activeTool === "region") Object.assign(properties, {
+      fillColor: areaFillColor, strokeColor: areaBorderColor, fillOpacity: areaFillOpacity, lineStyle: areaBorderStyle,
+      fontFamily: labelFontFamily,
+    });
+    if (activeTool === "mountain" || activeTool === "tree" || activeTool === "symbol") Object.assign(properties, {
+      scale: featureScale, rotation: featureRotation * Math.PI / 180, flipX: featureFlipX,
+    });
+    if (activeTool === "symbol") properties.symbolKind = symbolKind;
+    if (activeTool === "label") Object.assign(properties, {
+      fontSize: labelFontSize, fontFamily: labelFontFamily, textColor: labelTextColor, haloColor: labelHaloColor,
+      haloWidth: labelHaloWidth, rotation: featureRotation * Math.PI / 180,
+    });
     if (["mountain", "tree", "symbol", "overlay"].includes(activeTool) && featureAssetId) properties.assetId = featureAssetId;
     void run(() => backend.createFeature({ featureType: activeTool, name: featureName.trim() || "新しい地物", geometry, properties }), "地物を作成できませんでした。");
   };
@@ -358,8 +407,15 @@ export function EditorShell(props: EditorShellProps) {
       setFeatureStrokeColor(typeof feature.properties?.strokeColor === "string" ? feature.properties.strokeColor : feature.featureType === "road" ? "#7a573a" : "#357da5");
       setFeatureCasingColor(typeof feature.properties?.casingColor === "string" ? feature.properties.casingColor : "#ffffff");
       setFeatureLineStyle(feature.properties?.lineStyle === "dashed" || feature.properties?.lineStyle === "dotted" ? feature.properties.lineStyle : "solid");
+      setLineProfile(feature.properties?.lineProfile === "rough" || feature.properties?.lineProfile === "angular" ? feature.properties.lineProfile : "smooth");
+      setLineRoughness(typeof feature.properties?.roughness === "number" ? Math.max(0, Math.min(1, feature.properties.roughness)) : 0.55);
+      setAreaFillColor(typeof feature.properties?.fillColor === "string" ? feature.properties.fillColor : feature.featureType === "region" ? "#8e77b4" : "#c99b67");
+      setAreaBorderColor(typeof feature.properties?.strokeColor === "string" ? feature.properties.strokeColor : feature.featureType === "region" ? "#705a98" : "#a97949");
+      setAreaFillOpacity(typeof feature.properties?.fillOpacity === "number" ? Math.max(0, Math.min(1, feature.properties.fillOpacity)) : feature.featureType === "region" ? 0.12 : 0.18);
+      setAreaBorderStyle(feature.properties?.lineStyle === "dashed" || feature.properties?.lineStyle === "dotted" ? feature.properties.lineStyle : "solid");
       setFeatureScale(typeof feature.properties?.scale === "number" ? feature.properties.scale : 1);
       setFeatureRotation(typeof feature.properties?.rotation === "number" ? feature.properties.rotation * 180 / Math.PI : 0);
+      setFeatureFlipX(feature.properties?.flipX === true);
       setSymbolKind(feature.properties?.symbolKind === "compass" || feature.properties?.symbolKind === "north" ? feature.properties.symbolKind : "marker");
       setLabelFontSize(typeof feature.properties?.fontSize === "number" ? feature.properties.fontSize : 18);
       setLabelFontFamily(typeof feature.properties?.fontFamily === "string" && feature.properties.fontFamily in MAP_LABEL_FONT_FAMILIES ? feature.properties.fontFamily as MapLabelFontFamily : "system");
@@ -367,12 +423,20 @@ export function EditorShell(props: EditorShellProps) {
       setLabelHaloColor(typeof feature.properties?.haloColor === "string" ? feature.properties.haloColor : "#ffffff");
       setLabelHaloWidth(typeof feature.properties?.haloWidth === "number" ? feature.properties.haloWidth : 3);
       setLabelPlacement(feature.properties?.labelPlacement === "line" ? "line" : feature.featureType === "river" || feature.featureType === "road" ? "line" : "point");
+      setLabelRepeat(typeof feature.properties?.labelRepeat === "number" ? Math.max(0, Math.min(512, feature.properties.labelRepeat)) : 0);
+      setLabelMaxAngle(typeof feature.properties?.labelMaxAngle === "number" ? Math.max(15, Math.min(90, feature.properties.labelMaxAngle * 180 / Math.PI)) : 45);
       setFeatureAssetId(typeof feature.properties?.assetId === "string" ? feature.properties.assetId : "");
       setFeatureVisible(feature.properties?.visible !== false);
       setFeatureLocked(feature.properties?.locked === true);
       setFeatureZIndex(typeof feature.properties?.zIndex === "number" ? feature.properties.zIndex : 0);
       setFeatureOpacity(typeof feature.properties?.opacity === "number" ? feature.properties.opacity : 1);
       setOverlayBlendMode(feature.properties?.blendMode === "multiply" || feature.properties?.blendMode === "screen" || feature.properties?.blendMode === "overlay" || feature.properties?.blendMode === "soft-light" ? feature.properties.blendMode : "source-over");
+      setOverlayCrop({
+        left: typeof feature.properties?.cropLeft === "number" ? Math.max(0, Math.min(0.49, feature.properties.cropLeft)) : 0,
+        top: typeof feature.properties?.cropTop === "number" ? Math.max(0, Math.min(0.49, feature.properties.cropTop)) : 0,
+        right: typeof feature.properties?.cropRight === "number" ? Math.max(0, Math.min(0.49, feature.properties.cropRight)) : 0,
+        bottom: typeof feature.properties?.cropBottom === "number" ? Math.max(0, Math.min(0.49, feature.properties.cropBottom)) : 0,
+      });
       setScaleUnit(typeof feature.properties?.unit === "string" ? feature.properties.unit : "単位");
       setScaleUnitsPerDegree(typeof feature.properties?.unitsPerDegree === "number" ? feature.properties.unitsPerDegree : 1);
       setScaleBarLength(typeof feature.properties?.barLengthPx === "number" ? feature.properties.barLengthPx : 160);
@@ -401,15 +465,28 @@ export function EditorShell(props: EditorShellProps) {
       properties.strokeColor = featureStrokeColor;
       properties.casingColor = featureCasingColor;
       properties.lineStyle = featureLineStyle;
+      properties.lineProfile = lineProfile;
+      properties.roughness = lineRoughness;
+    }
+    if (feature.featureType === "country" || feature.featureType === "region") {
+      properties.fillColor = areaFillColor;
+      properties.strokeColor = areaBorderColor;
+      properties.fillOpacity = areaFillOpacity;
+      properties.lineStyle = areaBorderStyle;
     }
     if (["mountain", "tree", "symbol", "scale"].includes(feature.featureType)) {
       properties.scale = featureScale;
       properties.rotation = featureRotation * Math.PI / 180;
     }
+    if (["mountain", "tree", "symbol"].includes(feature.featureType)) properties.flipX = featureFlipX;
     if (feature.featureType === "symbol") properties.symbolKind = symbolKind;
     if (feature.featureType === "overlay") {
       properties.rotation = featureRotation * Math.PI / 180;
       properties.blendMode = overlayBlendMode;
+      properties.cropLeft = overlayCrop.left;
+      properties.cropTop = overlayCrop.top;
+      properties.cropRight = overlayCrop.right;
+      properties.cropBottom = overlayCrop.bottom;
     }
     if (feature.featureType === "scale") {
       properties.unit = scaleUnit.trim() || "単位";
@@ -433,6 +510,8 @@ export function EditorShell(props: EditorShellProps) {
       properties.haloColor = labelHaloColor;
       properties.haloWidth = labelHaloWidth;
       properties.rotation = featureRotation * Math.PI / 180;
+      properties.labelRepeat = labelRepeat;
+      properties.labelMaxAngle = labelMaxAngle * Math.PI / 180;
     }
     if (feature.featureType === "river" || feature.featureType === "road") {
       properties.fontSize = labelFontSize;
@@ -453,6 +532,11 @@ export function EditorShell(props: EditorShellProps) {
     try { reviseFeature(feature, transformGeometry(feature.geometry, options)); }
     catch (cause) { setError(errorMessage(cause, "地物を変形できませんでした。")); }
   };
+  const clearLabelPath = (feature: RealmFeature) => {
+    const properties = { ...feature.properties }; delete properties.labelPath; properties.labelPlacement = "point";
+    void run(() => backend.reviseFeature({ id: feature.id, name: feature.name, geometry: feature.geometry, properties }), "ラベルの曲線を解除できませんでした。");
+    setActiveTool("pan");
+  };
   const duplicateFeature = (feature: RealmFeature) => {
     try {
       const geometry = transformGeometry(feature.geometry, { offset: duplicateOffset(feature.geometry) });
@@ -468,6 +552,32 @@ export function EditorShell(props: EditorShellProps) {
     }).filter((revision): revision is NonNullable<typeof revision> => Boolean(revision));
     if (revisions.length === 0) return;
     void run(() => backend.reviseFeaturesBatch({ features: revisions }), "選択した地物を変更できませんでした。");
+  };
+  const shiftSelectedLayers = (direction: -1 | 1) => {
+    const revisions = selectedFeatures.filter((feature) => feature.properties?.locked !== true).map((feature) => {
+      const current = typeof feature.properties?.zIndex === "number" ? feature.properties.zIndex : 0;
+      return { ...feature, properties: { ...feature.properties, zIndex: Math.max(-1000, Math.min(1000, current + direction)) } };
+    });
+    if (revisions.length === 0) return;
+    if (revisions.length === 1) setFeatureZIndex(revisions[0]!.properties.zIndex as number);
+    void run(() => backend.reviseFeaturesBatch({ features: revisions.map((feature) => ({ id: feature.id, name: feature.name, geometry: feature.geometry, properties: feature.properties })) }), "選択した地物の描画順を変更できませんでした。");
+  };
+  const adjustActiveTool = (direction: -1 | 1, cycleVariant: boolean) => {
+    if (cycleVariant) {
+      if (activeTool === "river" || activeTool === "road") {
+        const profiles = ["smooth", "rough", "angular"] as const; const index = profiles.indexOf(lineProfile);
+        setLineProfile(profiles[(index + direction + profiles.length) % profiles.length]!);
+      } else if (activeTool === "symbol") {
+        const kinds = ["marker", "compass", "north"] as const; const index = kinds.indexOf(symbolKind);
+        setSymbolKind(kinds[(index + direction + kinds.length) % kinds.length]!);
+      }
+      return;
+    }
+    if (activeTool === "cell-select") {
+      const sizes = [1, 2, 4, 8]; const index = sizes.indexOf(cellBrushRadius);
+      setCellBrushRadius(sizes[Math.max(0, Math.min(sizes.length - 1, index + direction))]!);
+    } else if (activeTool === "river" || activeTool === "road") setFeatureWidth((value) => Math.max(0.5, Math.min(12, value + direction * 0.5)));
+    else if (activeTool === "mountain" || activeTool === "tree" || activeTool === "symbol") setFeatureScale((value) => Math.max(0.25, Math.min(4, value + direction * 0.1)));
   };
   const transformSelectedFeatures = (options: TransformOptions) => {
     const editable = selectedFeatures.filter((feature) => feature.properties?.locked !== true);
@@ -490,6 +600,38 @@ export function EditorShell(props: EditorShellProps) {
         properties: feature.properties ?? {},
       })) }), "選択した地物を複製できませんでした。");
     } catch (cause) { setError(errorMessage(cause, "選択した地物を複製できませんでした。")); }
+  };
+  const copySelectedFeatures = () => {
+    if (selectedFeatures.length === 0) return;
+    setFeatureClipboard(selectedFeatures.map((feature) => ({
+      ...feature,
+      geometry: JSON.parse(JSON.stringify(feature.geometry)) as GeoJsonGeometry,
+      properties: JSON.parse(JSON.stringify(feature.properties ?? {})) as Record<string, unknown>,
+    })));
+    clipboardPasteCount.current = 0;
+  };
+  const pasteCopiedFeatures = () => {
+    if (featureClipboard.length === 0) return;
+    try {
+      clipboardPasteCount.current += 1;
+      const baseOffset = duplicateOffset(featureClipboard[0]!.geometry);
+      const offset: [number, number] = [baseOffset[0] * clipboardPasteCount.current, baseOffset[1] * clipboardPasteCount.current];
+      const geometries = transformGeometries(featureClipboard.map((feature) => feature.geometry), { offset });
+      void run(() => backend.createFeaturesBatch({ features: featureClipboard.map((feature, index) => ({
+        featureType: feature.featureType,
+        name: `${feature.name} のコピー`,
+        geometry: geometries[index]!,
+        properties: { ...feature.properties, locked: false },
+      })) }), "コピーした地物を貼り付けできませんでした。");
+    } catch (cause) { setError(errorMessage(cause, "コピーした地物を貼り付けできませんでした。")); }
+  };
+  const cutSelectedFeatures = () => {
+    const editable = selectedFeatures.filter((feature) => feature.properties?.locked !== true);
+    if (editable.length === 0) return;
+    setFeatureClipboard(editable.map((feature) => ({ ...feature, geometry: JSON.parse(JSON.stringify(feature.geometry)) as GeoJsonGeometry, properties: JSON.parse(JSON.stringify(feature.properties ?? {})) as Record<string, unknown> })));
+    clipboardPasteCount.current = 0;
+    setSelectedFeatureIds([]);
+    void run(() => backend.deleteFeaturesBatch({ ids: editable.map((feature) => feature.id) }), "選択した地物を切り取りできませんでした。");
   };
   const deleteSelectedFeatures = () => {
     if (selectedFeatureIds.length === 0 || !window.confirm(`${selectedFeatureIds.length}件の地物を削除しますか？`)) return;
@@ -558,8 +700,46 @@ export function EditorShell(props: EditorShellProps) {
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       const target = event.target;
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || !(event.metaKey || event.ctrlKey)) return;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
       const key = event.key.toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && (key === "c" || key === "x" || key === "v")) {
+        if (locked) return;
+        event.preventDefault();
+        if (key === "c") copySelectedFeatures();
+        else if (key === "x") cutSelectedFeatures();
+        else pasteCopiedFeatures();
+        return;
+      }
+      if (!(event.metaKey || event.ctrlKey)) {
+        if (locked || event.altKey || event.shiftKey) return;
+        const tool = TOOL_SHORTCUTS[key];
+        if (tool) {
+          event.preventDefault();
+          setActiveTool(tool);
+          setSelectedCellIds([]);
+          if (tool !== "pan") setSelectedFeatureIds([]);
+          return;
+        }
+        const direction = key === "]" ? 1 : key === "[" ? -1 : 0;
+        if (direction !== 0) {
+          event.preventDefault();
+          if (activeTool === "cell-select") {
+            const sizes = [1, 2, 4, 8]; const index = sizes.indexOf(cellBrushRadius);
+            setCellBrushRadius(sizes[Math.max(0, Math.min(sizes.length - 1, index + direction))]!);
+          } else if (activeTool === "river" || activeTool === "road") setFeatureWidth((value) => Math.max(0.5, Math.min(12, value + direction * 0.5)));
+          else if (activeTool === "mountain" || activeTool === "tree" || activeTool === "symbol") setFeatureScale((value) => Math.max(0.25, Math.min(4, value + direction * 0.1)));
+          return;
+        }
+        if ((key === "," || key === "." || key === "/") && (activeTool === "mountain" || activeTool === "tree" || activeTool === "symbol")) {
+          event.preventDefault();
+          setFeatureRotation((value) => key === "/" ? 0 : Math.max(-180, Math.min(180, value + (key === "." ? 15 : -15))));
+        }
+        if (key === "f" && (activeTool === "mountain" || activeTool === "tree" || activeTool === "symbol")) {
+          event.preventDefault();
+          setFeatureFlipX((value) => !value);
+        }
+        return;
+      }
       const redo = key === "y" || (key === "z" && event.shiftKey);
       const undo = key === "z" && !event.shiftKey;
       if (locked || (!undo && !redo) || (undo ? !viewedSnapshot.canUndo : !viewedSnapshot.canRedo)) return;
@@ -568,7 +748,7 @@ export function EditorShell(props: EditorShellProps) {
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [backend, locked, viewedSnapshot.canRedo, viewedSnapshot.canUndo]);
+  }, [activeTool, backend, cellBrushRadius, featureClipboard, locked, selectedFeatures, viewedSnapshot.canRedo, viewedSnapshot.canUndo]);
 
   return (
     <main className="editor-shell" aria-label="Realm編集画面">
@@ -608,8 +788,9 @@ export function EditorShell(props: EditorShellProps) {
           <section className="feature-editor" aria-label="地物編集">
             <label>地物名<input value={featureName} onChange={(event) => setFeatureName(event.target.value)} disabled={locked} maxLength={200} /></label>
             {selectedFeature?.featureType === "river" || selectedFeature?.featureType === "road" ? <><label>線の太さ<input type="range" min="0.5" max="12" step="0.1" value={featureWidth} onChange={(event) => setFeatureWidth(Number(event.target.value))} disabled={locked} /><output>{featureWidth.toFixed(1)}</output></label><label>線色<input type="color" value={featureStrokeColor} onChange={(event) => setFeatureStrokeColor(event.target.value)} disabled={locked} /></label><label>縁色<input type="color" value={featureCasingColor} onChange={(event) => setFeatureCasingColor(event.target.value)} disabled={locked} /></label><label>線種<CellAttributeSelect value={featureLineStyle} onChange={(event) => setFeatureLineStyle(event.target.value as typeof featureLineStyle)} disabled={locked}><option value="solid">実線</option><option value="dashed">破線</option><option value="dotted">点線</option></CellAttributeSelect></label></> : null}
-            {selectedFeature && ["mountain", "tree", "symbol", "scale"].includes(selectedFeature.featureType) ? <><label>記号サイズ<input type="range" min="0.25" max="4" step="0.05" value={featureScale} onChange={(event) => setFeatureScale(Number(event.target.value))} disabled={locked} /><output>{featureScale.toFixed(2)}</output></label><label>回転<input type="range" min="-180" max="180" step="1" value={featureRotation} onChange={(event) => setFeatureRotation(Number(event.target.value))} disabled={locked} /><output>{Math.round(featureRotation)}°</output></label></> : null}
-            {selectedFeature?.featureType === "overlay" ? <><label>画像の回転<input type="range" min="-180" max="180" step="1" value={featureRotation} onChange={(event) => setFeatureRotation(Number(event.target.value))} disabled={locked} /><output>{Math.round(featureRotation)}°</output></label><label>画像の合成<CellAttributeSelect value={overlayBlendMode} onChange={(event) => setOverlayBlendMode(event.target.value as typeof overlayBlendMode)} disabled={locked}><option value="source-over">通常</option><option value="multiply">乗算</option><option value="screen">スクリーン</option><option value="overlay">オーバーレイ</option><option value="soft-light">ソフトライト</option></CellAttributeSelect></label></> : null}
+            {selectedFeature && (selectedFeature.featureType === "country" || selectedFeature.featureType === "region") ? <><label>領域の色<input type="color" value={areaFillColor} onChange={(event) => setAreaFillColor(event.target.value)} disabled={locked || featureLocked} /></label><label>領域の濃さ<input type="range" min="0" max="1" step="0.05" value={areaFillOpacity} onChange={(event) => setAreaFillOpacity(Number(event.target.value))} disabled={locked || featureLocked} /><output>{Math.round(areaFillOpacity * 100)}%</output></label><label>境界の色<input type="color" value={areaBorderColor} onChange={(event) => setAreaBorderColor(event.target.value)} disabled={locked || featureLocked} /></label><label>境界の種類<CellAttributeSelect value={areaBorderStyle} onChange={(event) => setAreaBorderStyle(event.target.value as typeof areaBorderStyle)} disabled={locked || featureLocked}><option value="solid">実線</option><option value="dashed">破線</option><option value="dotted">点線</option></CellAttributeSelect></label></> : null}
+            {selectedFeature && ["mountain", "tree", "symbol", "scale"].includes(selectedFeature.featureType) ? <><label>記号サイズ<input type="range" min="0.25" max="4" step="0.05" value={featureScale} onChange={(event) => setFeatureScale(Number(event.target.value))} disabled={locked} /><output>{featureScale.toFixed(2)}</output></label><label>回転<input type="range" min="-180" max="180" step="1" value={featureRotation} onChange={(event) => setFeatureRotation(Number(event.target.value))} disabled={locked} /><output>{Math.round(featureRotation)}°</output></label>{["mountain", "tree", "symbol"].includes(selectedFeature.featureType) ? <label><input type="checkbox" checked={featureFlipX} onChange={(event) => setFeatureFlipX(event.target.checked)} disabled={locked || featureLocked} />左右反転</label> : null}</> : null}
+            {selectedFeature?.featureType === "overlay" ? <><label>画像の回転<input type="range" min="-180" max="180" step="1" value={featureRotation} onChange={(event) => setFeatureRotation(Number(event.target.value))} disabled={locked} /><output>{Math.round(featureRotation)}°</output></label><label>画像の合成<CellAttributeSelect value={overlayBlendMode} onChange={(event) => setOverlayBlendMode(event.target.value as typeof overlayBlendMode)} disabled={locked}><option value="source-over">通常</option><option value="multiply">乗算</option><option value="screen">スクリーン</option><option value="overlay">オーバーレイ</option><option value="soft-light">ソフトライト</option></CellAttributeSelect></label><fieldset className="overlay-crop-controls"><legend>画像の切り抜き</legend>{(["left", "top", "right", "bottom"] as const).map((edge) => <label key={edge}>{({ left: "左", top: "上", right: "右", bottom: "下" })[edge]}<input type="range" min="0" max="0.49" step="0.01" value={overlayCrop[edge]} onChange={(event) => setOverlayCrop((current) => ({ ...current, [edge]: Number(event.target.value) }))} disabled={locked} /><output>{Math.round(overlayCrop[edge] * 100)}%</output></label>)}</fieldset><p className="editor-help">頂点編集で四隅を動かすと、参照画像を地図へ合わせて変形できます。</p></> : null}
             {selectedFeature?.featureType === "scale" ? <><label>計測単位<input value={scaleUnit} onChange={(event) => setScaleUnit(event.target.value)} disabled={locked} maxLength={32} /></label><label>1度あたり<input type="number" min="0.0001" max="1000000" step="0.1" value={scaleUnitsPerDegree} onChange={(event) => setScaleUnitsPerDegree(Number(event.target.value))} disabled={locked} /></label><label>縮尺線の長さ<input type="range" min="24" max="640" step="8" value={scaleBarLength} onChange={(event) => setScaleBarLength(Number(event.target.value))} disabled={locked} /><output>{Math.round(scaleBarLength)}px</output></label><label>縮尺線の分割<input type="number" min="1" max="12" step="1" value={scaleSegments} onChange={(event) => setScaleSegments(Number(event.target.value))} disabled={locked} /></label></> : null}
             {selectedFeature?.featureType === "frame" ? <><label>枠線の太さ<input type="range" min="0.5" max="32" step="0.5" value={frameWidth} onChange={(event) => setFrameWidth(Number(event.target.value))} disabled={locked} /><output>{frameWidth.toFixed(1)}px</output></label><label>枠線の色<input type="color" value={frameColor} onChange={(event) => setFrameColor(event.target.value)} disabled={locked} /></label><label>枠線の種類<CellAttributeSelect value={frameStyle} onChange={(event) => setFrameStyle(event.target.value as typeof frameStyle)} disabled={locked}><option value="solid">単線</option><option value="double">二重線</option><option value="dashed">破線</option></CellAttributeSelect></label></> : null}
             {selectedFeature && ["mountain", "tree", "symbol", "overlay"].includes(selectedFeature.featureType) ? <label>カスタム素材<CellAttributeSelect value={featureAssetId} onChange={(event) => setFeatureAssetId(event.target.value)} disabled={locked}><option value="">内蔵表現</option>{viewedSnapshot.assets.map((asset) => <option key={asset.id} value={asset.id}>{typeof asset.metadata.originalName === "string" ? asset.metadata.originalName : asset.id}</option>)}</CellAttributeSelect></label> : null}
@@ -618,7 +799,9 @@ export function EditorShell(props: EditorShellProps) {
             {selectedFeature ? <div className="feature-layer-controls" aria-label="地物レイヤー設定"><label><input type="checkbox" checked={featureVisible} onChange={(event) => setFeatureVisible(event.target.checked)} disabled={locked || featureLocked} />表示</label><label><input type="checkbox" checked={featureLocked} onChange={(event) => { const next = event.target.checked; setFeatureLocked(next); setSelectedFeaturesLocked(next); }} disabled={locked} />ロック</label><label className="feature-opacity">不透明度<input type="range" min="0.05" max="1" step="0.05" value={featureOpacity} onChange={(event) => setFeatureOpacity(Number(event.target.value))} disabled={locked || featureLocked} /><output>{Math.round(featureOpacity * 100)}%</output></label><button type="button" onClick={() => setFeatureZIndex((value) => Math.min(1000, value + 1))} disabled={locked || featureLocked}>前面へ</button><button type="button" onClick={() => setFeatureZIndex((value) => Math.max(-1000, value - 1))} disabled={locked || featureLocked}>背面へ</button><output>順序 {featureZIndex}</output></div> : null}
             {selectedFeature ? <><div className="feature-transform-actions" aria-label="地物の変形"><button type="button" onClick={() => duplicateFeature(selectedFeature)} disabled={locked || featureLocked}>複製</button>{selectedFeature.geometry.type !== "Point" ? <><button type="button" onClick={() => transformSelectedFeature(selectedFeature, { scale: 1.25 })} disabled={locked || featureLocked}>拡大</button><button type="button" onClick={() => transformSelectedFeature(selectedFeature, { scale: 0.8 })} disabled={locked || featureLocked}>縮小</button></> : null}<button type="button" onClick={() => transformSelectedFeature(selectedFeature, { rotationRadians: Math.PI / 2 })} disabled={locked || featureLocked}>90°回転</button><button type="button" onClick={() => transformSelectedFeature(selectedFeature, { flipX: true })} disabled={locked || featureLocked}>左右反転</button><button type="button" onClick={() => transformSelectedFeature(selectedFeature, { flipY: true })} disabled={locked || featureLocked}>上下反転</button></div><div className="feature-editor-actions"><button type="button" onClick={() => saveFeatureAppearance(selectedFeature)} disabled={locked || featureLocked}>変更を保存</button><button type="button" className="danger-action" onClick={() => { if (window.confirm("この地物を削除しますか？")) void run(() => backend.deleteFeature({ id: selectedFeature.id }), "地物を削除できませんでした。"); }} disabled={locked || featureLocked}>削除</button></div></> : null}
             {selectedMeasurement ? <p className="feature-measurement"><span>平面計測</span><strong>{selectedMeasurement}</strong><small>最初の縮尺記号の換算値を使用</small></p> : null}
+            {selectedFeature && (selectedFeature.featureType === "river" || selectedFeature.featureType === "road") ? <><label>線の描き味<CellAttributeSelect value={lineProfile} onChange={(event) => setLineProfile(event.target.value as typeof lineProfile)} disabled={locked || featureLocked}><option value="smooth">滑らか</option><option value="rough">手描き</option><option value="angular">角張り</option></CellAttributeSelect></label><label>手描きの粗さ<input type="range" min="0" max="1" step="0.05" value={lineRoughness} onChange={(event) => setLineRoughness(Number(event.target.value))} disabled={locked || featureLocked || lineProfile !== "rough"} /><output>{Math.round(lineRoughness * 100)}%</output></label></> : null}
             {selectedFeature && ["label", "river", "road", "country", "region"].includes(selectedFeature.featureType) ? <label>ラベル書体<CellAttributeSelect value={labelFontFamily} onChange={(event) => setLabelFontFamily(event.target.value as MapLabelFontFamily)} disabled={locked || featureLocked}><option value="system">システム</option><option value="serif">古典セリフ</option><option value="handwritten">手書き風</option><option value="condensed">細身</option></CellAttributeSelect></label> : null}
+            {selectedFeature?.featureType === "label" ? <div className="label-path-controls"><label>ラベル本文<textarea value={featureName} onChange={(event) => setFeatureName(event.target.value)} rows={3} maxLength={200} disabled={locked || featureLocked} /></label><label>曲線の繰り返し<input type="range" min="0" max="512" step="8" value={labelRepeat} onChange={(event) => setLabelRepeat(Number(event.target.value))} disabled={locked || featureLocked} /><output>{labelRepeat === 0 ? "なし" : `${labelRepeat}px`}</output></label><label>曲がり許容<input type="range" min="15" max="90" step="5" value={labelMaxAngle} onChange={(event) => setLabelMaxAngle(Number(event.target.value))} disabled={locked || featureLocked} /><output>{Math.round(labelMaxAngle)}°</output></label><button type="button" aria-pressed={activeTool === "label-path"} onClick={() => setActiveTool(activeTool === "label-path" ? "pan" : "label-path")} disabled={locked || featureLocked}>{activeTool === "label-path" ? "曲線描画を終了" : "ラベル曲線を描く"}</button>{Array.isArray(selectedFeature.properties?.labelPath) ? <button type="button" onClick={() => clearLabelPath(selectedFeature)} disabled={locked || featureLocked}>曲線を解除</button> : null}</div> : null}
             {selectedFeature?.featureType === "symbol" ? <label>内蔵記号<CellAttributeSelect value={symbolKind} onChange={(event) => setSymbolKind(event.target.value as typeof symbolKind)} disabled={locked || featureLocked || Boolean(featureAssetId)}><option value="marker">目印</option><option value="compass">方位盤</option><option value="north">北向き矢印</option></CellAttributeSelect></label> : null}
             {selectedFeature?.geometry.type === "Polygon" ? <button type="button" aria-pressed={activeTool === "polygon-hole"} onClick={() => setActiveTool(activeTool === "polygon-hole" ? "pan" : "polygon-hole")} disabled={locked || featureLocked}>{activeTool === "polygon-hole" ? "穴の追加を終了" : "領域の内側に穴を追加"}</button> : null}
             {selectedFeature?.geometry.type === "Polygon" ? <div className="feature-spray" aria-label="領域へ記号を散布"><strong>領域内へ散布</strong><label>種類<CellAttributeSelect value={sprayFeatureType} onChange={(event) => setSprayFeatureType(event.target.value as SprayFeatureType)} disabled={locked}><option value="tree">木</option><option value="mountain">山</option><option value="symbol">記号</option></CellAttributeSelect></label><label>個数<input type="number" min="1" max="1000" value={sprayCount} onChange={(event) => setSprayCount(Math.max(1, Math.min(1000, Number(event.target.value))))} disabled={locked} /></label><label>最小間隔<input type="number" min="0" max="90" step="0.25" value={spraySpacing} onChange={(event) => setSpraySpacing(Math.max(0, Math.min(90, Number(event.target.value))))} disabled={locked} /></label><label>seed<input value={spraySeed} onChange={(event) => setSpraySeed(event.target.value)} disabled={locked} maxLength={128} /></label><button type="button" onClick={() => sprayInsideFeature(selectedFeature)} disabled={locked}>この領域へ散布</button></div> : null}
@@ -630,7 +813,7 @@ export function EditorShell(props: EditorShellProps) {
           <section className="cell-inspector" aria-label="ブラシ設定"><h3>ブラシ</h3><label>操作<CellAttributeSelect value={cellPaintMode} onChange={(event) => setCellPaintMode(event.target.value as "paint" | "erase")} disabled={locked}><option value="paint">塗る</option><option value="erase">消す</option></CellAttributeSelect></label><label>筆の属性<CellAttributeSelect value={cellAttribute} onChange={(event) => { const attribute = event.target.value as CellAttribute; setCellAttribute(attribute); setCellAttributeValue(attribute); }} disabled={locked}><option value="forest">森林</option><option value="country">国</option><option value="region">地域</option></CellAttributeSelect></label><label>値<input value={cellAttributeValue} onChange={(event) => setCellAttributeValue(event.target.value)} disabled={locked || cellAttribute === "forest" || cellPaintMode === "erase"} /></label><label>筆サイズ<CellAttributeSelect value={String(cellBrushRadius)} onChange={(event) => setCellBrushRadius(Number(event.target.value))} disabled={locked}><option value="1">小</option><option value="2">中</option><option value="4">大</option><option value="8">特大</option></CellAttributeSelect></label></section>
           <section className="cell-inspector" aria-label="線と領域の描き方"><h3>線・領域</h3><label>入力方式<CellAttributeSelect value={drawingGesture} onChange={(event) => setDrawingGesture(event.target.value as DrawingOptions["gesture"])} disabled={locked}><option value="freehand">フリーハンド</option><option value="vertices">点をつないで描く</option></CellAttributeSelect></label><label>滑らかさ<input type="range" min="0" max="4" step="1" value={drawingSmoothingPasses} onChange={(event) => setDrawingSmoothingPasses(Number(event.target.value))} disabled={locked} /><output>{drawingSmoothingPasses}</output></label><label>角度スナップ<CellAttributeSelect value={drawingSnapAngleDegrees === null ? "none" : String(drawingSnapAngleDegrees)} onChange={(event) => setDrawingSnapAngleDegrees(event.target.value === "none" ? null : Number(event.target.value))} disabled={locked || drawingGesture !== "vertices"}><option value="none">なし</option><option value="15">15°</option><option value="30">30°</option><option value="45">45°</option><option value="90">90°</option></CellAttributeSelect></label></section>
         </aside>
-        <section className="map-region" aria-label="地図編集領域"><MapCanvas features={viewedSnapshot.features} mode={locked ? "pan" : activeTool} selectedFeatureIds={selectedFeatureIds} selectedCellIds={selectedCellIds} cellAttributes={cellAttributes} cellBrushRadius={cellBrushRadius} drawingOptions={{ gesture: drawingGesture, smoothingPasses: drawingSmoothingPasses, snapAngleDegrees: drawingSnapAngleDegrees }} themeId={themeId} themeOverrides={themeOverrides} showGrid={showGrid} gridOptions={{ kind: gridKind, color: gridColor, width: gridWidth, spacingDegrees: gridSpacing }} assetUrls={assetUrls} layerVisibility={layerVisibility} onDraw={createDrawnFeature} onSelectFeatures={selectFeatures} onCellSelect={(ids) => { const selected = [...ids]; setSelectedCellIds(selected); applyCellAttribute(cellPaintMode === "erase" ? null : cellAttributeValue, selected); }} onModifyFeatures={reviseSelectedFeatures} onEraseFeatures={(ids) => { setSelectedFeatureIds([]); void run(() => backend.deleteFeaturesBatch({ ids: [...ids] }), "地物を削除できませんでした。"); }} onError={setError} onExporterReady={(exporter) => { mapExporter.current = exporter; }} onZoomChange={setZoom} zoom={zoom} />{nameError ? <p className="save-error" role="alert">{nameError}</p> : error ? <p className="save-error" role="alert">{error}</p> : null}</section>
+        <section className="map-region" aria-label="地図編集領域"><MapCanvas features={viewedSnapshot.features} mode={locked ? "pan" : activeTool} selectedFeatureIds={selectedFeatureIds} selectedCellIds={selectedCellIds} cellAttributes={cellAttributes} cellBrushRadius={cellBrushRadius} drawingOptions={{ gesture: drawingGesture, smoothingPasses: drawingSmoothingPasses, snapAngleDegrees: drawingSnapAngleDegrees }} themeId={themeId} themeOverrides={themeOverrides} showGrid={showGrid} gridOptions={{ kind: gridKind, color: gridColor, width: gridWidth, spacingDegrees: gridSpacing }} assetUrls={assetUrls} layerVisibility={layerVisibility} onDraw={createDrawnFeature} onSelectFeatures={selectFeatures} onCellSelect={(ids) => { const selected = [...ids]; setSelectedCellIds(selected); applyCellAttribute(cellPaintMode === "erase" ? null : cellAttributeValue, selected); }} onModifyFeatures={reviseSelectedFeatures} onEraseFeatures={(ids) => { setSelectedFeatureIds([]); void run(() => backend.deleteFeaturesBatch({ ids: [...ids] }), "地物を削除できませんでした。"); }} onLayerShift={shiftSelectedLayers} onToolWheel={adjustActiveTool} onError={setError} onExporterReady={(exporter) => { mapExporter.current = exporter; }} onZoomChange={setZoom} zoom={zoom} />{nameError ? <p className="save-error" role="alert">{nameError}</p> : error ? <p className="save-error" role="alert">{error}</p> : null}</section>
         <footer className="editor-footer"><MapZoomControls zoom={zoom} onChange={setZoom} /></footer>
       </div>
     </main>

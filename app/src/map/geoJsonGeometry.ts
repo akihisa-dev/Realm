@@ -29,7 +29,7 @@ export const geometryToGeoJson = (geometry: Geometry): GeoJsonGeometry => {
 export const drawTypeForMode = (mode: Exclude<RealmMapMode, "pan" | "cell-select" | "erase">): "Point" | "LineString" | "Polygon" => mode === "city" || mode === "town"
   || mode === "mountain" || mode === "tree" || mode === "symbol" || mode === "label" || mode === "scale"
   ? "Point"
-  : mode === "river" || mode === "coastline" || mode === "boundary" || mode === "road"
+  : mode === "river" || mode === "coastline" || mode === "boundary" || mode === "road" || mode === "label-path"
     ? "LineString"
     : "Polygon";
 

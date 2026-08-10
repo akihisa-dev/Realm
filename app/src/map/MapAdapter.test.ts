@@ -123,7 +123,7 @@ describe("RealmMapAdapter", () => {
     host.remove();
   });
 
-  it("nudges all selected features in one batch, excludes locked features, and preserves plain Arrow navigation", () => {
+  it("nudges selected features with Arrow and shifts their layer with Shift+Arrow", () => {
     const host = document.createElement("div");
     host.style.width = "640px";
     host.style.height = "480px";
@@ -137,7 +137,7 @@ describe("RealmMapAdapter", () => {
     adapter.setSelectedFeatures(["a", "b", "c"]);
     const batch = vi.fn();
     adapter.onModifyFeatures(batch);
-    const nudge = new KeyboardEvent("keydown", { key: "ArrowRight", shiftKey: true, bubbles: true, cancelable: true });
+    const nudge = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
     host.dispatchEvent(nudge);
     expect(nudge.defaultPrevented).toBe(true);
     expect(batch).toHaveBeenCalledOnce();
@@ -145,17 +145,23 @@ describe("RealmMapAdapter", () => {
       { id: "a", geometry: { type: "Point", coordinates: [0.25, 0] } },
       { id: "c", geometry: { type: "Point", coordinates: [3.25, 3] } },
     ]);
-    const fineNudge = new KeyboardEvent("keydown", { key: "ArrowUp", shiftKey: true, altKey: true, bubbles: true, cancelable: true });
+    const fineNudge = new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true, cancelable: true });
     host.dispatchEvent(fineNudge);
     expect(batch).toHaveBeenCalledTimes(2);
     expect(batch.mock.calls[1]?.[0]).toEqual([
       { id: "a", geometry: { type: "Point", coordinates: [0.25, 0.05] } },
       { id: "c", geometry: { type: "Point", coordinates: [3.25, 3.05] } },
     ]);
-    const plainArrow = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
-    host.dispatchEvent(plainArrow);
-    expect(plainArrow.defaultPrevented).toBe(false);
+    const layerShift = vi.fn(); adapter.onLayerShift(layerShift);
+    const shiftUp = new KeyboardEvent("keydown", { key: "ArrowUp", shiftKey: true, bubbles: true, cancelable: true });
+    host.dispatchEvent(shiftUp);
+    expect(shiftUp.defaultPrevented).toBe(true);
+    expect(layerShift).toHaveBeenCalledWith(1);
     expect(batch).toHaveBeenCalledTimes(2);
+    adapter.setSelectedFeatures([]);
+    const navigation = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
+    host.dispatchEvent(navigation);
+    expect(navigation.defaultPrevented).toBe(false);
     adapter.dispose();
     host.remove();
   });
@@ -172,7 +178,7 @@ describe("RealmMapAdapter", () => {
     const error = vi.fn();
     adapter.onModifyFeatures(batch);
     adapter.onError(error);
-    const event = new KeyboardEvent("keydown", { key: "ArrowRight", shiftKey: true, bubbles: true, cancelable: true });
+    const event = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
     host.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
     expect(batch).not.toHaveBeenCalled();
@@ -274,13 +280,27 @@ describe("RealmMapAdapter", () => {
     const lineAngle = Math.atan2(lineEnd![1] - lineStart![1], lineEnd![0] - lineStart![0]) * 180 / Math.PI;
     expect(Math.abs(lineAngle / 45 - Math.round(lineAngle / 45))).toBeLessThan(1e-8);
 
+    adapter.setDrawingOptions({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: null });
+    host.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", altKey: true, shiftKey: true, bubbles: true }));
+    draw.dispatchEvent({ type: "drawend", feature: new Feature({ geometry: new LineString([[0, 0], [1, 0.6]]) }) } as never);
+    const modifierSnapped = onDraw.mock.calls[1]?.[0];
+    expect(modifierSnapped.type).toBe("LineString");
+    const modifierEnd = modifierSnapped.coordinates[1];
+    expect(Math.atan2(modifierEnd![1], modifierEnd![0]) * 180 / Math.PI).toBeCloseTo(45);
+    host.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true }));
+
+    host.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", altKey: true, bubbles: true }));
+    draw.dispatchEvent({ type: "drawend", feature: new Feature({ geometry: new LineString([[0, 0], [1, 2], [3, 1]]) }) } as never);
+    expect(onDraw.mock.calls[2]?.[0]).toEqual({ type: "LineString", coordinates: [[0, 0], [3, 1]] });
+    host.dispatchEvent(new KeyboardEvent("keyup", { key: "Alt", bubbles: true }));
+
     adapter.setMode("country");
     draw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw) as Draw;
     draw.dispatchEvent({
       type: "drawend",
       feature: new Feature({ geometry: new Polygon([[ [0, 0], [2, 0], [2, 2], [0, 0] ]]) }),
     } as never);
-    const polygon = onDraw.mock.calls[1]?.[0];
+    const polygon = onDraw.mock.calls[3]?.[0];
     expect(polygon.type).toBe("Polygon");
     expect(polygon.coordinates[0]?.at(-1)).toEqual(polygon.coordinates[0]?.[0]);
 

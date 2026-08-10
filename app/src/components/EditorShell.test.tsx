@@ -3,17 +3,39 @@ import { MemoryRealmBackend, type GeoJsonGeometry } from "../backend";
 import { EditorShell } from "./EditorShell";
 
 vi.mock("./MapCanvas", () => ({
-  MapCanvas: (props: { onDraw?: (geometry: GeoJsonGeometry) => void; onSelectFeatures?: (ids: string[]) => void; onCellSelect?: (ids: string[]) => void; onModifyFeatures?: (changes: { id: string; geometry: GeoJsonGeometry }[]) => void; onExporterReady?: (exporter: ((mime: "image/png" | "image/jpeg") => Promise<{ bytes: number[]; width: number; height: number }>) | null) => void; features?: Array<{ id: string }>; selectedFeatureIds?: readonly string[] }) => <div role="region" aria-label="世界地図">
+  MapCanvas: (props: { onDraw?: (geometry: GeoJsonGeometry) => void; onSelectFeatures?: (ids: string[]) => void; onCellSelect?: (ids: string[]) => void; onModifyFeatures?: (changes: { id: string; geometry: GeoJsonGeometry }[]) => void; onLayerShift?: (direction: -1 | 1) => void; onExporterReady?: (exporter: ((mime: "image/png" | "image/jpeg") => Promise<{ bytes: number[]; width: number; height: number }>) | null) => void; features?: Array<{ id: string }>; selectedFeatureIds?: readonly string[] }) => <div role="region" aria-label="世界地図">
     <button type="button" onClick={() => props.onDraw?.({ type: "Point", coordinates: [1, 2] })}>テスト描画</button>
+    <button type="button" onClick={() => props.onDraw?.({ type: "LineString", coordinates: [[1, 2], [3, 4]] })}>テスト線描画</button>
     <button type="button" onClick={() => props.onDraw?.({ type: "Polygon", coordinates: [[[2, 2], [4, 2], [4, 4], [2, 2]]] })}>テスト穴描画</button>
     <button type="button" onClick={() => props.onSelectFeatures?.(props.features?.[0]?.id ? [props.features[0].id] : [])}>テスト選択</button>
     <button type="button" onClick={() => props.onSelectFeatures?.(props.features?.slice(0, 2).map(({ id }) => id) ?? [])}>テスト複数選択</button>
     <button type="button" onClick={() => props.onCellSelect?.(["1:2"])}>テストセル</button>
     <button type="button" onClick={() => props.selectedFeatureIds?.[0] && props.onModifyFeatures?.([{ id: props.selectedFeatureIds[0], geometry: { type: "Point", coordinates: [3, 4] } }])}>テスト変形</button>
+    <button type="button" onClick={() => props.onLayerShift?.(1)}>テスト前面</button>
     <button type="button" onClick={() => props.onExporterReady?.(async () => ({ bytes: [1, 2, 3], width: 2, height: 2 }))}>テストexport準備</button>
   </div>,
   MapZoomControls: () => <div />,
 }));
+
+it("switches tools and adjusts new feature appearance with drawing shortcuts", async () => {
+  const backend = new MemoryRealmBackend(); const snapshot = await backend.createProject({ path: "browser://shortcuts.realmmap", name: "Shortcuts" });
+  render(<EditorShell snapshot={snapshot} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+  fireEvent.keyDown(window, { key: "r" });
+  expect(screen.getByRole("button", { name: "河川" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.keyDown(window, { key: "]" });
+  fireEvent.click(screen.getByRole("button", { name: "テスト線描画" }));
+  await waitFor(async () => expect((await backend.getOpenProject())?.features[0]).toMatchObject({ featureType: "river", properties: { width: 2.9 } }));
+});
+
+it("moves selected drawing order through the map layer shortcut callback", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://layer-shortcut.realmmap", name: "Layer" });
+  const snapshot = await backend.createFeature({ featureType: "city", name: "City", geometry: { type: "Point", coordinates: [0, 0] } });
+  render(<EditorShell snapshot={snapshot} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "テスト選択" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト前面" }));
+  await waitFor(async () => expect((await backend.getOpenProject())?.features[0]?.properties).toMatchObject({ zIndex: 1 }));
+});
 
 it("adds a drawn inner ring to the selected polygon as one editable feature", async () => {
   const backend = new MemoryRealmBackend();
@@ -27,6 +49,20 @@ it("adds a drawn inner ring to the selected polygon as one editable feature", as
     const current = await backend.getOpenProject();
     expect(current?.features[0]?.geometry).toMatchObject({ type: "Polygon", coordinates: expect.arrayContaining([expect.arrayContaining([[2, 2]])]) });
   });
+});
+
+it("stores and clears a hand-drawn curve for a standalone label", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://curved-label.realmmap", name: "Curved" });
+  const snapshot = await backend.createFeature({ featureType: "label", name: "北方領", geometry: { type: "Point", coordinates: [0, 0] }, properties: { fontSize: 18 } });
+  render(<EditorShell snapshot={snapshot} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "テスト選択" }));
+  fireEvent.click(screen.getByRole("button", { name: "ラベル曲線を描く" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト線描画" }));
+  await waitFor(async () => expect((await backend.getOpenProject())?.features[0]?.properties).toMatchObject({ labelPath: [[1, 2], [3, 4]], labelPlacement: "line" }));
+  fireEvent.click(screen.getByRole("button", { name: "曲線を解除" }));
+  await waitFor(async () => expect((await backend.getOpenProject())?.features[0]?.properties).toMatchObject({ labelPlacement: "point" }));
+  expect((await backend.getOpenProject())?.features[0]?.properties).not.toHaveProperty("labelPath");
 });
 
 it("renders single-state editor without chronology controls", async () => {
@@ -142,10 +178,14 @@ it("stores trace-image rotation and a bounded canvas blend mode", async () => {
   fireEvent.click(screen.getByRole("button", { name: "テスト選択" }));
   fireEvent.change(screen.getByRole("slider", { name: /^画像の回転/ }), { target: { value: "30" } });
   fireEvent.change(screen.getByRole("combobox", { name: "画像の合成" }), { target: { value: "multiply" } });
+  fireEvent.change(screen.getByRole("slider", { name: /^左/ }), { target: { value: "0.12" } });
+  fireEvent.change(screen.getByRole("slider", { name: /^下/ }), { target: { value: "0.08" } });
   fireEvent.click(screen.getByRole("button", { name: "変更を保存" }));
   await waitFor(async () => expect((await backend.getOpenProject())?.features[0]?.properties).toMatchObject({
     rotation: Math.PI / 6,
     blendMode: "multiply",
+    cropLeft: 0.12,
+    cropBottom: 0.08,
   }));
 });
 
@@ -159,6 +199,19 @@ it("stores editable frame presentation", async () => {
   fireEvent.change(screen.getByRole("combobox", { name: "枠線の種類" }), { target: { value: "double" } });
   fireEvent.click(screen.getByRole("button", { name: "変更を保存" }));
   await waitFor(async () => expect((await backend.getOpenProject())?.features[0]?.properties).toMatchObject({ frameWidth: 6, frameStyle: "double" }));
+});
+
+it("stores independent territory fill and border presentation", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://territory.realmmap", name: "Territory" });
+  const initial = await backend.createFeature({ featureType: "region", name: "March", geometry: { type: "Polygon", coordinates: [[[0, 0], [8, 0], [8, 6], [0, 0]]] } });
+  render(<EditorShell snapshot={initial} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "テスト選択" }));
+  fireEvent.change(screen.getByLabelText("領域の色"), { target: { value: "#123456" } });
+  fireEvent.change(screen.getByRole("slider", { name: /^領域の濃さ/ }), { target: { value: "0.4" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "境界の種類" }), { target: { value: "dotted" } });
+  fireEvent.click(screen.getByRole("button", { name: "変更を保存" }));
+  await waitFor(async () => expect((await backend.getOpenProject())?.features[0]?.properties).toMatchObject({ fillColor: "#123456", fillOpacity: 0.4, lineStyle: "dotted" }));
 });
 
 it("groups embedded assets by pack and deletes the complete pack", async () => {
@@ -297,6 +350,25 @@ it("edits a lasso-style multi-selection as atomic operations", async () => {
   await waitFor(async () => expect((await backend.getOpenProject())?.features).toHaveLength(0));
   expect((await backend.undoProject()).features).toHaveLength(2);
   confirm.mockRestore();
+});
+
+it("copies, pastes, and cuts the current selection with desktop shortcuts", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://clipboard.realmmap", name: "Clipboard" });
+  const initial = await backend.createFeaturesBatch({ features: [
+    { featureType: "city", name: "West", geometry: { type: "Point", coordinates: [0, 0] } },
+    { featureType: "city", name: "East", geometry: { type: "Point", coordinates: [4, 0] } },
+  ] });
+  render(<EditorShell snapshot={initial} backend={backend} busy={false} onClose={vi.fn()} onSaved={vi.fn()} onExportTransfer={vi.fn()} onExportArtifact={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "テスト複数選択" }));
+  fireEvent.keyDown(window, { key: "c", metaKey: true });
+  fireEvent.keyDown(window, { key: "v", metaKey: true });
+  await waitFor(async () => expect((await backend.getOpenProject())?.features).toHaveLength(4));
+  expect((await backend.undoProject()).features).toHaveLength(2);
+
+  fireEvent.keyDown(window, { key: "x", metaKey: true });
+  await waitFor(async () => expect((await backend.getOpenProject())?.features).toHaveLength(0));
+  expect((await backend.undoProject()).features).toHaveLength(2);
 });
 
 it("keeps newer name input when an older automatic save finishes", async () => {

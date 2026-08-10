@@ -4,7 +4,6 @@ use rusqlite::{Connection, Error as SqlError, Transaction, params};
 use serde_json::{Number, Value};
 
 pub(crate) const CURRENT_SCHEMA_VERSION: i32 = 7;
-pub(crate) const PREVIOUS_SCHEMA_VERSION: i32 = 6;
 pub(crate) const SCHEMA_VERSION_V3: i32 = 3;
 pub(crate) const SCHEMA_VERSION_V4: i32 = 4;
 pub(crate) const SCHEMA_VERSION_V5: i32 = 5;
@@ -135,22 +134,22 @@ pub(crate) fn schema_sql(transaction: &Transaction<'_>) -> Result<(), AppError> 
             settings_json TEXT NOT NULL CHECK (json_valid(settings_json)
                 AND json_type(settings_json) = 'object'
                 AND length(settings_json) <= 32768
-                AND json_type(json_extract(settings_json, '$.canvasWidth')) = 'integer'
+                AND json_type(settings_json, '$.canvasWidth') = 'integer'
                 AND json_extract(settings_json, '$.canvasWidth') BETWEEN 512 AND 8192
-                AND json_type(json_extract(settings_json, '$.canvasHeight')) = 'integer'
+                AND json_type(settings_json, '$.canvasHeight') = 'integer'
                 AND json_extract(settings_json, '$.canvasHeight') BETWEEN 512 AND 8192
-                AND json_type(json_extract(settings_json, '$.gridKind')) = 'text'
+                AND json_type(settings_json, '$.gridKind') = 'text'
                 AND json_extract(settings_json, '$.gridKind') IN ('graticule', 'square', 'hex')
-                AND json_type(json_extract(settings_json, '$.gridColor')) = 'text'
+                AND json_type(settings_json, '$.gridColor') = 'text'
                 AND length(json_extract(settings_json, '$.gridColor')) = 7
                 AND json_extract(settings_json, '$.gridColor') GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'
-                AND (json_type(json_extract(settings_json, '$.gridWidth')) = 'integer'
-                    OR json_type(json_extract(settings_json, '$.gridWidth')) = 'real')
+                AND (json_type(settings_json, '$.gridWidth') = 'integer'
+                    OR json_type(settings_json, '$.gridWidth') = 'real')
                 AND CAST(json_extract(settings_json, '$.gridWidth') AS REAL) BETWEEN 0.25 AND 4
-                AND (json_type(json_extract(settings_json, '$.gridSpacing')) = 'integer'
-                    OR json_type(json_extract(settings_json, '$.gridSpacing')) = 'real')
+                AND (json_type(settings_json, '$.gridSpacing') = 'integer'
+                    OR json_type(settings_json, '$.gridSpacing') = 'real')
                 AND CAST(json_extract(settings_json, '$.gridSpacing') AS REAL) BETWEEN 2 AND 45
-                AND json_type(json_extract(settings_json, '$.themeOverrides')) = 'object'
+                AND json_type(settings_json, '$.themeOverrides') = 'object'
             )
         );
         CREATE TABLE IF NOT EXISTS features (
@@ -571,22 +570,22 @@ pub(crate) fn verify_schema(connection: &Connection) -> Result<(), AppError> {
         "check (json_valid(settings_json)",
         "json_type(settings_json) = 'object'",
         "length(settings_json) <= 32768",
-        "json_type(json_extract(settings_json, '$.canvaswidth')) = 'integer'",
+        "json_type(settings_json, '$.canvaswidth') = 'integer'",
         "json_extract(settings_json, '$.canvaswidth') between 512 and 8192",
-        "json_type(json_extract(settings_json, '$.canvasheight')) = 'integer'",
+        "json_type(settings_json, '$.canvasheight') = 'integer'",
         "json_extract(settings_json, '$.canvasheight') between 512 and 8192",
-        "json_type(json_extract(settings_json, '$.gridkind')) = 'text'",
+        "json_type(settings_json, '$.gridkind') = 'text'",
         "json_extract(settings_json, '$.gridkind') in ('graticule', 'square', 'hex')",
-        "json_type(json_extract(settings_json, '$.gridcolor')) = 'text'",
+        "json_type(settings_json, '$.gridcolor') = 'text'",
         "length(json_extract(settings_json, '$.gridcolor')) = 7",
         "json_extract(settings_json, '$.gridcolor') glob '#[0-9a-fa-f][0-9a-fa-f][0-9a-fa-f][0-9a-fa-f][0-9a-fa-f][0-9a-fa-f]'",
-        "json_type(json_extract(settings_json, '$.gridwidth')) = 'integer'",
-        "json_type(json_extract(settings_json, '$.gridwidth')) = 'real'",
+        "json_type(settings_json, '$.gridwidth') = 'integer'",
+        "json_type(settings_json, '$.gridwidth') = 'real'",
         "cast(json_extract(settings_json, '$.gridwidth') as real) between 0.25 and 4",
-        "json_type(json_extract(settings_json, '$.gridspacing')) = 'integer'",
-        "json_type(json_extract(settings_json, '$.gridspacing')) = 'real'",
+        "json_type(settings_json, '$.gridspacing') = 'integer'",
+        "json_type(settings_json, '$.gridspacing') = 'real'",
         "cast(json_extract(settings_json, '$.gridspacing') as real) between 2 and 45",
-        "json_type(json_extract(settings_json, '$.themeoverrides')) = 'object'",
+        "json_type(settings_json, '$.themeoverrides') = 'object'",
     ] {
         if !world_sql.contains(invariant) {
             return Err(corrupt_schema());
@@ -702,6 +701,7 @@ pub(crate) fn validate_existing_schema(connection: &Connection) -> Result<(), Ap
     verify_world(connection)
 }
 
+#[cfg(test)]
 pub(crate) fn migrate_v3_to_v4(connection: &mut Connection) -> Result<(), AppError> {
     if read_schema_version(connection)? != SCHEMA_VERSION_V3 {
         return Err(AppError::new(
@@ -738,62 +738,7 @@ pub(crate) fn migrate_v3_to_v4(connection: &mut Connection) -> Result<(), AppErr
     transaction.commit().map_err(AppError::from)
 }
 
-pub(crate) fn migrate_v3_to_v5(connection: &mut Connection) -> Result<(), AppError> {
-    if read_schema_version(connection)? != SCHEMA_VERSION_V3 {
-        return Err(AppError::new(
-            "unsupported_schema",
-            "This project uses a legacy Realm format that is no longer supported.",
-        ));
-    }
-    verify_schema_v3(connection)?;
-    verify_world_count(connection)?;
-    let transaction = connection.transaction().map_err(AppError::from)?;
-    transaction
-        .execute_batch(
-            "
-            ALTER TABLE features RENAME TO features_v3;
-            CREATE TABLE features (
-                id TEXT PRIMARY KEY NOT NULL,
-                feature_type TEXT NOT NULL CHECK (feature_type IN
-                    ('terrain','forest','river','coastline','country','region','boundary','city','town',
-                     'road','lake','mountain','tree','symbol','label','overlay','frame','scale')),
-                name TEXT NOT NULL,
-                geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json)),
-                properties_json TEXT NOT NULL CHECK (json_valid(properties_json) AND json_type(properties_json) = 'object')
-            );
-            INSERT INTO features(id, feature_type, name, geometry_json, properties_json)
-                SELECT id, feature_type, name, geometry_json, '{}' FROM features_v3;
-            DROP TABLE features_v3;
-            INSERT INTO schema_migrations(version) VALUES (4);
-            PRAGMA user_version = 4;
-            ",
-        )
-        .map_err(AppError::from)?;
-    verify_schema_v4(&transaction)?;
-    verify_world_count(&transaction)?;
-    transaction
-        .execute_batch(
-            "
-            CREATE TABLE assets (
-                id TEXT PRIMARY KEY NOT NULL,
-                sha256 TEXT NOT NULL UNIQUE CHECK (length(sha256) = 64),
-                mime TEXT NOT NULL,
-                bytes BLOB NOT NULL,
-                width INTEGER NOT NULL CHECK (width > 0 AND width <= 32768),
-                height INTEGER NOT NULL CHECK (height > 0 AND height <= 32768),
-                metadata_json TEXT NOT NULL CHECK (json_valid(metadata_json) AND json_type(metadata_json) = 'object')
-            );
-            CREATE INDEX assets_sha256_lookup ON assets(sha256);
-            INSERT INTO schema_migrations(version) VALUES (5);
-            PRAGMA user_version = 5;
-            ",
-        )
-        .map_err(AppError::from)?;
-    verify_schema_v5(&transaction)?;
-    verify_world_count(&transaction)?;
-    transaction.commit().map_err(AppError::from)
-}
-
+#[cfg(test)]
 pub(crate) fn migrate_v4_to_v5(connection: &mut Connection) -> Result<(), AppError> {
     if read_schema_version(connection)? != SCHEMA_VERSION_V4 {
         return Err(AppError::new(
@@ -840,7 +785,7 @@ fn rebuild_world_for_v6(transaction: &Transaction<'_>) -> Result<(), AppError> {
                  )
              );
              INSERT INTO world(id, name, settings_json)
-                 SELECT id, name, '{DEFAULT_SETTINGS_JSON}';
+                 SELECT id, name, '{DEFAULT_SETTINGS_JSON}' FROM world_v5;
              DROP TABLE world_v5;
              INSERT INTO schema_migrations(version) VALUES (6);
              PRAGMA user_version = 6;"
@@ -909,22 +854,22 @@ fn rebuild_world_for_v7(transaction: &Transaction<'_>) -> Result<(), AppError> {
                  settings_json TEXT NOT NULL CHECK (json_valid(settings_json)
                      AND json_type(settings_json) = 'object'
                      AND length(settings_json) <= {SETTINGS_MAX_BYTES}
-                     AND json_type(json_extract(settings_json, '$.canvasWidth')) = 'integer'
+                     AND json_type(settings_json, '$.canvasWidth') = 'integer'
                      AND json_extract(settings_json, '$.canvasWidth') BETWEEN 512 AND 8192
-                     AND json_type(json_extract(settings_json, '$.canvasHeight')) = 'integer'
+                     AND json_type(settings_json, '$.canvasHeight') = 'integer'
                      AND json_extract(settings_json, '$.canvasHeight') BETWEEN 512 AND 8192
-                     AND json_type(json_extract(settings_json, '$.gridKind')) = 'text'
+                     AND json_type(settings_json, '$.gridKind') = 'text'
                      AND json_extract(settings_json, '$.gridKind') IN ('graticule', 'square', 'hex')
-                     AND json_type(json_extract(settings_json, '$.gridColor')) = 'text'
+                     AND json_type(settings_json, '$.gridColor') = 'text'
                      AND length(json_extract(settings_json, '$.gridColor')) = 7
                      AND json_extract(settings_json, '$.gridColor') GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'
-                     AND (json_type(json_extract(settings_json, '$.gridWidth')) = 'integer'
-                         OR json_type(json_extract(settings_json, '$.gridWidth')) = 'real')
+                     AND (json_type(settings_json, '$.gridWidth') = 'integer'
+                         OR json_type(settings_json, '$.gridWidth') = 'real')
                      AND CAST(json_extract(settings_json, '$.gridWidth') AS REAL) BETWEEN 0.25 AND 4
-                     AND (json_type(json_extract(settings_json, '$.gridSpacing')) = 'integer'
-                         OR json_type(json_extract(settings_json, '$.gridSpacing')) = 'real')
+                     AND (json_type(settings_json, '$.gridSpacing') = 'integer'
+                         OR json_type(settings_json, '$.gridSpacing') = 'real')
                      AND CAST(json_extract(settings_json, '$.gridSpacing') AS REAL) BETWEEN 2 AND 45
-                     AND json_type(json_extract(settings_json, '$.themeOverrides')) = 'object'
+                     AND json_type(settings_json, '$.themeOverrides') = 'object'
                  )
              );"
         ))

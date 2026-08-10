@@ -927,11 +927,21 @@ mod tests {
         )
         .unwrap();
         assert_eq!(imported.assets.len(), 2);
-        let pack_id = imported.assets[0].metadata["packId"].clone();
-        assert_eq!(imported.assets[1].metadata["packId"], pack_id);
-        assert_eq!(imported.assets[0].metadata["packName"], "Atlas Pack");
-        assert_eq!(imported.assets[0].metadata["packOrdinal"], 0);
-        assert_eq!(imported.assets[1].metadata["packOrdinal"], 1);
+        let first_asset = imported
+            .assets
+            .iter()
+            .find(|asset| asset.metadata["role"] == "first")
+            .unwrap();
+        let second_asset = imported
+            .assets
+            .iter()
+            .find(|asset| asset.metadata["role"] == "second")
+            .unwrap();
+        let pack_id = first_asset.metadata["packId"].clone();
+        assert_eq!(second_asset.metadata["packId"], pack_id);
+        assert_eq!(first_asset.metadata["packName"], "Atlas Pack");
+        assert_eq!(first_asset.metadata["packOrdinal"], 0);
+        assert_eq!(second_asset.metadata["packOrdinal"], 1);
         assert!(imported.can_undo);
         undo_project_in_state(&state).unwrap();
         assert!(
