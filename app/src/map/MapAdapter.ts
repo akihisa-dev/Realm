@@ -46,6 +46,26 @@ const MAX_GRID_EDGES = 20_000;
 const DEFAULT_GRID_OPTIONS: GridOptions = { kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 };
 const DEFAULT_CELL_GRID_OPTIONS: CellGridOptions = { color: "#d1d7dc", width: 0.65 };
 
+/**
+ * Returns the resolution that covers an extent in both viewport dimensions.
+ * OpenLayers' `getResolutionForExtent` returns a contain/letterbox resolution;
+ * the editor instead keeps the fixed editing grid flush with the
+ * padding-adjusted viewport's top and bottom, allowing the world edges to
+ * clip only when the viewport is wider than the bounded EPSG:4326 world.
+ */
+export const resolutionForCoveringExtent = (
+  extent: readonly [number, number, number, number],
+  size: readonly [number, number],
+): number => {
+  const width = size[0];
+  const height = size[1];
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return Number.NaN;
+  const extentWidth = extent[2] - extent[0];
+  const extentHeight = extent[3] - extent[1];
+  if (!Number.isFinite(extentWidth) || !Number.isFinite(extentHeight) || extentWidth <= 0 || extentHeight <= 0) return Number.NaN;
+  return Math.min(extentWidth / width, extentHeight / height);
+};
+
 class CancelablePointerInteraction extends PointerInteraction {
   cancelSequence(): void {
     this.handlingDownUpSequence = false;
@@ -1156,11 +1176,14 @@ export class RealmMapAdapter implements RealmMapRenderer {
       Math.max(1, width - this.fitPadding * 2),
       Math.max(1, height - this.fitPadding * 2),
     ];
-    const fitResolution = view.getResolutionForExtent([...this.worldExtent], availableSize);
+    const fitResolution = resolutionForCoveringExtent(this.worldExtent, availableSize);
+    if (!Number.isFinite(fitResolution)) return;
     const fitZoom = view.getZoomForResolution(fitResolution);
     if (fitZoom === undefined) return;
 
-    // UI scale 1 is the widest view and fits the whole editing world.
+    // UI scale 1 covers the complete editing grid vertically. On a wide
+    // viewport the horizontal world edges are intentionally clipped instead
+    // of leaving letterbox space above and below the grid.
     this.baseZoom = fitZoom - 1;
     view.setMinZoom(this.baseZoom + 1);
     view.setMaxZoom(this.baseZoom + 8);

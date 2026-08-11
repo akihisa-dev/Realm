@@ -26,9 +26,9 @@
     "component": {
       "type": "application",
       "name": "Realm",
-      "version": "0.18.4",
-      "purl": "pkg:generic/realm@0.18.4",
-      "bom-ref": "pkg:generic/realm@0.18.4",
+      "version": "0.18.5",
+      "purl": "pkg:generic/realm@0.18.5",
+      "bom-ref": "pkg:generic/realm@0.18.5",
       "licenses": [
         {
           "license": {
