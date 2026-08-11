@@ -75,6 +75,11 @@ describe("MapCanvas", () => {
     expect(document.querySelector(".radial-palette")).toHaveStyle({ left: "120px", top: "80px" });
     expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(8);
     expect(document.querySelector(".radial-palette")?.textContent).toBe("");
+    fireEvent.pointerDown(document.querySelector(".radial-palette") as Element);
+    expect(document.querySelector(".radial-palette")).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
+    fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     fireEvent.keyDown(window, { key: "Escape" });
     expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
     (drawListener as ((geometry: never) => void) | null)?.({} as never);

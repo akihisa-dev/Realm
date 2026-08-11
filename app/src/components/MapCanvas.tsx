@@ -84,6 +84,7 @@ export function MapCanvas({
   onExporterReady,
 }: MapCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const radialPaletteRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<RealmMapRenderer | null>(null);
   const [radialPalettePosition, setRadialPalettePosition] = useState<RadialPalettePosition | null>(null);
   const onZoomChangeRef = useRef(onZoomChange);
@@ -202,8 +203,19 @@ export function MapCanvas({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setRadialPalettePosition(null);
     };
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof window.Node && radialPaletteRef.current?.contains(event.target)) return;
+      setRadialPalettePosition(null);
+    };
+    const handleBlur = () => setRadialPalettePosition(null);
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("blur", handleBlur);
+    };
   }, [radialPalettePosition]);
 
   const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -227,6 +239,7 @@ export function MapCanvas({
       <span className={`map-texture map-texture-${themeId}`} aria-hidden="true" />
       {radialPalettePosition ? (
         <div
+          ref={radialPaletteRef}
           className="radial-palette"
           aria-hidden="true"
           style={{ left: radialPalettePosition.x, top: radialPalettePosition.y }}
