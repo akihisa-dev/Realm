@@ -460,7 +460,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
         zoom: 1,
         minZoom: -1,
         maxZoom: 8,
-        extent: [-400, -220, 400, 220],
+        extent: [...this.worldExtent],
         showFullExtent: true,
         enableRotation: false,
       }),
