@@ -32,7 +32,7 @@ Realm is a terrain authoring tool, not a general map-object editor or GIS data e
 - Launch enters the terrain editor without a startup screen, opening an existing library world before creating a blank one.
 - The primary rail exposes exactly move, draw terrain, and erase terrain. It has no non-terrain creation entry, terrain list, new-terrain form, brush-settings panel, presentation-settings panel, or asset manager.
 - The top row exposes exactly `戻す` and `進む`; the editor has no file toolbar, export controls, world-name field, floating map controls, or bottom zoom bar.
-- The complete fixed 64 by 37 regular-hexagon editing grid spans the bounded world and is visible before any terrain is drawn without deforming its boundary cells. The world origin and focus axes remain centered independently from persistent terrain cells and transient brush selection.
+- The complete fixed 64 by 37 regular-hexagon editing grid spans the bounded world and is visible before any terrain is drawn without deforming its boundary cells. The widest allowed zoom fits the complete editing grid in the canvas without rendering separate origin or focus axes.
 - Drawing or erasing applies the complete set of valid hexagonal cells touched by one pointer stroke in one transaction and one undo step. The active terrain tool remains selected for consecutive strokes; Escape cancels the current selection.
 - Valid edits are automatically saved, and reopening a world preserves the current world metadata, terrain, project presentation settings, and untouched legacy compatibility rows.
 - The renderer uses the bounded project settings already stored in the world, but the terrain editor does not expose a settings sidebar. Viewport, zoom, selection, and active tool remain transient.

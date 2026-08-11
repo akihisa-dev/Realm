@@ -114,7 +114,7 @@ describe("RealmMapAdapter", () => {
     const batch = vi.fn();
     adapter.onModifyFeatures(batch);
     const interaction = adapter.getMap().getInteractions().getArray().find((item) => item instanceof Modify) as Modify | undefined;
-    const source = (adapter.getMap().getLayers().item(2) as VectorLayer).getSource();
+    const source = (adapter.getMap().getLayers().item(1) as VectorLayer).getSource();
     const features = [source?.getFeatureById("a"), source?.getFeatureById("b")].filter((feature): feature is NonNullable<typeof feature> => Boolean(feature));
     interaction?.dispatchEvent({ type: "modifyend", features: { getArray: () => features } } as never);
     expect(batch).toHaveBeenCalledOnce();
@@ -207,7 +207,7 @@ describe("RealmMapAdapter", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(batch).not.toHaveBeenCalled();
     expect(error).toHaveBeenCalledWith("feature_outside_world");
-    const source = (adapter.getMap().getLayers().item(2) as VectorLayer).getSource();
+    const source = (adapter.getMap().getLayers().item(1) as VectorLayer).getSource();
     expect((source?.getFeatureById("edge")?.getGeometry() as Point).getCoordinates()).toEqual([180, 0]);
     adapter.dispose();
     host.remove();
@@ -264,8 +264,8 @@ describe("RealmMapAdapter", () => {
     expect(() => adapter.setGridOptions({ kind: "square", color: "#102030", width: 1, spacingDegrees: 1 })).toThrow(/spacing/);
     adapter.setFeatures([{ id: "city", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [0, 0] } }]);
     adapter.setGridOptions({ kind: "hex", color: "#102030", width: 1.25, spacingDegrees: 30 });
-    const hexLayer = adapter.getMap().getLayers().item(4) as VectorLayer;
-    const cellGridLayer = adapter.getMap().getLayers().item(5) as VectorLayer;
+    const hexLayer = adapter.getMap().getLayers().item(3) as VectorLayer;
+    const cellGridLayer = adapter.getMap().getLayers().item(4) as VectorLayer;
     expect(cellGridLayer.getSource()?.getFeatures()).toHaveLength(1);
     expect(cellGridLayer.getSource()?.getWrapX()).toBe(false);
     expect(cellGridLayer.getVisible()).toBe(false);
@@ -293,7 +293,7 @@ describe("RealmMapAdapter", () => {
     expect(hexLayer.getVisible()).toBe(true);
     adapter.setGridOptions({ kind: "graticule", color: "#405060", width: 2, spacingDegrees: 15 });
     expect(adapter.getMap().getLayers().item(0)).toBeInstanceOf(Graticule);
-    expect((adapter.getMap().getLayers().item(4) as VectorLayer).getVisible()).toBe(false);
+    expect((adapter.getMap().getLayers().item(3) as VectorLayer).getVisible()).toBe(false);
     adapter.dispose();
     expect(adapter.getMap().getTarget()).toBeNull();
     host.remove();
@@ -391,15 +391,7 @@ describe("RealmMapAdapter", () => {
     adapter.setGridVisible(false);
     expect(graticule.getVisible()).toBe(false);
     adapter.setGridVisible(true);
-    const referenceAxes = adapter.getMap().getLayers().item(1);
-    expect(referenceAxes).toBeInstanceOf(VectorLayer);
-    const axisCoordinates = (referenceAxes as VectorLayer).getSource()?.getFeatures().map((feature) => (
-      feature.getGeometry() as LineString
-    ).getCoordinates());
-    expect(axisCoordinates).toEqual([
-      [[-180, 0], [180, 0]],
-      [[0, -90], [0, 90]],
-    ]);
+    expect(adapter.getMap().getLayers().getLength()).toBe(5);
     adapter.setFeatures([
       { id: "city-1", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [12, 34] } },
       { id: "river-1", featureType: "river", name: "River", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
@@ -411,7 +403,7 @@ describe("RealmMapAdapter", () => {
       { id: "boundary-1", featureType: "boundary", name: "Boundary", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
       { id: "town-1", featureType: "town", name: "Town", geometry: { type: "Point", coordinates: [1, 1] } },
     ]);
-    const featureLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
+    const featureLayer = adapter.getMap().getLayers().item(1) as VectorLayer;
     const featureSource = featureLayer.getSource();
     const styleFunction = featureLayer.getStyleFunction();
     const styleFor = (id: string): Style => {
@@ -454,7 +446,7 @@ describe("RealmMapAdapter", () => {
     adapter.setSelectedCells(["0:0"]);
     adapter.setSelectedCells([]);
     adapter.setCellAttributes([]);
-    expect((adapter.getMap().getLayers().item(3) as VectorLayer).getSource()?.getFeatures()).toHaveLength(0);
+    expect((adapter.getMap().getLayers().item(2) as VectorLayer).getSource()?.getFeatures()).toHaveLength(0);
     adapter.setMode("river");
     const riverDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
     expect(riverDraw).toBeInstanceOf(Draw);
@@ -486,11 +478,11 @@ describe("RealmMapAdapter", () => {
     expect(interactions.some((interaction) => interaction instanceof KeyboardZoom)).toBe(true);
 
     adapter.setMode("cell-select");
-    const cellLayer = adapter.getMap().getLayers().item(3) as VectorLayer;
+    const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
     expect(cellLayer.getVisible()).toBe(true);
     expect(cellLayer.getSource()?.getFeatures()).toHaveLength(0);
     adapter.setCellGridVisible(true);
-    const fixedCellGridLayer = adapter.getMap().getLayers().item(5) as VectorLayer;
+    const fixedCellGridLayer = adapter.getMap().getLayers().item(4) as VectorLayer;
     expect(fixedCellGridLayer.getVisible()).toBe(true);
     expect(fixedCellGridLayer.getSource()?.getFeatures()).toHaveLength(1);
     adapter.setCellAttributes([{ cellId: "2:2", attribute: "terrain", value: "terrain" }]);
@@ -540,7 +532,7 @@ describe("RealmMapAdapter", () => {
     adapter.setZoom(99);
     expect(adapter.getZoom()).toBe(8);
     adapter.setZoom(-99);
-    expect(adapter.getZoom()).toBe(0);
+    expect(adapter.getZoom()).toBe(1);
     host.dispatchEvent(new KeyboardEvent("keydown", { key: "1", ctrlKey: true, bubbles: true }));
     expect(adapter.getZoom()).toBe(1);
     adapter.setCellBrushRadius(Number.NaN);
@@ -558,7 +550,7 @@ describe("RealmMapAdapter", () => {
     const view = adapter.getMap().getView();
     const fittedResolution = view.getResolutionForExtent([-180, -90, 180, 90], [592, 432]);
     expect(view.getResolution()).toBeCloseTo(fittedResolution);
-    expect(view.getZoom()).toBeCloseTo(view.getMinZoom() + 1);
+    expect(view.getZoom()).toBeCloseTo(view.getMinZoom());
 
     adapter.setZoom(3);
     adapter.getMap().setSize([900, 400]);

@@ -388,19 +388,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.target.style.background = mapTheme(this.activeThemeId).canvas;
     this.graticule = createGraticule(this.gridOptions);
 
-    const referenceAxes = new VectorLayer({
-      source: new VectorSource({
-        wrapX: false,
-        features: [
-          new Feature({ geometry: new LineString([[-180, 0], [180, 0]]) }),
-          new Feature({ geometry: new LineString([[0, -90], [0, 90]]) }),
-        ],
-      }),
-      style: new Style({
-        stroke: new Stroke({ color: "rgba(74, 87, 98, 0.34)", width: 1 }),
-      }),
-    });
-
     this.featureLayer = new VectorLayer({ source: this.featureSource, style: this.featureStyle });
     this.cellLayer = new VectorLayer({ source: this.cellSource, style: this.cellStyle, visible: true });
     this.cellGridSource.addFeature(new Feature({ geometry: new MultiLineString(fixedCellGridLines()) }));
@@ -461,15 +448,13 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
     this.map = new Map({
       target,
-      layers: [this.graticule, referenceAxes, this.featureLayer, this.cellLayer, this.gridLayer, this.cellGridLayer],
+      layers: [this.graticule, this.featureLayer, this.cellLayer, this.gridLayer, this.cellGridLayer],
       view: new View({
         projection: "EPSG:4326",
         center: [0, 0],
         zoom: 1,
         minZoom: -1,
         maxZoom: 8,
-        // Scale 0 shows one additional step around the fitted world without
-        // letting the viewport escape the bounded editing plane.
         extent: [-400, -220, 400, 220],
         showFullExtent: true,
         enableRotation: false,
@@ -498,11 +483,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   getZoom(): number {
     const internalZoom = this.map.getView().getZoom();
-    return Math.min(8, Math.max(0, (internalZoom ?? this.baseZoom + 1) - this.baseZoom));
+    return Math.min(8, Math.max(1, (internalZoom ?? this.baseZoom + 1) - this.baseZoom));
   }
 
   setZoom(zoom: number): void {
-    const relativeZoom = Math.min(8, Math.max(0, zoom));
+    const relativeZoom = Math.min(8, Math.max(1, zoom));
     this.map.getView().setZoom(this.baseZoom + relativeZoom);
   }
 
@@ -1109,9 +1094,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
     const fitZoom = view.getZoomForResolution(fitResolution);
     if (fitZoom === undefined) return;
 
-    // UI scale 1 is the fitted whole-world view; scale 0 is one step wider.
+    // UI scale 1 is the widest view and fits the whole editing world.
     this.baseZoom = fitZoom - 1;
-    view.setMinZoom(this.baseZoom);
+    view.setMinZoom(this.baseZoom + 1);
     view.setMaxZoom(this.baseZoom + 8);
     view.setZoom(this.baseZoom + currentRelativeZoom);
   }
