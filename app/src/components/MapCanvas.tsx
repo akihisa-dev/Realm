@@ -13,7 +13,7 @@ import type { ExportCanvasSize } from "../map/contracts";
 import type { MapErrorCode } from "../map/errors";
 import { DEFAULT_MAP_THEME_ID, type MapThemeId, type ThemeOverrides } from "../map/themes";
 
-export type TerrainMapMode = "pan" | "cell-select";
+export type TerrainMapMode = "pan" | "cell-select" | "cell-erase";
 
 type RadialPalettePosition = {
   x: number;
@@ -101,7 +101,9 @@ export function MapCanvas({
   const onExporterReadyRef = useRef(onExporterReady);
   const mapHelp = mode === "pan"
     ? "ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
-    : "六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。";
+    : mode === "cell-erase"
+      ? "六角セルを押したままなぞって地形を消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。"
+      : "六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。";
 
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;
@@ -131,9 +133,12 @@ export function MapCanvas({
   useEffect(() => { adapterRef.current?.setGridOptions(gridOptions); }, [gridOptions]);
   useEffect(() => { adapterRef.current?.setCellGridVisible(showCellGrid); }, [showCellGrid]);
   useEffect(() => { adapterRef.current?.setCellGridOptions(cellGridOptions); }, [cellGridOptions]);
-  useEffect(() => { adapterRef.current?.setMode(mode); }, [mode]);
   useEffect(() => { adapterRef.current?.setDrawingOptions(drawingOptions); }, [drawingOptions]);
+  // Erase saves lock the map as `pan` in the same render that removes the
+  // attributes. Apply the semantic state first so setMode cannot expose the
+  // old painted cell while it clears the transient erase preview.
   useEffect(() => { adapterRef.current?.setCellAttributes(cellAttributes); }, [cellAttributes]);
+  useEffect(() => { adapterRef.current?.setMode(mode); }, [mode]);
   useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [selectedCellIds]);
   useEffect(() => { adapterRef.current?.setCellBrushRadius(cellBrushRadius); }, [cellBrushRadius]);
   useEffect(() => {

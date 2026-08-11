@@ -112,6 +112,18 @@ describe("MapCanvas", () => {
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
     expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
 
+    rerender(<MapCanvas mode="cell-erase" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(screen.getByText("六角セルを押したままなぞって地形を消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。")).toBeInTheDocument();
+    expect(renderer.setMode).toHaveBeenLastCalledWith("cell-erase");
+
+    const syncOrder: string[] = [];
+    renderer.setCellAttributes = vi.fn(() => { syncOrder.push("attributes"); });
+    renderer.setMode = vi.fn(() => { syncOrder.push("mode"); });
+    rerender(<MapCanvas mode="cell-erase" cellAttributes={[{ cellId: "1:1", attribute: "terrain", value: "terrain" }]} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    syncOrder.length = 0;
+    rerender(<MapCanvas mode="pan" cellAttributes={[]} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(syncOrder).toEqual(["attributes", "mode"]);
+
     rerender(<MapCanvas mode="cell-select" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setDrawingOptions).toHaveBeenLastCalledWith({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
     expect(screen.getByText("六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();

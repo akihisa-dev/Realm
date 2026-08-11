@@ -543,6 +543,7 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     const has = (attribute: CellAttributeSnapshot["attribute"]): boolean => attributes?.some((item) => item.attribute === attribute) ?? false;
     const selected = feature.get("selected") === true;
     const preview = feature.get("preview") === true;
+    if (feature.get("erasePreview") === true) return undefined;
     const hasTerrain = has("terrain");
     const hasPhysical = has("forest");
     const hasCountry = has("country");

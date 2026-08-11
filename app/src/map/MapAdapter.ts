@@ -652,7 +652,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   private drawTypeUsesFreehand(mode: RealmMapMode): boolean {
-    return mode !== "pan" && mode !== "cell-select" && mode !== "erase"
+    return mode !== "pan" && mode !== "cell-select" && mode !== "cell-erase" && mode !== "erase"
       && drawTypeForMode(mode) !== "Point" && this.drawingGesture === "freehand";
   }
 
@@ -677,7 +677,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.eraser = null;
     }
     this.lassoPoints = [];
-    if (mode !== "cell-select" && this.activeMode === "cell-select") this.setSelectedCells([]);
+    const isCellMode = mode === "cell-select" || mode === "cell-erase";
+    const wasCellMode = this.activeMode === "cell-select" || this.activeMode === "cell-erase";
+    if ((!isCellMode || mode !== this.activeMode) && wasCellMode) this.setSelectedCells([]);
     this.setHoveredCells([]);
     this.activeMode = mode;
     this.modify.setActive(mode === "pan");
@@ -701,7 +703,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.map.addInteraction(this.eraser);
       return;
     }
-    if (mode === "cell-select") {
+    if (isCellMode) {
       this.setSelected(null);
       this.brush = new CancelablePointerInteraction({
         handleDownEvent: (event) => {
@@ -851,7 +853,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       event.preventDefault();
       return;
     }
-    if (this.activeMode !== "cell-select") return;
+    if (this.activeMode !== "cell-select" && this.activeMode !== "cell-erase") return;
     this.cancelBrushStroke(false);
     this.setSelectedCells([]);
     for (const listener of this.cellSelectListeners) listener([]);
@@ -892,7 +894,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   private readonly handlePointerMove = (event: Event | BaseEvent): void => {
-    if (this.activeMode !== "cell-select" || this.temporaryPan || this.brushLastPoint) {
+    if ((this.activeMode !== "cell-select" && this.activeMode !== "cell-erase") || this.temporaryPan || this.brushLastPoint) {
       this.setHoveredCells([]);
       return;
     }
@@ -917,7 +919,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     const hadGesture = Boolean(this.draw) || this.lassoPoints.length > 0;
     if (this.draw) {
       const vertexDrawing = this.drawingGesture === "vertices"
-        && this.activeMode !== "pan" && this.activeMode !== "cell-select" && this.activeMode !== "erase"
+        && this.activeMode !== "pan" && this.activeMode !== "cell-select" && this.activeMode !== "cell-erase" && this.activeMode !== "erase"
         && drawTypeForMode(this.activeMode) !== "Point";
       if (vertexDrawing) this.draw.finishDrawing();
       else this.draw.abortDrawing();
@@ -950,16 +952,22 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private setHoveredCells(cellIds: readonly string[]): void {
     const next = new Set(this.validCellIds(cellIds));
     const previous = this.hoveredCellIds;
+    const erasing = this.activeMode === "cell-erase";
     this.hoveredCellIds = next;
     for (const id of previous) {
       if (!next.has(id)) {
         const feature = this.getCellFeature(id);
         feature?.set("preview", false, true);
+        feature?.set("erasePreview", false, true);
         this.removeUnusedCell(id);
       }
     }
     this.ensureCells(next);
-    for (const id of next) this.getCellFeature(id)?.set("preview", true, true);
+    for (const id of next) {
+      const feature = this.getCellFeature(id);
+      feature?.set("preview", !erasing, true);
+      feature?.set("erasePreview", erasing, true);
+    }
     this.cellLayer.changed();
   }
 
@@ -1019,13 +1027,18 @@ export class RealmMapAdapter implements RealmMapRenderer {
     const next = new Set(validIds);
     for (const id of this.selectedCellIds) {
       if (!next.has(id)) {
-        this.getCellFeature(id)?.set("selected", false, true);
+        const feature = this.getCellFeature(id);
+        feature?.set("selected", false, true);
+        feature?.set("erasePreview", false, true);
         this.selectedCellIds.delete(id);
         this.removeUnusedCell(id);
       }
     }
+    const erasing = this.activeMode === "cell-erase";
     for (const id of next) {
-      if (!this.selectedCellIds.has(id)) this.getCellFeature(id)?.set("selected", true, true);
+      const feature = this.getCellFeature(id);
+      if (!this.selectedCellIds.has(id)) feature?.set("selected", !erasing, true);
+      feature?.set("erasePreview", erasing, true);
     }
     this.selectedCellIds = next;
     this.cellLayer.changed();

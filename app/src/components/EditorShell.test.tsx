@@ -8,6 +8,7 @@ vi.mock("./MapCanvas", () => ({
     features?: Array<{ id: string; featureType: string }>;
     selectedFeatureIds?: readonly string[];
     selectedCellIds?: readonly string[];
+    cellAttributes?: readonly { cellId: string; attribute: string; value: string }[];
     mode?: string;
     showGrid?: boolean;
     showCellGrid?: boolean;
@@ -18,8 +19,11 @@ vi.mock("./MapCanvas", () => ({
     const initialCellSelect = useRef(props.onCellSelect);
     return <div role="region" aria-label="世界地図" data-mode={props.mode} data-grid-visible={String(props.showGrid)} data-cell-grid-visible={String(props.showCellGrid)} data-zoom={String(props.zoom)}>
       <output aria-label="描画対象">{props.features?.map(({ featureType }) => featureType).join(",")}</output>
+      <output aria-label="表示中の地形セル">{props.cellAttributes?.map(({ cellId }) => cellId).join(",")}</output>
+      <output aria-label="選択中の地形セル">{props.selectedCellIds?.join(",")}</output>
       <button type="button" onClick={() => props.onCellSelect?.(["1:1", "1:2"])}>テストセル描画</button>
       <button type="button" onClick={() => initialCellSelect.current?.(["1:1"])}>テスト遅延セル操作</button>
+      <button type="button" onClick={() => props.onCellSelect?.([])}>テスト選択解除</button>
       <button type="button" onClick={() => props.onError?.("drawing_self_intersection")}>テスト描画エラー</button>
     </div>;
   },
@@ -113,9 +117,47 @@ it("erases terrain cells through an already registered map callback without dele
   renderEditor(backend, snapshot);
 
   fireEvent.click(screen.getByRole("button", { name: "地形を消す" }));
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-erase");
   fireEvent.click(screen.getByRole("button", { name: "テスト遅延セル操作" }));
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([]));
   expect((await backend.getOpenProject())?.features).toEqual([expect.objectContaining({ featureType: "city", name: "旧都市" })]);
+});
+
+it("removes an erased cell from the map before save completes and restores it on failure", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://erase-optimistic.realmmap", name: "Erase optimistic" });
+  await backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "terrain", value: "terrain" });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  const visibleCells = screen.getByRole("status", { name: "表示中の地形セル" });
+  await waitFor(() => expect(visibleCells).toHaveTextContent("1:1"));
+  let rejectSave: (cause: Error) => void = () => undefined;
+  const saveFailure = new Promise<RealmSnapshot>((_resolve, reject) => { rejectSave = reject; });
+  vi.spyOn(backend, "applyCellAttributes").mockReturnValue(saveFailure);
+
+  fireEvent.click(screen.getByRole("button", { name: "地形を消す" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト遅延セル操作" }));
+  expect(visibleCells).not.toHaveTextContent("1:1");
+
+  rejectSave(new Error("save failed"));
+  await waitFor(() => expect(visibleCells).toHaveTextContent("1:1"));
+  expect(screen.getByRole("alert")).toHaveTextContent("セルの地形属性を更新できませんでした。");
+});
+
+it("clears the controlled cell selection when an empty brush selection arrives", async () => {
+  const backend = new MemoryRealmBackend();
+  const snapshot = await backend.createProject({ path: "browser://empty-selection.realmmap", name: "Empty selection" });
+  renderEditor(backend, snapshot);
+  vi.spyOn(backend, "applyCellAttributes").mockRejectedValue(new Error("save failed"));
+
+  fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
+  await waitFor(() => expect(screen.getByRole("status", { name: "選択中の地形セル" })).toHaveTextContent("1:1,1:2"));
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("セルの地形属性を更新できませんでした。"));
+
+  fireEvent.click(screen.getByRole("button", { name: "テスト選択解除" }));
+  expect(screen.getByRole("status", { name: "選択中の地形セル" })).toHaveTextContent("");
 });
 
 it("keeps the three terrain tool shortcuts", async () => {

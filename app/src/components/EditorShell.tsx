@@ -80,7 +80,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     if (activeTool === "pan" || locked) setSelectedCellIds([]);
   }, [activeTool, locked]);
 
-  const run = async (action: () => Promise<RealmSnapshot>, fallback: string) => {
+  const run = async (action: () => Promise<RealmSnapshot>, fallback: string, recover?: (identity: string) => Promise<void>) => {
     await enqueueSerial(commandTail, async () => {
       const identity = projectIdentity;
       setOperating(true);
@@ -94,7 +94,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         await refreshCellAttributes(identity);
         setSelectedCellIds([]);
       } catch (cause) {
-        if (mounted.current && viewedIdentity.current === identity) setError(errorMessage(cause, fallback));
+        if (mounted.current && viewedIdentity.current === identity) {
+          if (recover) await recover(identity);
+          if (mounted.current && viewedIdentity.current === identity) setError(errorMessage(cause, fallback));
+        }
       } finally {
         if (mounted.current) setOperating(false);
       }
@@ -108,10 +111,23 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       setSelectedCellIds([]);
       return;
     }
-    setSelectedCellIds(nextIds);
-    if (nextIds.length === 0) return;
+    if (nextIds.length === 0) {
+      setSelectedCellIds([]);
+      return;
+    }
     const value = tool === "terrain" ? "terrain" : null;
-    void run(() => backend.applyCellAttributes({ cellIds: nextIds, attribute: "terrain", value }), "セルの地形属性を更新できませんでした。");
+    if (value === null) {
+      const selected = new Set(nextIds);
+      setCellAttributes((current) => current.filter((attribute) => !selected.has(attribute.cellId)));
+      setSelectedCellIds([]);
+    } else {
+      setSelectedCellIds(nextIds);
+    }
+    void run(
+      () => backend.applyCellAttributes({ cellIds: nextIds, attribute: "terrain", value }),
+      "セルの地形属性を更新できませんでした。",
+      value === null ? refreshCellAttributes : undefined,
+    );
   };
 
   useEffect(() => {
@@ -158,7 +174,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         <section className="map-region" aria-label="地形編集領域">
           <MapCanvas
             features={[]}
-            mode={locked || activeTool === "pan" ? "pan" : "cell-select"}
+            mode={locked || activeTool === "pan" ? "pan" : activeTool === "erase" ? "cell-erase" : "cell-select"}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}
             cellBrushRadius={1}

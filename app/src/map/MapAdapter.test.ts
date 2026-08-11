@@ -263,6 +263,40 @@ describe("RealmMapAdapter", () => {
     expect(cellIdsWithinBrushPath([[-Infinity, -90], [Infinity, 90]], 1)).toEqual([]);
   });
 
+  it("keeps erase hover and drag previews unpainted", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    adapter.setCellAttributes([{ cellId: "10:10", attribute: "terrain", value: "terrain" }]);
+    adapter.setMode("cell-erase");
+    const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
+    const style = cellLayer.getStyleFunction();
+
+    adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: cellCenter(10, 10) } as never);
+    const hovered = cellLayer.getSource()?.getFeatureById("10:10");
+    expect(hovered?.get("erasePreview")).toBe(true);
+    expect(style?.(hovered!, 1)).toBeUndefined();
+
+    const cellBrush = adapter.getMap().getInteractions().getArray().at(-1);
+    const pointerDown = new MouseEvent("pointerdown", { button: 0, bubbles: true });
+    Object.defineProperty(pointerDown, "isPrimary", { value: true });
+    cellBrush?.handleEvent({ type: "pointerdown", originalEvent: pointerDown, coordinate: cellCenter(10, 10), activePointers: [pointerDown] } as never);
+    const selected = cellLayer.getSource()?.getFeatureById("10:10");
+    expect(selected?.get("selected")).not.toBe(true);
+    expect(selected?.get("erasePreview")).toBe(true);
+    expect(style?.(selected!, 1)).toBeUndefined();
+
+    cellBrush?.handleEvent({ type: "pointerdrag", originalEvent: pointerDown, coordinate: cellCenter(11, 10), activePointers: [pointerDown] } as never);
+    const dragged = cellLayer.getSource()?.getFeatureById("11:10");
+    expect(dragged?.get("erasePreview")).toBe(true);
+    expect(style?.(dragged!, 1)).toBeUndefined();
+
+    adapter.dispose();
+    host.remove();
+  });
+
   it("builds closed regular hex cells without deforming the grid edge", () => {
     const even = cellCenter(18, 32);
     const odd = cellCenter(19, 32);

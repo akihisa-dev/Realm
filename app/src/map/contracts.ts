@@ -7,7 +7,7 @@ export type MapAdapterOptions = {
   target: HTMLElement;
 };
 
-export type RealmMapMode = "pan" | "cell-select" | "erase" | "polygon-hole" | "label-path" | FeatureType;
+export type RealmMapMode = "pan" | "cell-select" | "cell-erase" | "erase" | "polygon-hole" | "label-path" | FeatureType;
 export type FeatureGeometryChange = { id: string; geometry: GeoJsonGeometry };
 export type ExportCanvasSize = {
   width: number;
