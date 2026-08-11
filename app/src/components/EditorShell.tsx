@@ -29,6 +29,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [zoom, setZoom] = useState(1);
   const [operating, setOperating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeToolRef = useRef<Tool>("terrain");
   const viewedIdentity = useRef(`${snapshot.path}:${snapshot.world.id}`);
   const mounted = useRef(true);
   const commandTail = useRef<Promise<void>>(Promise.resolve());
@@ -54,6 +55,11 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
 
   const settings = viewedSnapshot.settings;
   const locked = busy || operating;
+
+  const selectTool = (tool: Tool) => {
+    activeToolRef.current = tool;
+    setActiveTool(tool);
+  };
 
   const refreshCellAttributes = async (identity: string): Promise<void> => {
     const request = ++cellRequest.current;
@@ -96,13 +102,14 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
 
   const applyCellSelection = (ids: readonly string[]) => {
     const nextIds = [...new Set(ids)];
-    if (locked || activeTool === "pan") {
+    const tool = activeToolRef.current;
+    if (locked || tool === "pan") {
       setSelectedCellIds([]);
       return;
     }
     setSelectedCellIds(nextIds);
     if (nextIds.length === 0) return;
-    const value = activeTool === "terrain" ? "terrain" : null;
+    const value = tool === "terrain" ? "terrain" : null;
     void run(() => backend.applyCellAttributes({ cellIds: nextIds, attribute: "terrain", value }), "セルの地形属性を更新できませんでした。");
   };
 
@@ -122,10 +129,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       if (locked || event.altKey || event.shiftKey) return;
       if (key === "c" || key === "z") {
         event.preventDefault();
-        setActiveTool("terrain");
+        selectTool("terrain");
       } else if (key === "e" || key === "x") {
         event.preventDefault();
-        setActiveTool("erase");
+        selectTool("erase");
       }
     };
     window.addEventListener("keydown", handleShortcut);
@@ -142,9 +149,9 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       </header>
       <div className="editor-body">
         <aside className="left-rail" aria-label="地形ツール">
-          <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => setActiveTool("pan")} disabled={locked}><Hand aria-hidden="true" size={24} /><span>移動</span></button>
-          <button className={activeTool === "terrain" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "terrain"} onClick={() => setActiveTool("terrain")} disabled={locked}><PencilLine aria-hidden="true" size={24} /><span>地形を描く</span></button>
-          <button className={activeTool === "erase" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "erase"} onClick={() => setActiveTool("erase")} disabled={locked}><Eraser aria-hidden="true" size={24} /><span>地形を消す</span></button>
+          <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => selectTool("pan")} disabled={locked}><Hand aria-hidden="true" size={24} /><span>移動</span></button>
+          <button className={activeTool === "terrain" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "terrain"} onClick={() => selectTool("terrain")} disabled={locked}><PencilLine aria-hidden="true" size={24} /><span>地形を描く</span></button>
+          <button className={activeTool === "erase" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "erase"} onClick={() => selectTool("erase")} disabled={locked}><Eraser aria-hidden="true" size={24} /><span>地形を消す</span></button>
         </aside>
 
         <section className="map-region" aria-label="地形編集領域">

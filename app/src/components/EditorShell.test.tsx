@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRealmBackend, type RealmSnapshot } from "../backend";
 import { EditorShell } from "./EditorShell";
@@ -11,12 +12,15 @@ vi.mock("./MapCanvas", () => ({
     showGrid?: boolean;
     onCellSelect?: (ids: readonly string[]) => void;
     onError?: (code: "drawing_self_intersection") => void;
-  }) => <div role="region" aria-label="世界地図" data-mode={props.mode} data-grid-visible={String(props.showGrid)}>
-    <output aria-label="描画対象">{props.features?.map(({ featureType }) => featureType).join(",")}</output>
-    <button type="button" onClick={() => props.onCellSelect?.(["1:1", "1:2"])}>テストセル描画</button>
-    <button type="button" onClick={() => props.onCellSelect?.(["1:1"])}>テストセル消去</button>
-    <button type="button" onClick={() => props.onError?.("drawing_self_intersection")}>テスト描画エラー</button>
-  </div>,
+  }) => {
+    const initialCellSelect = useRef(props.onCellSelect);
+    return <div role="region" aria-label="世界地図" data-mode={props.mode} data-grid-visible={String(props.showGrid)}>
+      <output aria-label="描画対象">{props.features?.map(({ featureType }) => featureType).join(",")}</output>
+      <button type="button" onClick={() => props.onCellSelect?.(["1:1", "1:2"])}>テストセル描画</button>
+      <button type="button" onClick={() => initialCellSelect.current?.(["1:1"])}>テスト遅延セル操作</button>
+      <button type="button" onClick={() => props.onError?.("drawing_self_intersection")}>テスト描画エラー</button>
+    </div>;
+  },
 }));
 
 const renderEditor = (backend: MemoryRealmBackend, snapshot: RealmSnapshot) => render(
@@ -95,7 +99,7 @@ it("edits terrain directly on the canvas while hiding legacy objects", async () 
   });
 });
 
-it("erases terrain cells without deleting legacy polygons", async () => {
+it("erases terrain cells through an already registered map callback without deleting legacy polygons", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://erase.realmmap", name: "Erase" });
   await backend.createFeature({ featureType: "city", name: "旧都市", geometry: { type: "Point", coordinates: [0, 0] } });
@@ -105,7 +109,7 @@ it("erases terrain cells without deleting legacy polygons", async () => {
   renderEditor(backend, snapshot);
 
   fireEvent.click(screen.getByRole("button", { name: "地形を消す" }));
-  fireEvent.click(screen.getByRole("button", { name: "テストセル消去" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト遅延セル操作" }));
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([]));
   expect((await backend.getOpenProject())?.features).toEqual([expect.objectContaining({ featureType: "city", name: "旧都市" })]);
 });
