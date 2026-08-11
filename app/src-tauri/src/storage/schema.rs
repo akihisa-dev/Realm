@@ -13,8 +13,6 @@ pub(crate) const SCHEMA_VERSION_V8: i32 = 8;
 pub(crate) const SETTINGS_MAX_BYTES: usize = 32 * 1024;
 pub(crate) const DEFAULT_SETTINGS_JSON: &str = r##"{"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":2048,"canvasHeight":1024,"gridKind":"graticule","gridColor":"#687784","gridWidth":1,"gridSpacing":10,"themeOverrides":{}}"##;
 pub(crate) const GRID_VERSION: i32 = 1;
-pub(crate) const GRID_COLUMNS: i32 = 512;
-pub(crate) const GRID_ROWS: i32 = 256;
 #[derive(Clone, Copy)]
 pub(crate) struct ColumnExpectation {
     name: &'static str,
