@@ -1,4 +1,4 @@
-import { CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellCenter, cellIdsWithinBrushPath, cellPolygon, isGeometryWithinWorld, selectFeatureIdsWithinLasso } from "./MapAdapter";
+import { CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellCenter, cellIdsWithinBrushPath, cellIdsWithinBrushPosition, cellPolygon, isGeometryWithinWorld, selectFeatureIdsWithinLasso } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -508,6 +508,16 @@ describe("RealmMapAdapter", () => {
     adapter.setMode("cell-select");
     const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
     expect(cellLayer.getVisible()).toBe(true);
+    expect(cellLayer.getSource()?.getFeatures()).toHaveLength(0);
+    const hoverCellIds = cellIdsWithinBrushPosition(cellCenter(10, 10), 1);
+    expect(hoverCellIds).toHaveLength(7);
+    adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: cellCenter(10, 10) } as never);
+    expect(hoverCellIds.length).toBeGreaterThan(0);
+    expect(hoverCellIds.every((id) => cellLayer.getSource()?.getFeatureById(id)?.get("preview") === true)).toBe(true);
+    const previewFeature = cellLayer.getSource()?.getFeatureById(hoverCellIds[0]!);
+    const previewStyles = cellLayer.getStyleFunction()?.(previewFeature!, 1) as Style[];
+    expect(previewStyles.some((style) => style.getStroke()?.getLineDash())).toBeTruthy();
+    host.dispatchEvent(new Event("pointerleave"));
     expect(cellLayer.getSource()?.getFeatures()).toHaveLength(0);
     adapter.setCellGridVisible(true);
     const fixedCellGridLayer = adapter.getMap().getLayers().item(4) as VectorLayer;

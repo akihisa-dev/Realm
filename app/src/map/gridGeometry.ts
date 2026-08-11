@@ -91,3 +91,35 @@ export const cellIdsWithinBrushPath = (path: readonly [number, number][], radius
   }
   return selected;
 };
+
+/** Returns a fixed hexagonal footprint centered on the cell under the pointer. */
+export const cellIdsWithinBrushPosition = (position: [number, number], radiusCells: number): string[] => {
+  if (!Number.isFinite(position[0]) || !Number.isFinite(position[1]) || !Number.isFinite(radiusCells) || radiusCells < 0) return [];
+  const [gridColumn, gridRow] = gridCoordinate(position);
+  let centerRow = Math.round(gridRow);
+  let centerColumn = Math.round(gridColumn - (centerRow % 2 === 0 ? 0 : 0.5));
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (let row = Math.max(0, centerRow - 2); row <= Math.min(CELL_GRID_ROWS - 1, centerRow + 2); row += 1) {
+    for (let column = Math.max(0, centerColumn - 2); column <= Math.min(CELL_GRID_COLUMNS - 1, centerColumn + 2); column += 1) {
+      const candidate = [column + (row % 2 === 0 ? 0 : 0.5), row] as const;
+      const distance = ((candidate[0] - gridColumn) ** 2) + ((candidate[1] - gridRow) ** 2);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        centerRow = row;
+        centerColumn = column;
+      }
+    }
+  }
+  const radius = Math.floor(radiusCells);
+  const centerAxialQ = centerColumn - (centerRow - (centerRow & 1)) / 2;
+  const selected: string[] = [];
+  for (let row = Math.max(0, centerRow - radius); row <= Math.min(CELL_GRID_ROWS - 1, centerRow + radius); row += 1) {
+    for (let column = Math.max(0, centerColumn - radius - 1); column <= Math.min(CELL_GRID_COLUMNS - 1, centerColumn + radius + 1); column += 1) {
+      const axialQ = column - (row - (row & 1)) / 2;
+      const axialR = row;
+      const distance = Math.max(Math.abs(axialQ - centerAxialQ), Math.abs(axialR - centerRow), Math.abs((axialQ + axialR) - (centerAxialQ + centerRow)));
+      if (distance <= radius) selected.push(cellId(row, column));
+    }
+  }
+  return selected;
+};

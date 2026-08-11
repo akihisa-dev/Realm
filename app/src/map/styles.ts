@@ -542,16 +542,17 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     const attributes = feature.get("attributes") as CellAttributeSnapshot[] | undefined;
     const has = (attribute: CellAttributeSnapshot["attribute"]): boolean => attributes?.some((item) => item.attribute === attribute) ?? false;
     const selected = feature.get("selected") === true;
+    const preview = feature.get("preview") === true;
     const hasTerrain = has("terrain");
     const hasPhysical = has("forest");
     const hasCountry = has("country");
     const hasRegion = has("region");
-    if (!hasTerrain && !hasPhysical && !hasCountry && !hasRegion && !selected) return undefined;
+    if (!hasTerrain && !hasPhysical && !hasCountry && !hasRegion && !selected && !preview) return undefined;
     const themeId = getThemeId();
     const overrides = getThemeOverrides();
     const theme = mapTheme(themeId, overrides);
     const variant = stableVariant(String(feature.getId() ?? "")) % 7;
-    const flags = (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0);
+    const flags = (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0) | (preview ? 64 : 0);
     const key = `${themeId}:${JSON.stringify(overrides)}:${flags}:${hasPhysical ? variant : 0}`;
     const cached = cellStyles.get(key);
     if (cached) return cached;
@@ -561,6 +562,7 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     if (hasCountry) styles.push(new Style({ fill: new Fill({ color: `${theme.country}14` }), stroke: new Stroke({ color: theme.country, width: 1.1 }), zIndex: 9 }));
     if (hasRegion) styles.push(new Style({ fill: new Fill({ color: `${theme.region}0d` }), stroke: new Stroke({ color: theme.region, width: 1.1, lineDash: [3, 2] }), zIndex: 10 }));
     if (selected) styles.push(new Style({ fill: new Fill({ color: "rgba(7, 140, 152, 0.16)" }), stroke: new Stroke({ color: "#078c98", width: 1.4 }), zIndex: 85 }));
+    if (preview) styles.push(new Style({ fill: new Fill({ color: "rgba(7, 140, 152, 0.08)" }), stroke: new Stroke({ color: "#078c98", width: 1.2, lineDash: [3, 2] }), zIndex: 84 }));
     cellStyles.set(key, styles);
     return styles;
   };
