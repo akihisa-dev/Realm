@@ -44,6 +44,7 @@ it("shows exactly the three requested terrain tools and no sidebar", async () =>
 
   const tools = screen.getByRole("complementary", { name: "地形ツール" });
   expect(within(tools).getAllByRole("button").map((button) => button.textContent)).toEqual(["移動", "地形を描く", "地形を消す"]);
+  expect(tools.querySelectorAll("svg")).toHaveLength(3);
   expect(screen.getByRole("button", { name: "地形を描く" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("navigation", { name: "編集履歴" })).toBeInTheDocument();
   expect(screen.getByRole("navigation", { name: "編集履歴" }).closest("header")).toHaveAttribute("data-tauri-drag-region", "deep");

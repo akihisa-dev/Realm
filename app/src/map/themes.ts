@@ -39,7 +39,7 @@ export const validateThemeOverrides = (overrides: ThemeOverrides): ThemeOverride
 };
 
 export const MAP_THEMES: Record<MapThemeId, MapTheme> = {
-  ink: { id: "ink", name: "インク地図", canvas: "#93b9ba", land: "#dfd0a8", landInk: "#443a2b", coastGlow: "rgba(245, 239, 216, 0.88)", river: "#4c8d9b", forest: "#426a45", country: "#8a654c", region: "#8e765e", boundary: "#6f4938", settlement: "#50382e", label: "#352d25", labelHalo: "rgba(239, 226, 191, 0.94)", grid: "rgba(61, 69, 66, 0.26)" },
+  ink: { id: "ink", name: "インク地図", canvas: "#d7e4e3", land: "#dfd0a8", landInk: "#443a2b", coastGlow: "rgba(245, 239, 216, 0.88)", river: "#4c8d9b", forest: "#426a45", country: "#8a654c", region: "#8e765e", boundary: "#6f4938", settlement: "#50382e", label: "#352d25", labelHalo: "rgba(239, 226, 191, 0.94)", grid: "rgba(61, 69, 66, 0.26)" },
   atlas: { id: "atlas", name: "現代アトラス", canvas: "#dcecf1", land: "#e8ebdf", landInk: "#65715f", coastGlow: "rgba(255, 255, 255, 0.9)", river: "#2e78a6", forest: "#3f7c55", country: "#315f7d", region: "#76568c", boundary: "#915f3d", settlement: "#8a3f58", label: "#26323b", labelHalo: "rgba(255, 255, 255, 0.94)", grid: "rgba(74, 87, 98, 0.24)" },
   midnight: { id: "midnight", name: "夜の航海図", canvas: "#172a35", land: "#35463f", landInk: "#b7aa7c", coastGlow: "rgba(101, 151, 157, 0.72)", river: "#75b6c2", forest: "#86a66f", country: "#d1a86a", region: "#aa91bf", boundary: "#d18a72", settlement: "#e2c38f", label: "#e8dfc8", labelHalo: "rgba(19, 35, 43, 0.94)", grid: "rgba(196, 214, 214, 0.22)" },
 };

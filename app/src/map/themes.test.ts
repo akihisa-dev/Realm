@@ -1,6 +1,10 @@
 import { DEFAULT_MAP_THEME_ID, MAP_THEMES, mapTheme, validateThemeOverrides } from "./themes";
 
 describe("map theme overrides", () => {
+  it("uses a calm light canvas for the default ink theme", () => {
+    expect(mapTheme(DEFAULT_MAP_THEME_ID).canvas).toBe("#d7e4e3");
+  });
+
   it("immutably merges valid color overrides without mutating the base theme", () => {
     const base = MAP_THEMES[DEFAULT_MAP_THEME_ID];
     const merged = mapTheme(DEFAULT_MAP_THEME_ID, { canvas: "#010203", river: "#aabbcc" });

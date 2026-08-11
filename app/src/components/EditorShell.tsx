@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { errorMessage, type GeoJsonGeometry, type RealmBackend, type RealmFeature, type RealmSnapshot } from "../backend";
-import { GlobeHemisphereWest } from "@phosphor-icons/react/dist/csr/GlobeHemisphereWest";
+import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
+import { Hand } from "@phosphor-icons/react/dist/csr/Hand";
+import { PencilLine } from "@phosphor-icons/react/dist/csr/PencilLine";
 import { MapCanvas } from "./MapCanvas";
 import { mapErrorMessage } from "../locales/ja";
 
@@ -140,9 +142,9 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       </header>
       <div className="editor-body">
         <aside className="left-rail" aria-label="地形ツール">
-          <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => setActiveTool("pan")} disabled={locked}><GlobeHemisphereWest aria-hidden="true" size={25} /><span>移動</span></button>
-          <button className={activeTool === "terrain" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "terrain"} onClick={() => { setActiveTool("terrain"); setSelectedFeatureIds([]); }} disabled={locked}><span className="feature-tool-mark" aria-hidden="true" /><span>地形を描く</span></button>
-          <button className={activeTool === "erase" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "erase"} onClick={() => { setActiveTool("erase"); setSelectedFeatureIds([]); }} disabled={locked}><span className="feature-tool-mark" aria-hidden="true" /><span>地形を消す</span></button>
+          <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => setActiveTool("pan")} disabled={locked}><Hand aria-hidden="true" size={24} /><span>移動</span></button>
+          <button className={activeTool === "terrain" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "terrain"} onClick={() => { setActiveTool("terrain"); setSelectedFeatureIds([]); }} disabled={locked}><PencilLine aria-hidden="true" size={24} /><span>地形を描く</span></button>
+          <button className={activeTool === "erase" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "erase"} onClick={() => { setActiveTool("erase"); setSelectedFeatureIds([]); }} disabled={locked}><Eraser aria-hidden="true" size={24} /><span>地形を消す</span></button>
         </aside>
 
         <section className="map-region" aria-label="地形編集領域">
