@@ -76,6 +76,30 @@ describe("RealmMapAdapter", () => {
     host.remove();
   });
 
+  it("handles wheel zoom without requiring a platform modifier", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const map = adapter.getMap();
+    const wheelZoom = map.getInteractions().getArray().find((item) => item instanceof MouseWheelZoom) as MouseWheelZoom | undefined;
+    expect(wheelZoom).toBeDefined();
+
+    const wheelEvent = new WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true });
+    const handled = wheelZoom?.handleEvent({
+      type: "wheel",
+      map,
+      pixel: [320, 240],
+      originalEvent: wheelEvent,
+    } as never);
+
+    expect(handled).toBe(false);
+    expect(wheelEvent.defaultPrevented).toBe(true);
+    adapter.dispose();
+    host.remove();
+  });
+
   it("emits one modify batch for a multi-feature gesture", () => {
     const host = document.createElement("div");
     host.style.width = "640px";

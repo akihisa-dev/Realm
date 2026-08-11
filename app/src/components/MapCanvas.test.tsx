@@ -102,7 +102,7 @@ describe("MapCanvas", () => {
     expect(screen.getByText("六角セルを押したままなぞって選択します。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
 
     rerender(<MapCanvas mode="pan" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("ドラッグで地図を移動し、Command+ホイールで拡大縮小します。")).toBeInTheDocument();
+    expect(screen.getByText("ドラッグで地図を移動し、ホイールで拡大縮小します。")).toBeInTheDocument();
     expect(renderer.setMode).toHaveBeenLastCalledWith("pan");
     unmount();
     expect(renderer.dispose).toHaveBeenCalledOnce();

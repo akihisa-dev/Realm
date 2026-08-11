@@ -19,7 +19,7 @@ import Fill from "ol/style/Fill";
 import Stroke from "ol/style/Stroke";
 import Style from "ol/style/Style";
 import Text from "ol/style/Text";
-import { platformModifierKeyOnly, singleClick } from "ol/events/condition";
+import { singleClick } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, Position, RealmFeature } from "../backend";
@@ -476,7 +476,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       }),
       controls: defaultControls({ zoom: false, rotate: false, attribution: false }),
       interactions: defaultInteractions({ altShiftDragRotate: false, pinchRotate: false, mouseWheelZoom: false }).extend([
-        new MouseWheelZoom({ condition: platformModifierKeyOnly }),
+        new MouseWheelZoom(),
       ]),
     });
     this.map.addInteraction(this.selection);
