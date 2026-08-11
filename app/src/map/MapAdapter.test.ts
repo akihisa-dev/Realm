@@ -11,6 +11,7 @@ import * as SelectModule from "ol/interaction/Select";
 import PointerInteraction from "ol/interaction/Pointer";
 import Feature from "ol/Feature";
 import LineString from "ol/geom/LineString";
+import MultiLineString from "ol/geom/MultiLineString";
 import Polygon from "ol/geom/Polygon";
 import Point from "ol/geom/Point";
 import Style from "ol/style/Style";
@@ -189,32 +190,35 @@ describe("RealmMapAdapter", () => {
   });
 
   it("selects a thick brush stroke and expands its footprint with radius", () => {
-    const oneCell = cellCenter(128, 256);
+    const oneCell = cellCenter(18, 32);
     const narrow = cellIdsWithinBrushPath([oneCell, [oneCell[0] + 0.7, oneCell[1]]], 0.25);
     const wide = cellIdsWithinBrushPath([oneCell, [oneCell[0] + 0.7, oneCell[1]]], 2);
-    expect(narrow).toContain("256:128");
+    expect(narrow).toContain("32:18");
     expect(wide.length).toBeGreaterThan(narrow.length);
     expect(cellIdsWithinBrushPath([], 1)).toEqual([]);
     expect(cellIdsWithinBrushPath([oneCell], -1)).toEqual([]);
     expect(cellIdsWithinBrushPath([oneCell], Number.NaN)).toEqual([]);
     expect(cellIdsWithinBrushPath([cellCenter(0, 0)], 0)).toEqual(["0:0"]);
     expect(cellIdsWithinBrushPath([[-180, -90]], 1)).toContain("0:0");
-    expect(cellIdsWithinBrushPath([[180, 90]], 1)).toContain("511:255");
+    expect(cellIdsWithinBrushPath([cellCenter(36, 63)], 1)).toContain("63:36");
     expect(cellIdsWithinBrushPath([[-Infinity, -90], [Infinity, 90]], 1)).toEqual([]);
   });
 
-  it("builds closed tessellating hex cells and clips edge cells to the bounded world", () => {
-    const even = cellCenter(128, 256);
-    const odd = cellCenter(129, 256);
+  it("builds closed regular hex cells without deforming the grid edge", () => {
+    const even = cellCenter(18, 32);
+    const odd = cellCenter(19, 32);
     expect(odd[0]).toBeGreaterThan(even[0]);
-    const interior = cellPolygon(128, 256);
+    const interior = cellPolygon(18, 32);
     expect(interior).toHaveLength(7);
     expect(interior?.[0]).toEqual(interior?.at(-1));
+    const sideLengths = interior?.slice(1).map(([x, y], index) => Math.hypot(x - interior[index]![0], y - interior[index]![1])) ?? [];
+    expect(Math.max(...sideLengths) - Math.min(...sideLengths)).toBeLessThan(1e-8);
     expect(interior?.every(([longitude, latitude]) => longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90)).toBe(true);
     const edge = cellPolygon(1, 0);
-    expect(edge?.some(([longitude]) => longitude === -180)).toBe(true);
+    const edgeSideLengths = edge?.slice(1).map(([x, y], index) => Math.hypot(x - edge[index]![0], y - edge[index]![1])) ?? [];
+    expect(Math.max(...edgeSideLengths) - Math.min(...edgeSideLengths)).toBeLessThan(1e-8);
     expect(cellPolygon(-1, 0)).toBeNull();
-    expect(cellPolygon(0, 512)).toBeNull();
+    expect(cellPolygon(0, 64)).toBeNull();
   });
 
   it("guards feature geometry at the bounded world edge", () => {
@@ -239,20 +243,12 @@ describe("RealmMapAdapter", () => {
     const hexLayer = adapter.getMap().getLayers().item(4) as VectorLayer;
     const cellGridLayer = adapter.getMap().getLayers().item(5) as VectorLayer;
     expect(cellGridLayer.getSource()?.getFeatures()).toHaveLength(1);
+    expect(cellGridLayer.getSource()?.getWrapX()).toBe(false);
     expect(cellGridLayer.getVisible()).toBe(false);
     adapter.setCellGridVisible(true);
     expect(cellGridLayer.getVisible()).toBe(true);
     adapter.setCellGridOptions({ color: "#203040", width: 0.75 });
-    const renderer = (cellGridLayer.getStyle() as Style).getRenderer();
-    const lineTo = vi.fn();
-    const stroke = vi.fn();
-    const context = {
-      canvas: { width: 640, height: 480 }, save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(),
-      moveTo: vi.fn(), lineTo, stroke, strokeStyle: "", lineWidth: 0,
-    } as unknown as CanvasRenderingContext2D;
-    renderer?.([[[0, 480], [640, 480], [640, 0], [0, 0], [0, 480]]], { context, pixelRatio: 1 } as never);
-    expect(lineTo).toHaveBeenCalled();
-    expect(stroke).toHaveBeenCalledOnce();
+    expect(cellGridLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(MultiLineString);
     expect(() => adapter.setCellGridOptions({ color: "gray", width: 0.75 })).toThrow(/RRGGBB/);
     expect(() => adapter.setCellGridOptions({ color: "#203040", width: 0.1 })).toThrow(/width/);
     const firstEdges = hexLayer.getSource()?.getFeatures().map((feature) => feature.getId());
@@ -373,7 +369,13 @@ describe("RealmMapAdapter", () => {
     adapter.setGridVisible(true);
     const referenceAxes = adapter.getMap().getLayers().item(1);
     expect(referenceAxes).toBeInstanceOf(VectorLayer);
-    expect((referenceAxes as VectorLayer).getSource()?.getFeatures()).toHaveLength(2);
+    const axisCoordinates = (referenceAxes as VectorLayer).getSource()?.getFeatures().map((feature) => (
+      feature.getGeometry() as LineString
+    ).getCoordinates());
+    expect(axisCoordinates).toEqual([
+      [[-180, 0], [180, 0]],
+      [[0, -90], [0, 90]],
+    ]);
     adapter.setFeatures([
       { id: "city-1", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [12, 34] } },
       { id: "river-1", featureType: "river", name: "River", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },

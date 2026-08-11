@@ -50,6 +50,9 @@ it("creates, edits, deletes, and undoes current features", async () => {
     await backend.closeProject(); await expect(backend.getOpenProject()).resolves.toBeNull();
     await backend.openProject({ path: created.path }); await backend.importProject({ path: created.path });
     await expect(backend.applyCellAttributes({ cellIds: [], attribute: "forest", value: "on" })).rejects.toThrow("セルを選択");
+    await expect(backend.applyCellAttributes({ cellIds: ["63:36"], attribute: "forest", value: "on" })).resolves.toBeTruthy();
+    await expect(backend.applyCellAttributes({ cellIds: ["64:36"], attribute: "forest", value: "on" })).rejects.toThrow("不正");
+    await expect(backend.applyCellAttributes({ cellIds: ["63:37"], attribute: "forest", value: "on" })).rejects.toThrow("不正");
     await expect(backend.applyCellAttributes({ cellIds: ["999:999"], attribute: "forest", value: "on" })).rejects.toThrow("不正");
     await expect(backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "forest", value: " " })).rejects.toThrow("属性値");
   });

@@ -2,6 +2,7 @@ import Feature from "ol/Feature";
 import Map from "ol/Map";
 import View from "ol/View";
 import LineString from "ol/geom/LineString";
+import MultiLineString from "ol/geom/MultiLineString";
 import Polygon from "ol/geom/Polygon";
 import Draw from "ol/interaction/Draw";
 import PointerInteraction from "ol/interaction/Pointer";
@@ -16,7 +17,7 @@ import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import Fill from "ol/style/Fill";
 import Stroke from "ol/style/Stroke";
-import Style, { type RenderFunction } from "ol/style/Style";
+import Style from "ol/style/Style";
 import Text from "ol/style/Text";
 import { platformModifierKeyOnly, singleClick } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
@@ -43,6 +44,28 @@ const MAX_LASSO_POINTS = 4096;
 const MAX_GRID_EDGES = 20_000;
 const DEFAULT_GRID_OPTIONS: GridOptions = { kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 };
 const DEFAULT_CELL_GRID_OPTIONS: CellGridOptions = { color: "#d1d7dc", width: 0.65 };
+
+const fixedCellGridLines = (): Position[][] => {
+  const lines: Position[][] = [];
+  const seen = new Set<string>();
+  for (let row = 0; row < CELL_GRID_ROWS; row += 1) {
+    for (let column = 0; column < CELL_GRID_COLUMNS; column += 1) {
+      const ring = gridCellPolygon(row, column);
+      if (!ring) continue;
+      for (let index = 1; index < ring.length; index += 1) {
+        const first = ring[index - 1]!;
+        const second = ring[index]!;
+        const firstKey = `${first[0].toFixed(9)},${first[1].toFixed(9)}`;
+        const secondKey = `${second[0].toFixed(9)},${second[1].toFixed(9)}`;
+        const key = firstKey < secondKey ? `${firstKey}:${secondKey}` : `${secondKey}:${firstKey}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        lines.push([first, second]);
+      }
+    }
+  }
+  return lines;
+};
 
 const createGraticule = (options: GridOptions): Graticule => new Graticule({
   strokeStyle: new Stroke({ color: options.color, lineDash: [4, 4], width: options.width }),
@@ -250,15 +273,16 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private themeOverrides: ThemeOverrides = {};
   private readonly hiddenFeatureTypes = new Set<RealmFeature["featureType"]>();
   private assetUrls: Readonly<Record<string, string>> = {};
-  private readonly featureSource = new VectorSource();
+  private readonly featureSource = new VectorSource({ wrapX: false });
   private graticule: Graticule;
   private readonly featureLayer: VectorLayer;
   private readonly featureStyle = createFeatureStyle(() => this.activeThemeId, (featureType) => featureType === undefined || !this.hiddenFeatureTypes.has(featureType), (assetId) => this.assetUrls[assetId], () => this.themeOverrides);
-  private readonly cellSource = new VectorSource();
+  private readonly cellSource = new VectorSource({ wrapX: false });
   private readonly cellLayer: VectorLayer;
-  private readonly cellGridSource = new VectorSource();
+  private readonly cellGridSource = new VectorSource({ wrapX: false });
+  private readonly cellGridStroke = new Stroke({ color: DEFAULT_CELL_GRID_OPTIONS.color, width: DEFAULT_CELL_GRID_OPTIONS.width });
   private readonly cellGridLayer: VectorLayer;
-  private readonly gridSource = new VectorSource();
+  private readonly gridSource = new VectorSource({ wrapX: false });
   private readonly gridStroke = new Stroke({ color: DEFAULT_GRID_OPTIONS.color, width: DEFAULT_GRID_OPTIONS.width });
   private readonly gridLayer = new VectorLayer({ source: this.gridSource, style: new Style({ stroke: this.gridStroke }), zIndex: -10, visible: false });
   private readonly cellStyle = createCellStyle(() => this.activeThemeId, () => this.themeOverrides);
@@ -276,7 +300,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private modifierStraighten = false;
   private gridOptions: GridOptions = { ...DEFAULT_GRID_OPTIONS };
   private gridVisible = true;
-  private cellGridOptions: CellGridOptions = { ...DEFAULT_CELL_GRID_OPTIONS };
   private cellBrushRadius: number = CELL_BRUSH_RADII.medium;
   private brush: PointerInteraction | null = null;
   private eraser: PointerInteraction | null = null;
@@ -302,55 +325,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private lassoAdditive = false;
   private suppressSelectionUntil = 0;
   private disposed = false;
-
-  private readonly renderCellGrid: RenderFunction = (pixelCoordinates, state): void => {
-    const rings = pixelCoordinates as number[][][];
-    const ring = rings[0];
-    if (!ring || ring.length < 4) return;
-    const xs = ring.map((coordinate) => coordinate[0] ?? Number.NaN);
-    const ys = ring.map((coordinate) => coordinate[1] ?? Number.NaN);
-    const left = Math.min(...xs);
-    const right = Math.max(...xs);
-    const top = Math.min(...ys);
-    const bottom = Math.max(...ys);
-    const cellWidth = (right - left) / CELL_GRID_COLUMNS;
-    const cellHeight = (bottom - top) / CELL_GRID_ROWS;
-    if (![left, right, top, bottom, cellWidth, cellHeight].every(Number.isFinite) || cellWidth <= 0 || cellHeight <= 0) return;
-
-    const context = state.context;
-    const pixelRatio = Number.isFinite(state.pixelRatio) && state.pixelRatio > 0 ? state.pixelRatio : 1;
-    const viewportWidth = context.canvas.width / pixelRatio;
-    const viewportHeight = context.canvas.height / pixelRatio;
-    const minRow = Math.max(0, Math.floor((bottom - viewportHeight) / cellHeight) - 1);
-    const maxRow = Math.min(CELL_GRID_ROWS - 1, Math.ceil(bottom / cellHeight) + 1);
-
-    context.save();
-    context.beginPath();
-    context.rect(left, top, right - left, bottom - top);
-    context.clip();
-    context.beginPath();
-    for (let row = minRow; row <= maxRow; row += 1) {
-      const centerY = bottom - (row + 0.5) * cellHeight;
-      const offset = row % 2 === 0 ? 0 : 0.5;
-      const minColumn = Math.max(0, Math.floor((0 - left) / cellWidth - offset - 1.5));
-      const maxColumn = Math.min(CELL_GRID_COLUMNS - 1, Math.ceil((viewportWidth - left) / cellWidth - offset + 0.5));
-      if (minColumn > maxColumn) continue;
-      const firstCenterX = left + (minColumn + 0.5 + offset) * cellWidth;
-      context.moveTo(firstCenterX - cellWidth / 2, centerY - cellHeight * 0.375);
-      for (let column = minColumn; column <= maxColumn; column += 1) {
-        const centerX = left + (column + 0.5 + offset) * cellWidth;
-        context.lineTo(centerX, centerY - cellHeight * 0.625);
-        context.lineTo(centerX + cellWidth / 2, centerY - cellHeight * 0.375);
-        context.moveTo(centerX + cellWidth / 2, centerY + cellHeight * 0.375);
-        context.lineTo(centerX + cellWidth / 2, centerY - cellHeight * 0.375);
-      }
-    }
-    context.rect(left, top, right - left, bottom - top);
-    context.strokeStyle = this.cellGridOptions.color;
-    context.lineWidth = this.cellGridOptions.width;
-    context.stroke();
-    context.restore();
-  };
 
   private readonly handleSelection = (): void => {
     this.emitSelection();
@@ -416,6 +390,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
     const referenceAxes = new VectorLayer({
       source: new VectorSource({
+        wrapX: false,
         features: [
           new Feature({ geometry: new LineString([[-180, 0], [180, 0]]) }),
           new Feature({ geometry: new LineString([[0, -90], [0, 90]]) }),
@@ -428,10 +403,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
     this.featureLayer = new VectorLayer({ source: this.featureSource, style: this.featureStyle });
     this.cellLayer = new VectorLayer({ source: this.cellSource, style: this.cellStyle, visible: true });
-    this.cellGridSource.addFeature(new Feature({ geometry: new Polygon([[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]]) }));
+    this.cellGridSource.addFeature(new Feature({ geometry: new MultiLineString(fixedCellGridLines()) }));
     this.cellGridLayer = new VectorLayer({
       source: this.cellGridSource,
-      style: new Style({ renderer: this.renderCellGrid }),
+      style: new Style({ stroke: this.cellGridStroke }),
       visible: false,
       zIndex: 4,
     });
@@ -621,7 +596,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
   setCellGridOptions(options: CellGridOptions): void {
     if (!/^#[\da-f]{6}$/i.test(options.color)) throw new Error("Cell grid color must be a #RRGGBB value.");
     if (!Number.isFinite(options.width) || options.width < 0.25 || options.width > 4) throw new Error("Cell grid width must be between 0.25 and 4.");
-    this.cellGridOptions = { ...options };
+    this.cellGridStroke.setColor(options.color);
+    this.cellGridStroke.setWidth(options.width);
     this.cellGridLayer.changed();
   }
 

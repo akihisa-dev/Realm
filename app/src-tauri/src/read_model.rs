@@ -3,11 +3,12 @@ use crate::contract::{
     FeatureType, ProjectSnapshot, WorldSnapshot,
 };
 use crate::domain::cell::cell_id;
+use crate::domain::cell::{EDITOR_GRID_COLUMNS, EDITOR_GRID_ROWS};
 use crate::domain::geometry::{validate_geometry, validate_properties};
 use crate::domain::settings::parse_stored_settings;
 use crate::error::AppError;
 use crate::state::OpenProject;
-use crate::storage::schema::{CURRENT_SCHEMA_VERSION, GRID_COLUMNS, GRID_ROWS, GRID_VERSION};
+use crate::storage::schema::{CURRENT_SCHEMA_VERSION, GRID_VERSION};
 use rusqlite::{Error as SqlError, params};
 use serde_json::Value;
 
@@ -139,10 +140,13 @@ pub(crate) fn cell_attributes_snapshot(
     let min_x = input.min_x.unwrap_or(0).max(0);
     let max_x = input
         .max_x
-        .unwrap_or(GRID_COLUMNS - 1)
-        .min(GRID_COLUMNS - 1);
+        .unwrap_or(EDITOR_GRID_COLUMNS - 1)
+        .min(EDITOR_GRID_COLUMNS - 1);
     let min_y = input.min_y.unwrap_or(0).max(0);
-    let max_y = input.max_y.unwrap_or(GRID_ROWS - 1).min(GRID_ROWS - 1);
+    let max_y = input
+        .max_y
+        .unwrap_or(EDITOR_GRID_ROWS - 1)
+        .min(EDITOR_GRID_ROWS - 1);
     if min_x > max_x || min_y > max_y {
         return Err(AppError::invalid("The cell viewport is invalid."));
     }

@@ -179,7 +179,7 @@ const validCell = (id: string): boolean => {
   const match = /^(\d+):(\d+)$/u.exec(id);
   if (!match) return false;
   const x = Number(match[1]); const y = Number(match[2]);
-  return x >= 0 && x < 512 && y >= 0 && y < 256;
+  return x >= 0 && x < 64 && y >= 0 && y < 37;
 };
 
 export class MemoryRealmBackend implements RealmBackend {
@@ -411,8 +411,8 @@ export class MemoryRealmBackend implements RealmBackend {
     return this.result(project);
   }
   async viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]> {
-    const project = this.current(); const minX = Math.max(0, input.minX ?? 0); const maxX = Math.min(511, input.maxX ?? 511);
-    const minY = Math.max(0, input.minY ?? 0); const maxY = Math.min(255, input.maxY ?? 255);
+    const project = this.current(); const minX = Math.max(0, input.minX ?? 0); const maxX = Math.min(63, input.maxX ?? 63);
+    const minY = Math.max(0, input.minY ?? 0); const maxY = Math.min(36, input.maxY ?? 36);
     return project.cells.filter((cell) => { const [x = -1, y = -1] = cell.cellId.split(":").map(Number); return x >= minX && x <= maxX && y >= minY && y <= maxY; }).map(clone);
   }
   async closeProject(): Promise<void> { this.openPath = null; }

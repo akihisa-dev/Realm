@@ -6,7 +6,7 @@ Realm's editing surface stays quiet so the map remains the dominant object. The 
 
 ## Initial states
 
-- Realm enters the editor directly with the fixed hexagonal editing grid already visible at relative zoom 4 so individual cells are large enough to edit. It restores the open world when one exists, otherwise opens the first world in the app-managed library, or creates `無題の世界` when the library is empty.
+- Realm enters the editor directly with the complete 64 by 37 regular-hexagon editing grid fitted around the centered world origin at relative zoom 1. It restores the open world when one exists, otherwise opens the first world in the app-managed library, or creates `無題の世界` when the library is empty.
 - The editor provides the three terrain tools (move, draw, and erase) plus `戻す` and `進む`. Valid terrain edits save automatically.
 
 Visible controls remain code-native. The primary rail exposes exactly three tools: move, draw terrain, and erase terrain. There is no startup screen, terrain list, creation form, brush-settings panel, or presentation-settings sidebar. Drawing and erasing use one fixed hex-cell brush, and adjacent cell edges define the map boundary. Feature rows and non-terrain compatibility cells never appear in the editor.

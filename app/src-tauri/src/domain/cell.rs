@@ -1,5 +1,7 @@
 use crate::error::AppError;
-use crate::storage::schema::{GRID_COLUMNS, GRID_ROWS};
+
+pub(crate) const EDITOR_GRID_COLUMNS: i32 = 64;
+pub(crate) const EDITOR_GRID_ROWS: i32 = 37;
 
 pub(crate) fn parse_cell_id(value: &str) -> Result<(i32, i32), AppError> {
     let mut parts = value.trim().split(':');
@@ -11,7 +13,10 @@ pub(crate) fn parse_cell_id(value: &str) -> Result<(i32, i32), AppError> {
         .next()
         .and_then(|part| part.parse::<i32>().ok())
         .ok_or_else(|| AppError::invalid("A cell identifier must use x:y coordinates."))?;
-    if parts.next().is_some() || !(0..GRID_COLUMNS).contains(&x) || !(0..GRID_ROWS).contains(&y) {
+    if parts.next().is_some()
+        || !(0..EDITOR_GRID_COLUMNS).contains(&x)
+        || !(0..EDITOR_GRID_ROWS).contains(&y)
+    {
         return Err(AppError::invalid(
             "A cell identifier is outside the world grid.",
         ));
@@ -47,4 +52,16 @@ pub(crate) fn validate_cell_value(value: Option<&str>) -> Result<(), AppError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_cell_id;
+
+    #[test]
+    fn accepts_only_active_editor_cell_ids() {
+        assert_eq!(parse_cell_id("63:36").unwrap(), (63, 36));
+        assert!(parse_cell_id("64:36").is_err());
+        assert!(parse_cell_id("63:37").is_err());
+    }
 }

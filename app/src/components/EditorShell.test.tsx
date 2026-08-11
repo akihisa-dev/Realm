@@ -67,7 +67,7 @@ it("applies terrain to selected hex cells", async () => {
   expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-select");
   expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-grid-visible", "false");
   expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-cell-grid-visible", "true");
-  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-zoom", "4");
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-zoom", "1");
   fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
 
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([

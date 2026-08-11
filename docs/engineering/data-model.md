@@ -49,7 +49,9 @@ A bounded asset-pack import validates 1 through 256 images and at most 64 MiB be
 
 ## Hexagonal cell grid and attributes
 
-The schema stores a fixed 512 by 256 EPSG:4326 odd-row-offset grid. Cell identity remains `x:y`, with `x` from 0 through 511 and `y` from 0 through 255. Interior cells derive to six-sided bounded Voronoi polygons; cells at the rectangular world edge absorb the clipped remainder so the editable plane has no gaps. A dedicated bounded renderer displays the complete editing grid from the empty state, while semantic cell objects are created only for persistent terrain or transient brush selection. Neither representation persists OpenLayers or GeoJSON geometry.
+The active editor uses a fixed 64 by 37 EPSG:4326 odd-row-offset grid of regular point-topped hexagons. Active cell identity remains `x:y`, with `x` from 0 through 63 and `y` from 0 through 36. Every active cell derives to the same regular six-sided polygon; boundary cells are not stretched or clipped to imitate a rectangular cell. A dedicated renderer displays the complete editing grid from the empty state, while semantic cell objects are created only for persistent terrain or transient brush selection. Neither representation persists OpenLayers or GeoJSON geometry.
+
+The version 8 SQLite schema retains its original 512 by 256 coordinate envelope so projects written by earlier builds remain structurally valid. Rows outside the active 64 by 37 editor grid are compatibility data: they remain stored unchanged but are excluded from active rendering, selection, reads, and new mutations.
 
 The `terrain` layer is present when a cell belongs to the drawn map and absent when it does not. A pointer stroke applies or clears the complete selected set transactionally. Existing `forest`, `country`, and `region` cell rows are preserved unchanged but hidden from the active editor. There is no `terrain_kind` value, and the editor does not reinterpret compatibility rows as terrain.
 
