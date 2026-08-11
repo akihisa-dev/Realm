@@ -206,14 +206,18 @@ export function MapCanvas({
     const handlePointerDown = (event: PointerEvent) => {
       if (event.target instanceof window.Node && radialPaletteRef.current?.contains(event.target)) return;
       setRadialPalettePosition(null);
+      if (event.target instanceof window.Node && hostRef.current?.contains(event.target)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
     };
     const handleBlur = () => setRadialPalettePosition(null);
     window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("blur", handleBlur);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("blur", handleBlur);
     };
   }, [radialPalettePosition]);
