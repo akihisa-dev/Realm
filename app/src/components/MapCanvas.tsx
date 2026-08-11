@@ -91,8 +91,8 @@ export function MapCanvas({
   const onErrorRef = useRef(onError);
   const onExporterReadyRef = useRef(onExporterReady);
   const mapHelp = mode === "pan"
-    ? "ドラッグで地図を移動し、ホイールで拡大縮小します。"
-    : "六角セルを押したままなぞって選択します。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。";
+    ? "ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
+    : "六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。";
 
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;

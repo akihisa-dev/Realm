@@ -290,6 +290,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly modify: Modify;
   private readonly translate: Translate;
   private readonly lasso: PointerInteraction;
+  private readonly middleDragPan = new DragPan({
+    condition: ({ originalEvent }) => originalEvent instanceof MouseEvent && originalEvent.button === 1,
+  });
   private readonly target: HTMLElement;
   private draw: Draw | null = null;
   private activeMode: RealmMapMode = "pan";
@@ -462,6 +465,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       controls: defaultControls({ zoom: false, rotate: false, attribution: false }),
       interactions: defaultInteractions({ altShiftDragRotate: false, pinchRotate: false, mouseWheelZoom: false }).extend([
         new MouseWheelZoom(),
+        this.middleDragPan,
       ]),
     });
     this.map.addInteraction(this.selection);
@@ -861,7 +865,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   private setNavigationActive(active: boolean): void {
     for (const interaction of this.map.getInteractions().getArray()) {
-      if (interaction instanceof DragPan || interaction instanceof KeyboardPan) interaction.setActive(active);
+      if ((interaction instanceof DragPan && interaction !== this.middleDragPan) || interaction instanceof KeyboardPan) interaction.setActive(active);
     }
   }
 

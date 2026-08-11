@@ -24,6 +24,8 @@ Visible controls remain code-native. The primary rail exposes exactly three tool
 
 The editor uses one native overlay title bar with only `戻す` and `進む`, a narrow three-item primary rail, and a dominant OpenLayers canvas. The rail continues to the bottom edge; no secondary sidebar, floating map buttons, or bottom zoom bar is shown. Do not draw a second set of macOS traffic lights in React. Default zoom and center are part of the map adapter contract and must not be persisted as project data.
 
+The move tool pans with a primary-button drag. A middle-button drag pans in every tool without changing the active tool, and Space plus a primary-button drag provides the same temporary navigation path. Wheel rotation zooms the canvas.
+
 ## Allowed editor copy
 
 The editor uses only `戻す`, `進む`, `移動`, `地形を描く`, and `地形を消す`. Startup, library, import, file actions, export controls, world-name editing, zoom buttons, terrain lists, creation metadata, drawing configuration, presentation settings, unavailable layers, and asset management are not shown.

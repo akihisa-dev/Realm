@@ -100,6 +100,34 @@ describe("RealmMapAdapter", () => {
     host.remove();
   });
 
+  it("keeps middle-button drag pan available in every tool mode", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const dragPans = adapter.getMap().getInteractions().getArray().filter((item): item is DragPan => item instanceof DragPan);
+    expect(dragPans).toHaveLength(2);
+
+    const middleButtonEvent = { originalEvent: new MouseEvent("pointerdown", { button: 1 }) } as never;
+    const middleDragPan = dragPans.find((interaction) => (
+      interaction as unknown as { condition_: (event: unknown) => boolean }
+    ).condition_(middleButtonEvent));
+    expect(middleDragPan).toBeDefined();
+
+    const primaryDragPan = dragPans.find((interaction) => interaction !== middleDragPan);
+    adapter.setMode("cell-select");
+    expect(primaryDragPan?.getActive()).toBe(false);
+    expect(middleDragPan?.getActive()).toBe(true);
+    adapter.setMode("terrain");
+    expect(middleDragPan?.getActive()).toBe(true);
+    adapter.setMode("pan");
+    expect(primaryDragPan?.getActive()).toBe(true);
+    expect(middleDragPan?.getActive()).toBe(true);
+    adapter.dispose();
+    host.remove();
+  });
+
   it("emits one modify batch for a multi-feature gesture", () => {
     const host = document.createElement("div");
     host.style.width = "640px";
