@@ -181,6 +181,12 @@ mod tests {
         transaction.commit().unwrap();
     }
 
+    fn create_v7_fixture(path: &Path, name: &str) {
+        create_v6_fixture(path, name);
+        let mut connection = Connection::open(path).unwrap();
+        migrate_v6_to_v7_fixture(&mut connection).unwrap();
+    }
+
     #[test]
     fn schema_and_world_initialization_roll_back_together() {
         let directory = tempdir().unwrap();
@@ -458,6 +464,103 @@ mod tests {
     }
 
     #[test]
+    fn v7_migrates_cell_layers_to_v8_and_preserves_terrain_undo_reopen() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("v7-cells.realmmap");
+        create_v7_fixture(&path, "Legacy v7");
+        {
+            let connection = Connection::open(&path).unwrap();
+            connection
+                .execute(
+                    "INSERT INTO cell_attributes(grid_version, cell_x, cell_y, layer, value)
+                     VALUES (1, 4, 5, 'forest', 'old-growth')",
+                    [],
+                )
+                .unwrap();
+        }
+        assert_eq!(
+            preflight_existing_project(&path).unwrap().1,
+            SCHEMA_VERSION_V7
+        );
+        let state = direct_state();
+        *state.project.lock().unwrap() = Some(create_open_project(path.clone()).unwrap());
+        {
+            let project = state.project.lock().unwrap();
+            assert_eq!(
+                project
+                    .as_ref()
+                    .unwrap()
+                    .connection
+                    .pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
+                    .unwrap(),
+                CURRENT_SCHEMA_VERSION
+            );
+        }
+        apply_cell_attributes_in_state(
+            &state,
+            ApplyCellAttributesInput {
+                cell_ids: vec!["4:5".into()],
+                attribute: CellLayer::Terrain,
+                value: Some("plains".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            view_cell_attributes_in_state(
+                &state,
+                CellViewportInput {
+                    min_x: Some(4),
+                    max_x: Some(4),
+                    min_y: Some(5),
+                    max_y: Some(5)
+                }
+            )
+            .unwrap()
+            .iter()
+            .map(|cell| (cell.attribute, cell.value.as_str()))
+            .collect::<Vec<_>>(),
+            vec![
+                (CellLayer::Forest, "old-growth"),
+                (CellLayer::Terrain, "plains")
+            ]
+        );
+        undo_project_in_state(&state).unwrap();
+        assert_eq!(
+            view_cell_attributes_in_state(
+                &state,
+                CellViewportInput {
+                    min_x: Some(4),
+                    max_x: Some(4),
+                    min_y: Some(5),
+                    max_y: Some(5)
+                }
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+        redo_project_in_state(&state).unwrap();
+        close_project_in_state(&state).unwrap();
+        *state.project.lock().unwrap() = Some(create_open_project(path).unwrap());
+        assert_eq!(
+            view_cell_attributes_in_state(
+                &state,
+                CellViewportInput {
+                    min_x: Some(4),
+                    max_x: Some(4),
+                    min_y: Some(5),
+                    max_y: Some(5)
+                }
+            )
+            .unwrap()
+            .iter()
+            .find(|cell| cell.attribute == CellLayer::Terrain)
+            .map(|cell| cell.value.as_str()),
+            Some("plains")
+        );
+    }
+
+    #[test]
     fn static_feature_crud_reopen_and_undo_redo() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("features.realmmap");
@@ -694,15 +797,43 @@ mod tests {
     }
 
     #[test]
-    fn failed_v6_to_v7_migration_rolls_back_source() {
+    fn failed_v7_to_v8_cell_migration_rolls_back_source() {
         let directory = tempdir().unwrap();
-        let path = directory.path().join("failed-v6.realmmap");
+        let path = directory.path().join("failed-v7.realmmap");
+        create_v7_fixture(&path, "Legacy v7");
+        let connection = Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "CREATE TRIGGER migration_failure_v8 BEFORE INSERT ON schema_migrations
+                 WHEN NEW.version = 8 BEGIN SELECT RAISE(ABORT, 'synthetic migration failure'); END;",
+            )
+            .unwrap();
+        drop(connection);
+        let before = fs::read(&path).unwrap();
+        assert_eq!(
+            open_connection(&path).unwrap_err().code,
+            "storage_constraint"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+        let check = Connection::open(&path).unwrap();
+        assert_eq!(
+            check
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
+                .unwrap(),
+            SCHEMA_VERSION_V7
+        );
+    }
+
+    #[test]
+    fn failed_v6_to_v8_late_stage_migration_rolls_back_source() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("failed-v6-late-stage.realmmap");
         create_v6_fixture(&path, "Legacy v6");
         let connection = Connection::open(&path).unwrap();
         connection
             .execute_batch(
-                "CREATE TRIGGER migration_failure_v7 BEFORE INSERT ON schema_migrations
-                 WHEN NEW.version = 7 BEGIN SELECT RAISE(ABORT, 'synthetic migration failure'); END;",
+                "CREATE TRIGGER migration_failure_v8 BEFORE INSERT ON schema_migrations
+                 WHEN NEW.version = 8 BEGIN SELECT RAISE(ABORT, 'synthetic migration failure'); END;",
             )
             .unwrap();
         drop(connection);

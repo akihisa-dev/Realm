@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRealmBackend, type RealmSnapshot } from "./backend";
 import App from "./App";
 
-const emptySnapshot: RealmSnapshot = { formatVersion: 7, path: "browser://test.realmmap", world: { id: "world-test", name: "テスト世界" }, features: [], assets: [], settings: { themeId: "ink", showGrid: true, exportScale: 2, exportExtent: "world", canvasWidth: 2048, canvasHeight: 1024, gridKind: "graticule", gridColor: "#687784", gridWidth: 1, gridSpacing: 10, themeOverrides: {} }, featureCount: 0, canUndo: false, canRedo: false };
+const emptySnapshot: RealmSnapshot = { formatVersion: 8, path: "browser://test.realmmap", world: { id: "world-test", name: "テスト世界" }, features: [], assets: [], settings: { themeId: "ink", showGrid: true, exportScale: 2, exportExtent: "world", canvasWidth: 2048, canvasHeight: 1024, gridKind: "graticule", gridColor: "#687784", gridWidth: 1, gridSpacing: 10, themeOverrides: {} }, featureCount: 0, canUndo: false, canRedo: false };
 
 describe("Realm editor bootstrap", () => {
   it("creates the first world and enters the editor without a startup screen", async () => {

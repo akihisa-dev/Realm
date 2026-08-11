@@ -14,7 +14,7 @@ import { chooseTauriArtifactPath, chooseTauriTransferPath, tauriRealmBackend } f
 import type { RealmSnapshot } from "./types";
 
 const snapshot: RealmSnapshot = {
-  formatVersion: 7,
+  formatVersion: 8,
   path: "/tmp/test.realmmap",
   world: { id: "world-test", name: "Test" },
   features: [],

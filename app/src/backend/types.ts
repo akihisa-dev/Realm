@@ -1,6 +1,6 @@
 export type FeatureType = "terrain" | "forest" | "river" | "coastline" | "country" | "region" | "boundary" | "city" | "town"
   | "road" | "lake" | "mountain" | "tree" | "symbol" | "label" | "overlay" | "frame" | "scale";
-export type CellAttribute = "forest" | "country" | "region";
+export type CellAttribute = "terrain" | "forest" | "country" | "region";
 export type FeatureProperties = Record<string, unknown>;
 
 export type Position = [number, number];

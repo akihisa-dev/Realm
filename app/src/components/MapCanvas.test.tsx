@@ -8,6 +8,7 @@ describe("MapCanvas", () => {
     let zoomListener: ((nextZoom: number) => void) | null = null;
     let drawListener: ((geometry: never) => void) | null = null;
     let selectFeaturesListener: ((ids: readonly string[]) => void) | null = null;
+    let cellSelectListener: ((ids: readonly string[]) => void) | null = null;
     let modifyFeaturesListener: ((changes: readonly { id: string; geometry: never }[]) => void) | null = null;
     let errorListener: ((code: "drawing_self_intersection") => void) | null = null;
     const renderer: RealmMapRenderer = {
@@ -31,7 +32,7 @@ describe("MapCanvas", () => {
       onDraw: vi.fn((listener) => { drawListener = listener as typeof drawListener; return vi.fn(); }),
       onSelectFeatures: vi.fn((listener) => { selectFeaturesListener = listener as typeof selectFeaturesListener; return vi.fn(); }),
       onSelect: vi.fn(() => vi.fn()),
-      onCellSelect: vi.fn(() => vi.fn()),
+      onCellSelect: vi.fn((listener) => { cellSelectListener = listener; return vi.fn(); }),
       onModifyFeatures: vi.fn((listener) => { modifyFeaturesListener = listener as typeof modifyFeaturesListener; return vi.fn(); }),
       onModify: vi.fn(() => vi.fn()),
       onEraseFeatures: vi.fn(() => vi.fn()),
@@ -49,8 +50,9 @@ describe("MapCanvas", () => {
     const createRenderer = vi.fn(() => renderer);
     const onZoomChange = vi.fn();
     const onError = vi.fn();
+    const onCellSelect = vi.fn();
     const { rerender, unmount } = render(
-      <MapCanvas zoom={3} onZoomChange={onZoomChange} onError={onError} createRenderer={createRenderer} />,
+      <MapCanvas zoom={3} onZoomChange={onZoomChange} onError={onError} onCellSelect={onCellSelect} createRenderer={createRenderer} />,
     );
 
     expect(createRenderer).toHaveBeenCalledOnce();
@@ -60,9 +62,14 @@ describe("MapCanvas", () => {
     expect(renderer.setThemeOverrides).toHaveBeenCalledWith({});
     expect(renderer.setGridOptions).toHaveBeenCalledWith({ kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 });
     expect(renderer.setDrawingOptions).toHaveBeenCalledWith({ gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null });
+    expect(renderer.setCellBrushRadius).toHaveBeenCalledWith(1);
+    expect(renderer.setCellAttributes).toHaveBeenCalledWith([]);
+    expect(renderer.setSelectedCells).toHaveBeenCalledWith([]);
     expect(screen.queryByRole("group", { name: "現在の地図操作" })).not.toBeInTheDocument();
     (drawListener as ((geometry: never) => void) | null)?.({} as never);
     (selectFeaturesListener as ((ids: readonly string[]) => void) | null)?.([]);
+    (cellSelectListener as ((ids: readonly string[]) => void) | null)?.(["2:3"]);
+    expect(onCellSelect).toHaveBeenCalledWith(["2:3"]);
     (modifyFeaturesListener as ((changes: readonly { id: string; geometry: never }[]) => void) | null)?.([{ id: "id", geometry: {} as never }]);
     (errorListener as ((code: "drawing_self_intersection") => void) | null)?.("drawing_self_intersection");
     expect(onError).toHaveBeenCalledWith("drawing_self_intersection");
@@ -78,18 +85,18 @@ describe("MapCanvas", () => {
     rerender(<MapCanvas themeOverrides={{ land: "#aabbcc" }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setThemeOverrides).toHaveBeenLastCalledWith({ land: "#aabbcc" });
 
-    rerender(<MapCanvas mode="terrain" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("地図上で押したまま地形を描きます。続けて複数の地形を描けます。Escapeで描画中の輪郭を取り消せます。")).toBeInTheDocument();
+    rerender(<MapCanvas mode="cell-select" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(screen.getByText("六角セルを押したままなぞって選択します。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
-    expect(renderer.setMode).toHaveBeenLastCalledWith("terrain");
+    expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
 
-    rerender(<MapCanvas mode="terrain" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    rerender(<MapCanvas mode="cell-select" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setDrawingOptions).toHaveBeenLastCalledWith({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
-    expect(screen.getByText("地図上を順にクリックして地形を描きます。Altで直線化、Alt+Shiftで45°に揃え、右クリックまたはダブルクリックで確定、Escapeで取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("六角セルを押したままなぞって選択します。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
 
-    rerender(<MapCanvas mode="polygon-hole" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("選択した地形の内側を描いて穴を追加します。右クリックまたはダブルクリックで確定し、Escapeで取り消せます。")).toBeInTheDocument();
-    expect(renderer.setMode).toHaveBeenLastCalledWith("polygon-hole");
+    rerender(<MapCanvas mode="pan" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(screen.getByText("ドラッグで地図を移動し、Command+ホイールで拡大縮小します。")).toBeInTheDocument();
+    expect(renderer.setMode).toHaveBeenLastCalledWith("pan");
     unmount();
     expect(renderer.dispose).toHaveBeenCalledOnce();
   });

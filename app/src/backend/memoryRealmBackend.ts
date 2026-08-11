@@ -11,7 +11,7 @@ type MemoryProject = {
 };
 
 const makeSnapshot = (path: string, name: string): RealmSnapshot => ({
-  formatVersion: 7, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, features: [], assets: [],
+  formatVersion: 8, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, features: [], assets: [],
   settings: { themeId: "ink", showGrid: true, exportScale: 1, exportExtent: "world", canvasWidth: 2048, canvasHeight: 1024, gridKind: "graticule", gridColor: "#687784", gridWidth: 1, gridSpacing: 10, themeOverrides: {} }, featureCount: 0,
   canUndo: false, canRedo: false,
 });

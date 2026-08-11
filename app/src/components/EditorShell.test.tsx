@@ -1,32 +1,23 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRealmBackend, type GeoJsonGeometry, type RealmSnapshot } from "../backend";
-import type { MapErrorCode } from "../map/errors";
+import { MemoryRealmBackend, type RealmSnapshot } from "../backend";
 import { EditorShell } from "./EditorShell";
 
 vi.mock("./MapCanvas", () => ({
   MapCanvas: (props: {
     features?: Array<{ id: string; featureType: string }>;
     selectedFeatureIds?: readonly string[];
+    selectedCellIds?: readonly string[];
     mode?: string;
-    onDraw?: (geometry: GeoJsonGeometry) => void;
-    onSelectFeatures?: (ids: string[]) => void;
-    onModifyFeatures?: (changes: { id: string; geometry: GeoJsonGeometry }[]) => void;
-    onEraseFeatures?: (ids: string[]) => void;
-    onError?: (code: MapErrorCode) => void;
-  }) => <div role="region" aria-label="世界地図" data-mode={props.mode}>
+    showGrid?: boolean;
+    onCellSelect?: (ids: readonly string[]) => void;
+    onError?: (code: "drawing_self_intersection") => void;
+  }) => <div role="region" aria-label="世界地図" data-mode={props.mode} data-grid-visible={String(props.showGrid)}>
     <output aria-label="描画対象">{props.features?.map(({ featureType }) => featureType).join(",")}</output>
-    <button type="button" onClick={() => props.onDraw?.({ type: "Polygon", coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] })}>テスト地形描画</button>
-    <button type="button" onClick={() => props.onSelectFeatures?.(props.features?.[0]?.id ? [props.features[0].id] : [])}>テスト選択</button>
-    <button type="button" onClick={() => props.selectedFeatureIds?.[0] && props.onModifyFeatures?.([{ id: props.selectedFeatureIds[0], geometry: { type: "Polygon", coordinates: [[[1, 1], [11, 1], [11, 11], [1, 11], [1, 1]]] } }])}>テスト変形</button>
-    <button type="button" onClick={() => props.features?.[0] && props.onEraseFeatures?.([props.features[0].id])}>テスト消去</button>
+    <button type="button" onClick={() => props.onCellSelect?.(["1:1", "1:2"])}>テストセル描画</button>
+    <button type="button" onClick={() => props.onCellSelect?.(["1:1"])}>テストセル消去</button>
     <button type="button" onClick={() => props.onError?.("drawing_self_intersection")}>テスト描画エラー</button>
   </div>,
 }));
-
-const terrainGeometry = (): GeoJsonGeometry => ({
-  type: "Polygon",
-  coordinates: [[[0, 0], [8, 0], [8, 8], [0, 8], [0, 0]]],
-});
 
 const renderEditor = (backend: MemoryRealmBackend, snapshot: RealmSnapshot) => render(
   <EditorShell
@@ -62,16 +53,18 @@ it("shows exactly the three requested terrain tools and no sidebar", async () =>
   expect(screen.queryByRole("group", { name: "地図のズーム" })).not.toBeInTheDocument();
 });
 
-it("creates a terrain polygon with the fixed terrain name", async () => {
+it("applies terrain to selected hex cells", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://draw.realmmap", name: "Draw" });
   renderEditor(backend, snapshot);
 
-  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "terrain");
-  fireEvent.click(screen.getByRole("button", { name: "テスト地形描画" }));
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-select");
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-grid-visible", "false");
+  fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
 
-  await waitFor(async () => expect((await backend.getOpenProject())?.features).toEqual([
-    expect.objectContaining({ featureType: "terrain", name: "地形", geometry: expect.objectContaining({ type: "Polygon" }) }),
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([
+    { cellId: "1:1", attribute: "terrain", value: "terrain" },
+    { cellId: "1:2", attribute: "terrain", value: "terrain" },
   ]));
 });
 
@@ -89,36 +82,32 @@ it("edits terrain directly on the canvas while hiding legacy objects", async () 
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://legacy.realmmap", name: "Legacy" });
   await backend.createFeature({ featureType: "city", name: "旧都市", geometry: { type: "Point", coordinates: [0, 0] } });
-  const snapshot = await backend.createFeature({ featureType: "terrain", name: "大陸", geometry: terrainGeometry() });
+  const snapshot = await backend.createFeature({ featureType: "terrain", name: "大陸", geometry: { type: "Polygon", coordinates: [[[0, 0], [8, 0], [8, 8], [0, 8], [0, 0]]] } });
   renderEditor(backend, snapshot);
 
   expect(screen.queryByText("旧都市")).not.toBeInTheDocument();
-  expect(screen.getByRole("status", { name: "描画対象" })).toHaveTextContent("terrain");
-  fireEvent.click(screen.getByRole("button", { name: "テスト選択" }));
-  fireEvent.click(screen.getByRole("button", { name: "テスト変形" }));
+  expect(screen.getByRole("status", { name: "描画対象" })).toHaveTextContent("");
 
   await waitFor(async () => {
     const current = await backend.getOpenProject();
     expect(current?.features.find(({ featureType }) => featureType === "city")).toMatchObject({ name: "旧都市" });
-    expect(current?.features.find(({ featureType }) => featureType === "terrain")?.geometry).toEqual({
-      type: "Polygon",
-      coordinates: [[[1, 1], [11, 1], [11, 11], [1, 11], [1, 1]]],
-    });
+    expect(current?.features.find(({ featureType }) => featureType === "terrain")).toBeDefined();
   });
 });
 
-it("erases only terrain through the erase tool", async () => {
+it("erases terrain cells without deleting legacy polygons", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://erase.realmmap", name: "Erase" });
   await backend.createFeature({ featureType: "city", name: "旧都市", geometry: { type: "Point", coordinates: [0, 0] } });
-  const snapshot = await backend.createFeature({ featureType: "terrain", name: "島", geometry: terrainGeometry() });
+  await backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "terrain", value: "terrain" });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
   renderEditor(backend, snapshot);
 
   fireEvent.click(screen.getByRole("button", { name: "地形を消す" }));
-  fireEvent.click(screen.getByRole("button", { name: "テスト消去" }));
-  await waitFor(async () => expect((await backend.getOpenProject())?.features).toEqual([
-    expect.objectContaining({ featureType: "city", name: "旧都市" }),
-  ]));
+  fireEvent.click(screen.getByRole("button", { name: "テストセル消去" }));
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([]));
+  expect((await backend.getOpenProject())?.features).toEqual([expect.objectContaining({ featureType: "city", name: "旧都市" })]);
 });
 
 it("keeps the three terrain tool shortcuts", async () => {
@@ -139,11 +128,11 @@ it("returns and reapplies the latest terrain edit", async () => {
   const snapshot = await backend.createProject({ path: "browser://history.realmmap", name: "History" });
   renderEditor(backend, snapshot);
 
-  fireEvent.click(screen.getByRole("button", { name: "テスト地形描画" }));
+  fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "戻す" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "戻す" }));
-  await waitFor(async () => expect((await backend.getOpenProject())?.features).toHaveLength(0));
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toHaveLength(0));
   expect(screen.getByRole("button", { name: "進む" })).toBeEnabled();
   fireEvent.click(screen.getByRole("button", { name: "進む" }));
-  await waitFor(async () => expect((await backend.getOpenProject())?.features).toHaveLength(1));
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toHaveLength(2));
 });

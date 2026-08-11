@@ -36,6 +36,7 @@ pub enum FeatureType {
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CellLayer {
+    Terrain,
     Forest,
     Country,
     Region,
@@ -44,6 +45,7 @@ pub enum CellLayer {
 impl CellLayer {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
+            Self::Terrain => "terrain",
             Self::Forest => "forest",
             Self::Country => "country",
             Self::Region => "region",
@@ -51,6 +53,7 @@ impl CellLayer {
     }
     pub(crate) fn from_storage(value: &str) -> Result<Self, AppError> {
         match value {
+            "terrain" => Ok(Self::Terrain),
             "forest" => Ok(Self::Forest),
             "country" => Ok(Self::Country),
             "region" => Ok(Self::Region),

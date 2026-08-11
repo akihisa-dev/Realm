@@ -9,7 +9,7 @@ Realm's editing surface stays quiet so the map remains the dominant object. The 
 - Realm enters the editor directly. It restores the open world when one exists, otherwise opens the first world in the app-managed library, or creates `無題の世界` when the library is empty.
 - The editor provides the three terrain tools (move, draw, and erase) plus `戻す` and `進む`. Valid terrain edits save automatically.
 
-Visible controls remain code-native. The primary rail exposes exactly three tools: move, draw terrain, and erase terrain. There is no startup screen, terrain list, creation form, drawing-settings panel, or presentation-settings sidebar. Terrain is drawn with the editor's fixed freehand profile and edited directly on the canvas. Non-terrain compatibility rows never appear in the editor.
+Visible controls remain code-native. The primary rail exposes exactly three tools: move, draw terrain, and erase terrain. There is no startup screen, terrain list, creation form, brush-settings panel, or presentation-settings sidebar. Drawing and erasing use one fixed hex-cell brush, and adjacent cell edges define the map boundary. Feature rows and non-terrain compatibility cells never appear in the editor.
 
 ## Visual system
 
@@ -30,9 +30,9 @@ The editor uses only `戻す`, `進む`, `移動`, `地形を描く`, and `地�
 
 ## Renderer boundary
 
-React owns transient interface state, including the terrain tool, viewport, and terrain selection. OpenLayers objects and theme definitions live behind the map adapter and render terrain from a snapshot only; they never become storage. The selected theme identifier, grid visibility, export scale, and export extent are bounded project settings that survive reopening. Per-terrain opacity, lock, visibility, and order are plain validated properties in the `.realmmap`, never renderer objects or external paths.
+React owns transient interface state, including the terrain tool, viewport, and current brush selection. OpenLayers objects, derived hex polygons, and theme definitions live behind the map adapter and never become storage. The selected theme identifier, grid visibility, export scale, and export extent are bounded project settings that survive reopening.
 
-Only `terrain` polygons are passed from the editor to the renderer. Their overlap order is derived from bounded terrain properties and never changes stored geometry. Older non-terrain rows remain storage compatibility data and are not rendered by the editor.
+Only `terrain` cell attributes are passed from the editor to the cell renderer. The renderer derives a tessellating polygon for each stable cell identifier and fills it with the terrain theme; world-edge cells are clipped to the canvas boundary. Feature rows and older non-terrain cell rows remain storage compatibility data and are not rendered by the editor.
 
 ## App icon assets
 

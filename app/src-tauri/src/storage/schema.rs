@@ -3,12 +3,13 @@ use crate::error::AppError;
 use rusqlite::{Connection, Error as SqlError, Transaction, params};
 use serde_json::{Number, Value};
 
-pub(crate) const CURRENT_SCHEMA_VERSION: i32 = 7;
+pub(crate) const CURRENT_SCHEMA_VERSION: i32 = 8;
 pub(crate) const SCHEMA_VERSION_V3: i32 = 3;
 pub(crate) const SCHEMA_VERSION_V4: i32 = 4;
 pub(crate) const SCHEMA_VERSION_V5: i32 = 5;
 pub(crate) const SCHEMA_VERSION_V6: i32 = 6;
 pub(crate) const SCHEMA_VERSION_V7: i32 = 7;
+pub(crate) const SCHEMA_VERSION_V8: i32 = 8;
 pub(crate) const SETTINGS_MAX_BYTES: usize = 32 * 1024;
 pub(crate) const DEFAULT_SETTINGS_JSON: &str = r##"{"themeId":"ink","showGrid":true,"exportScale":1,"exportExtent":"world","canvasWidth":2048,"canvasHeight":1024,"gridKind":"graticule","gridColor":"#687784","gridWidth":1,"gridSpacing":10,"themeOverrides":{}}"##;
 pub(crate) const GRID_VERSION: i32 = 1;
@@ -172,7 +173,7 @@ pub(crate) fn schema_sql(transaction: &Transaction<'_>) -> Result<(), AppError> 
             grid_version INTEGER NOT NULL CHECK (grid_version = 1),
             cell_x INTEGER NOT NULL CHECK (cell_x >= 0 AND cell_x < 512),
             cell_y INTEGER NOT NULL CHECK (cell_y >= 0 AND cell_y < 256),
-            layer TEXT NOT NULL CHECK (layer IN ('forest','country','region')),
+            layer TEXT NOT NULL CHECK (layer IN ('terrain','forest','country','region')),
             value TEXT NOT NULL,
             UNIQUE (grid_version, cell_x, cell_y, layer)
         );
@@ -361,6 +362,7 @@ fn verify_common_schema(
     feature_columns: &[ColumnExpectation],
     feature_types: &[&str],
     has_properties: bool,
+    has_terrain_layer: bool,
 ) -> Result<(), AppError> {
     for (table, expected) in [
         ("schema_migrations", SCHEMA_MIGRATION_COLUMNS),
@@ -372,7 +374,12 @@ fn verify_common_schema(
     verify_table(connection, "world", world_columns)?;
     verify_feature_schema(connection, feature_columns, feature_types, has_properties)?;
     let cell_sql = normalized_object_sql(connection, "table", "cell_attributes")?;
-    if !cell_sql.contains("check (layer in ('forest','country','region'))")
+    let expected_layer_check = if has_terrain_layer {
+        "check (layer in ('terrain','forest','country','region'))"
+    } else {
+        "check (layer in ('forest','country','region'))"
+    };
+    if !cell_sql.contains(expected_layer_check)
         || !cell_sql.contains("unique (grid_version, cell_x, cell_y, layer)")
     {
         return Err(corrupt_schema());
@@ -449,6 +456,7 @@ pub(crate) fn verify_schema_v3(connection: &Connection) -> Result<(), AppError> 
             "'town'",
         ],
         false,
+        false,
     )
 }
 
@@ -478,6 +486,7 @@ fn verify_schema_shape(connection: &Connection) -> Result<(), AppError> {
             "'scale'",
         ],
         true,
+        false,
     )?;
     Ok(())
 }
@@ -508,6 +517,37 @@ fn verify_schema_shape_current(connection: &Connection) -> Result<(), AppError> 
             "'scale'",
         ],
         true,
+        true,
+    )
+}
+
+fn verify_schema_shape_v7(connection: &Connection) -> Result<(), AppError> {
+    verify_common_schema(
+        connection,
+        WORLD_COLUMNS,
+        FEATURE_COLUMNS,
+        &[
+            "'terrain'",
+            "'forest'",
+            "'river'",
+            "'coastline'",
+            "'country'",
+            "'region'",
+            "'boundary'",
+            "'city'",
+            "'town'",
+            "'road'",
+            "'lake'",
+            "'mountain'",
+            "'tree'",
+            "'symbol'",
+            "'label'",
+            "'overlay'",
+            "'frame'",
+            "'scale'",
+        ],
+        true,
+        false,
     )
 }
 
@@ -549,7 +589,7 @@ fn verify_schema_v5(connection: &Connection) -> Result<(), AppError> {
 }
 
 fn verify_schema_v6(connection: &Connection) -> Result<(), AppError> {
-    verify_schema_shape_current(connection)?;
+    verify_schema_shape_v7(connection)?;
     let world_sql = normalized_object_sql(connection, "table", "world")?;
     for invariant in [
         "check (json_valid(settings_json)",
@@ -565,6 +605,17 @@ fn verify_schema_v6(connection: &Connection) -> Result<(), AppError> {
 
 pub(crate) fn verify_schema(connection: &Connection) -> Result<(), AppError> {
     verify_schema_shape_current(connection)?;
+    verify_schema_world_shape(connection)?;
+    verify_assets_schema(connection)
+}
+
+pub(crate) fn verify_schema_v7(connection: &Connection) -> Result<(), AppError> {
+    verify_schema_shape_v7(connection)?;
+    verify_schema_world_shape(connection)?;
+    verify_assets_schema(connection)
+}
+
+fn verify_schema_world_shape(connection: &Connection) -> Result<(), AppError> {
     let world_sql = normalized_object_sql(connection, "table", "world")?;
     for invariant in [
         "check (json_valid(settings_json)",
@@ -591,7 +642,7 @@ pub(crate) fn verify_schema(connection: &Connection) -> Result<(), AppError> {
             return Err(corrupt_schema());
         }
     }
-    verify_assets_schema(connection)
+    Ok(())
 }
 
 fn read_schema_version(connection: &Connection) -> Result<i32, AppError> {
@@ -673,7 +724,8 @@ pub(crate) fn validate_existing_schema_for_preflight(
         SCHEMA_VERSION_V4 => verify_schema_v4(connection)?,
         SCHEMA_VERSION_V5 => verify_schema_v5(connection)?,
         SCHEMA_VERSION_V6 => verify_schema_v6(connection)?,
-        SCHEMA_VERSION_V7 => verify_schema(connection)?,
+        SCHEMA_VERSION_V7 => verify_schema_v7(connection)?,
+        SCHEMA_VERSION_V8 => verify_schema(connection)?,
         _ => {
             return Err(AppError::new(
                 "unsupported_schema",
@@ -891,7 +943,49 @@ fn rebuild_world_for_v7(transaction: &Transaction<'_>) -> Result<(), AppError> {
         .map_err(AppError::from)
 }
 
-pub(crate) fn migrate_v5_to_v7(connection: &mut Connection) -> Result<(), AppError> {
+fn rebuild_cells_for_v8(transaction: &Transaction<'_>) -> Result<(), AppError> {
+    transaction
+        .execute_batch(
+            "ALTER TABLE cell_attributes RENAME TO cell_attributes_v7;
+             DROP INDEX cell_attributes_lookup;
+             CREATE TABLE cell_attributes (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 grid_version INTEGER NOT NULL CHECK (grid_version = 1),
+                 cell_x INTEGER NOT NULL CHECK (cell_x >= 0 AND cell_x < 512),
+                 cell_y INTEGER NOT NULL CHECK (cell_y >= 0 AND cell_y < 256),
+                 layer TEXT NOT NULL CHECK (layer IN ('terrain','forest','country','region')),
+                 value TEXT NOT NULL,
+                 UNIQUE (grid_version, cell_x, cell_y, layer)
+             );
+             INSERT INTO cell_attributes(id, grid_version, cell_x, cell_y, layer, value)
+                 SELECT id, grid_version, cell_x, cell_y, layer, value FROM cell_attributes_v7;
+             DROP TABLE cell_attributes_v7;
+             CREATE INDEX cell_attributes_lookup
+                 ON cell_attributes(grid_version, cell_x, cell_y, layer);
+             INSERT INTO schema_migrations(version) VALUES (8);
+             PRAGMA user_version = 8;",
+        )
+        .map_err(AppError::from)
+}
+
+#[cfg(test)]
+pub(crate) fn migrate_v6_to_v7_fixture(connection: &mut Connection) -> Result<(), AppError> {
+    if read_schema_version(connection)? != SCHEMA_VERSION_V6 {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses a legacy Realm format that is no longer supported.",
+        ));
+    }
+    verify_schema_v6(connection)?;
+    verify_world_count(connection)?;
+    let transaction = connection.transaction().map_err(AppError::from)?;
+    rebuild_world_for_v7(&transaction)?;
+    verify_schema_v7(&transaction)?;
+    verify_world(&transaction)?;
+    transaction.commit().map_err(AppError::from)
+}
+
+pub(crate) fn migrate_v5_to_v8(connection: &mut Connection) -> Result<(), AppError> {
     if read_schema_version(connection)? != SCHEMA_VERSION_V5 {
         return Err(AppError::new(
             "unsupported_schema",
@@ -904,12 +998,14 @@ pub(crate) fn migrate_v5_to_v7(connection: &mut Connection) -> Result<(), AppErr
     rebuild_world_for_v6(&transaction)?;
     verify_schema_v6(&transaction)?;
     rebuild_world_for_v7(&transaction)?;
+    verify_schema_v7(&transaction)?;
+    rebuild_cells_for_v8(&transaction)?;
     verify_schema(&transaction)?;
     verify_world(&transaction)?;
     transaction.commit().map_err(AppError::from)
 }
 
-pub(crate) fn migrate_v6_to_v7(connection: &mut Connection) -> Result<(), AppError> {
+pub(crate) fn migrate_v6_to_v8(connection: &mut Connection) -> Result<(), AppError> {
     if read_schema_version(connection)? != SCHEMA_VERSION_V6 {
         return Err(AppError::new(
             "unsupported_schema",
@@ -920,12 +1016,14 @@ pub(crate) fn migrate_v6_to_v7(connection: &mut Connection) -> Result<(), AppErr
     verify_world_count(connection)?;
     let transaction = connection.transaction().map_err(AppError::from)?;
     rebuild_world_for_v7(&transaction)?;
+    verify_schema_v7(&transaction)?;
+    rebuild_cells_for_v8(&transaction)?;
     verify_schema(&transaction)?;
     verify_world(&transaction)?;
     transaction.commit().map_err(AppError::from)
 }
 
-pub(crate) fn migrate_v4_to_v7(connection: &mut Connection) -> Result<(), AppError> {
+pub(crate) fn migrate_v4_to_v8(connection: &mut Connection) -> Result<(), AppError> {
     if read_schema_version(connection)? != SCHEMA_VERSION_V4 {
         return Err(AppError::new(
             "unsupported_schema",
@@ -956,12 +1054,14 @@ pub(crate) fn migrate_v4_to_v7(connection: &mut Connection) -> Result<(), AppErr
     rebuild_world_for_v6(&transaction)?;
     verify_schema_v6(&transaction)?;
     rebuild_world_for_v7(&transaction)?;
+    verify_schema_v7(&transaction)?;
+    rebuild_cells_for_v8(&transaction)?;
     verify_schema(&transaction)?;
     verify_world(&transaction)?;
     transaction.commit().map_err(AppError::from)
 }
 
-pub(crate) fn migrate_v3_to_v7(connection: &mut Connection) -> Result<(), AppError> {
+pub(crate) fn migrate_v3_to_v8(connection: &mut Connection) -> Result<(), AppError> {
     if read_schema_version(connection)? != SCHEMA_VERSION_V3 {
         return Err(AppError::new(
             "unsupported_schema",
@@ -1013,6 +1113,24 @@ pub(crate) fn migrate_v3_to_v7(connection: &mut Connection) -> Result<(), AppErr
     rebuild_world_for_v6(&transaction)?;
     verify_schema_v6(&transaction)?;
     rebuild_world_for_v7(&transaction)?;
+    verify_schema_v7(&transaction)?;
+    rebuild_cells_for_v8(&transaction)?;
+    verify_schema(&transaction)?;
+    verify_world(&transaction)?;
+    transaction.commit().map_err(AppError::from)
+}
+
+pub(crate) fn migrate_v7_to_v8(connection: &mut Connection) -> Result<(), AppError> {
+    if read_schema_version(connection)? != SCHEMA_VERSION_V7 {
+        return Err(AppError::new(
+            "unsupported_schema",
+            "This project uses a legacy Realm format that is no longer supported.",
+        ));
+    }
+    verify_schema_v7(connection)?;
+    verify_world(connection)?;
+    let transaction = connection.transaction().map_err(AppError::from)?;
+    rebuild_cells_for_v8(&transaction)?;
     verify_schema(&transaction)?;
     verify_world(&transaction)?;
     transaction.commit().map_err(AppError::from)

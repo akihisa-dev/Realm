@@ -6,13 +6,13 @@ import {
   type RealmMapRenderer,
   type RealmMapRendererFactory,
 } from "../map/MapAdapter";
-import type { GeoJsonGeometry, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, GeoJsonGeometry, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { ExportCanvasSize } from "../map/contracts";
 import type { MapErrorCode } from "../map/errors";
 import { DEFAULT_MAP_THEME_ID, type MapThemeId, type ThemeOverrides } from "../map/themes";
 
-export type TerrainMapMode = "pan" | "terrain" | "erase" | "polygon-hole";
+export type TerrainMapMode = "pan" | "cell-select";
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;
@@ -21,6 +21,9 @@ type MapCanvasProps = {
   mode?: TerrainMapMode;
   selectedFeatureId?: string | null;
   selectedFeatureIds?: readonly string[];
+  cellAttributes?: readonly CellAttributeSnapshot[];
+  selectedCellIds?: readonly string[];
+  cellBrushRadius?: number;
   drawingOptions?: DrawingOptions;
   gridOptions?: GridOptions;
   themeOverrides?: ThemeOverrides;
@@ -29,6 +32,7 @@ type MapCanvasProps = {
   onDraw?: (geometry: GeoJsonGeometry) => void;
   onSelect?: (featureId: string | null) => void;
   onSelectFeatures?: (featureIds: readonly string[]) => void;
+  onCellSelect?: (cellIds: readonly string[]) => void;
   onModify?: (featureId: string, geometry: GeoJsonGeometry) => void;
   onModifyFeatures?: (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void;
   onErase?: (featureId: string) => void;
@@ -46,6 +50,9 @@ export function MapCanvas({
   mode = "pan",
   selectedFeatureId = null,
   selectedFeatureIds,
+  cellAttributes = [],
+  selectedCellIds = [],
+  cellBrushRadius = 1,
   drawingOptions = { gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null },
   gridOptions = { kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 },
   themeOverrides = {},
@@ -54,6 +61,7 @@ export function MapCanvas({
   onDraw,
   onSelect,
   onSelectFeatures,
+  onCellSelect,
   onModify,
   onModifyFeatures,
   onErase,
@@ -69,6 +77,7 @@ export function MapCanvas({
   const onDrawRef = useRef(onDraw);
   const onSelectRef = useRef(onSelect);
   const onSelectFeaturesRef = useRef(onSelectFeatures);
+  const onCellSelectRef = useRef(onCellSelect);
   const onModifyRef = useRef(onModify);
   const onModifyFeaturesRef = useRef(onModifyFeatures);
   const onEraseRef = useRef(onErase);
@@ -77,14 +86,8 @@ export function MapCanvas({
   const onErrorRef = useRef(onError);
   const onExporterReadyRef = useRef(onExporterReady);
   const mapHelp = mode === "pan"
-    ? "クリックで地形を選択し、Shiftクリックで追加・解除、修飾キーを押しながら囲むと複数選択します。矢印で微移動、Shift+上下で描画順、Command+C/X/Vでコピー・切り取り・貼り付けできます。Command+ホイールで拡大縮小します。"
-    : mode === "erase"
-      ? "消したい地形をクリックします。削除した地形は元に戻す操作で復元できます。"
-      : mode === "polygon-hole"
-        ? "選択した地形の内側を描いて穴を追加します。右クリックまたはダブルクリックで確定し、Escapeで取り消せます。"
-      : drawingOptions.gesture === "vertices"
-        ? "地図上を順にクリックして地形を描きます。Altで直線化、Alt+Shiftで45°に揃え、右クリックまたはダブルクリックで確定、Escapeで取り消せます。"
-        : "地図上で押したまま地形を描きます。続けて複数の地形を描けます。Escapeで描画中の輪郭を取り消せます。";
+    ? "ドラッグで地図を移動し、Command+ホイールで拡大縮小します。"
+    : "六角セルを押したままなぞって選択します。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。";
 
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;
@@ -93,6 +96,7 @@ export function MapCanvas({
   useEffect(() => { onDrawRef.current = onDraw; }, [onDraw]);
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
   useEffect(() => { onSelectFeaturesRef.current = onSelectFeatures; }, [onSelectFeatures]);
+  useEffect(() => { onCellSelectRef.current = onCellSelect; }, [onCellSelect]);
   useEffect(() => { onModifyRef.current = onModify; }, [onModify]);
   useEffect(() => { onModifyFeaturesRef.current = onModifyFeatures; }, [onModifyFeatures]);
   useEffect(() => { onEraseRef.current = onErase; }, [onErase]);
@@ -113,6 +117,9 @@ export function MapCanvas({
   useEffect(() => { adapterRef.current?.setGridOptions(gridOptions); }, [gridOptions]);
   useEffect(() => { adapterRef.current?.setMode(mode); }, [mode]);
   useEffect(() => { adapterRef.current?.setDrawingOptions(drawingOptions); }, [drawingOptions]);
+  useEffect(() => { adapterRef.current?.setCellAttributes(cellAttributes); }, [cellAttributes]);
+  useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [selectedCellIds]);
+  useEffect(() => { adapterRef.current?.setCellBrushRadius(cellBrushRadius); }, [cellBrushRadius]);
   useEffect(() => {
     adapterRef.current?.setSelectedFeatures(selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []));
   }, [selectedFeatureId, selectedFeatureIds]);
@@ -130,6 +137,7 @@ export function MapCanvas({
       onSelectFeaturesRef.current?.(featureIds);
       onSelectRef.current?.(featureIds[0] ?? null);
     });
+    const stopCellSelectListener = adapter.onCellSelect((cellIds) => onCellSelectRef.current?.(cellIds));
     const stopModifyListener = adapter.onModifyFeatures((changes) => {
       onModifyFeaturesRef.current?.(changes);
       if (!onModifyFeaturesRef.current) for (const { id, geometry } of changes) onModifyRef.current?.(id, geometry);
@@ -147,6 +155,9 @@ export function MapCanvas({
     adapter.setGridOptions(gridOptions);
     adapter.setMode(mode);
     adapter.setDrawingOptions(drawingOptions);
+    adapter.setCellAttributes(cellAttributes);
+    adapter.setSelectedCells(selectedCellIds);
+    adapter.setCellBrushRadius(cellBrushRadius);
     adapter.setSelectedFeatures(selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []));
     onZoomChangeRef.current(adapter.getZoom());
 
@@ -158,6 +169,7 @@ export function MapCanvas({
       stopZoomListener();
       stopDrawListener();
       stopSelectListener();
+      stopCellSelectListener();
       stopModifyListener();
       stopEraseListener();
       stopLayerShiftListener();

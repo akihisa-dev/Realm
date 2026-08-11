@@ -1,4 +1,4 @@
-import { CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellCenter, cellIdsWithinBrushPath, isGeometryWithinWorld, selectFeatureIdsWithinLasso } from "./MapAdapter";
+import { CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellCenter, cellIdsWithinBrushPath, cellPolygon, isGeometryWithinWorld, selectFeatureIdsWithinLasso } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -14,7 +14,6 @@ import LineString from "ol/geom/LineString";
 import Polygon from "ol/geom/Polygon";
 import Point from "ol/geom/Point";
 import Style from "ol/style/Style";
-import CircleStyle from "ol/style/Circle";
 
 describe("RealmMapAdapter", () => {
   it("selects points, crossing lines, and contained polygons with a lasso", () => {
@@ -202,6 +201,20 @@ describe("RealmMapAdapter", () => {
     expect(cellIdsWithinBrushPath([[-180, -90]], 1)).toContain("0:0");
     expect(cellIdsWithinBrushPath([[180, 90]], 1)).toContain("511:255");
     expect(cellIdsWithinBrushPath([[-Infinity, -90], [Infinity, 90]], 1)).toEqual([]);
+  });
+
+  it("builds closed tessellating hex cells and clips edge cells to the bounded world", () => {
+    const even = cellCenter(128, 256);
+    const odd = cellCenter(129, 256);
+    expect(odd[0]).toBeGreaterThan(even[0]);
+    const interior = cellPolygon(128, 256);
+    expect(interior).toHaveLength(7);
+    expect(interior?.[0]).toEqual(interior?.at(-1));
+    expect(interior?.every(([longitude, latitude]) => longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90)).toBe(true);
+    const edge = cellPolygon(1, 0);
+    expect(edge?.some(([longitude]) => longitude === -180)).toBe(true);
+    expect(cellPolygon(-1, 0)).toBeNull();
+    expect(cellPolygon(0, 512)).toBeNull();
   });
 
   it("guards feature geometry at the bounded world edge", () => {
@@ -433,6 +446,7 @@ describe("RealmMapAdapter", () => {
     expect(cellLayer.getVisible()).toBe(true);
     expect(cellLayer.getSource()?.getFeatures()).toHaveLength(1);
     adapter.setCellAttributes([
+      { cellId: "0:0", attribute: "terrain", value: "terrain" },
       { cellId: "1:0", attribute: "forest", value: "forest" },
       { cellId: "3:0", attribute: "country", value: "A" },
       { cellId: "4:0", attribute: "region", value: "B" },
@@ -441,7 +455,8 @@ describe("RealmMapAdapter", () => {
     const cellStyleFunction = cellLayer.getStyleFunction();
     const forestCell = cellLayer.getSource()?.getFeatureById("1:0");
     const forestStyle = (cellStyleFunction?.(forestCell!, 1) as Style[])[0]!;
-    expect((forestStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("#426a45");
+    expect(forestCell?.getGeometry()).toBeInstanceOf(Polygon);
+    expect(forestStyle.getFill()?.getColor()).toBe("#426a45");
     adapter.setTheme("midnight");
     expect(host.dataset.mapTheme).toBe("midnight");
     expect(host.style.background).not.toBe("");

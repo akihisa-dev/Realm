@@ -2,7 +2,7 @@ import Feature from "ol/Feature";
 import Map from "ol/Map";
 import View from "ol/View";
 import LineString from "ol/geom/LineString";
-import Point from "ol/geom/Point";
+import Polygon from "ol/geom/Polygon";
 import Draw from "ol/interaction/Draw";
 import PointerInteraction from "ol/interaction/Pointer";
 import Modify from "ol/interaction/Modify";
@@ -23,7 +23,7 @@ import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, Position, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
-import { CELL_BRUSH_RADII, cellCenter as gridCellCenter, cellIdsWithinBrushPath as gridCellIdsWithinBrushPath, parseCellId } from "./gridGeometry";
+import { CELL_BRUSH_RADII, cellIdsWithinBrushPath as gridCellIdsWithinBrushPath, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
 import { MAX_SMOOTHING_PASSES, refineDrawnGeometry, snapPositionToAngle } from "./drawingGeometry";
 import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
@@ -35,7 +35,7 @@ import type { DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptio
 
 export type { DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellBrushSize } from "./gridGeometry";
-export { CELL_BRUSH_RADII, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellCenter, cellId, cellIdsWithinBrushPath, parseCellId } from "./gridGeometry";
+export { CELL_BRUSH_RADII, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellCenter, cellId, cellIdsWithinBrushPath, cellPolygon, parseCellId } from "./gridGeometry";
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
 
 type Segment = readonly [Position, Position];
@@ -852,7 +852,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
     for (const id of cellIds) {
       if (this.cellFeatures.has(id) || !parseCellId(id)) continue;
       const [row, column] = parseCellId(id)!;
-      const feature = new Feature({ geometry: new Point(gridCellCenter(row, column)), selected: false, showGrid: false, attributes: this.cellAttributesById.get(id) ?? [] });
+      const ring = gridCellPolygon(row, column);
+      if (!ring) continue;
+      const feature = new Feature({ geometry: new Polygon([ring]), selected: false, showGrid: false, attributes: this.cellAttributesById.get(id) ?? [] });
       feature.setId(id);
       this.cellFeatures.set(id, feature);
       features.push(feature);

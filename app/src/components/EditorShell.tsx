@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { errorMessage, type GeoJsonGeometry, type RealmBackend, type RealmFeature, type RealmSnapshot } from "../backend";
+import { errorMessage, type CellAttributeSnapshot, type RealmBackend, type RealmSnapshot } from "../backend";
 import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
 import { Hand } from "@phosphor-icons/react/dist/csr/Hand";
 import { PencilLine } from "@phosphor-icons/react/dist/csr/PencilLine";
 import { MapCanvas } from "./MapCanvas";
 import { mapErrorMessage } from "../locales/ja";
 
-const TERRAIN_TYPE = "terrain" as const;
 type Tool = "pan" | "terrain" | "erase";
 
 type EditorShellProps = {
@@ -25,13 +24,15 @@ const enqueueSerial = <T,>(tail: { current: Promise<void> }, action: () => Promi
 export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellProps) {
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
   const [activeTool, setActiveTool] = useState<Tool>("terrain");
-  const [selectedFeatureIds, setSelectedFeatureIds] = useState<string[]>([]);
+  const [cellAttributes, setCellAttributes] = useState<CellAttributeSnapshot[]>([]);
+  const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
   const [zoom, setZoom] = useState(1);
   const [operating, setOperating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const viewedIdentity = useRef(`${snapshot.path}:${snapshot.world.id}`);
   const mounted = useRef(true);
   const commandTail = useRef<Promise<void>>(Promise.resolve());
+  const cellRequest = useRef(0);
   const projectIdentity = `${snapshot.path}:${snapshot.world.id}`;
 
   useEffect(() => {
@@ -43,65 +44,66 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     const identityChanged = viewedIdentity.current !== projectIdentity;
     viewedIdentity.current = projectIdentity;
     setViewedSnapshot(snapshot);
-    setSelectedFeatureIds((current) => identityChanged
-      ? []
-      : current.filter((id) => snapshot.features.some((feature) => feature.id === id && feature.featureType === TERRAIN_TYPE)));
+    if (identityChanged) {
+      cellRequest.current += 1;
+      setCellAttributes([]);
+      setSelectedCellIds([]);
+      setError(null);
+    }
   }, [projectIdentity, snapshot]);
 
-  const terrainFeatures = viewedSnapshot.features.filter((feature) => feature.featureType === TERRAIN_TYPE);
   const settings = viewedSnapshot.settings;
   const locked = busy || operating;
 
+  const refreshCellAttributes = async (identity: string): Promise<void> => {
+    const request = ++cellRequest.current;
+    try {
+      const attributes = await backend.viewCellAttributes({});
+      const terrain = attributes.filter((attribute) => attribute.attribute === "terrain");
+      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request) setCellAttributes(terrain);
+    } catch (cause) {
+      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request) setError(errorMessage(cause, "セル属性を読み込めませんでした。"));
+    }
+  };
+
+  useEffect(() => {
+    void refreshCellAttributes(projectIdentity);
+  }, [backend, projectIdentity]);
+
+  useEffect(() => {
+    if (activeTool === "pan" || locked) setSelectedCellIds([]);
+  }, [activeTool, locked]);
+
   const run = async (action: () => Promise<RealmSnapshot>, fallback: string) => {
     await enqueueSerial(commandTail, async () => {
+      const identity = projectIdentity;
       setOperating(true);
       setError(null);
       try {
+        if (!mounted.current || viewedIdentity.current !== identity) return;
         const next = await action();
-        if (!mounted.current || viewedIdentity.current !== projectIdentity) return;
+        if (!mounted.current || viewedIdentity.current !== identity) return;
         setViewedSnapshot(next);
         onSaved(next);
+        await refreshCellAttributes(identity);
       } catch (cause) {
-        setError(errorMessage(cause, fallback));
+        if (mounted.current && viewedIdentity.current === identity) setError(errorMessage(cause, fallback));
       } finally {
-        setOperating(false);
+        if (mounted.current) setOperating(false);
       }
     });
   };
 
-  const createTerrain = (geometry: GeoJsonGeometry) => {
-    if (activeTool !== "terrain" || geometry.type !== "Polygon") return;
-    void run(() => backend.createFeature({
-      featureType: TERRAIN_TYPE,
-      name: "地形",
-      geometry,
-      properties: {},
-    }), "地形を作成できませんでした。");
-  };
-
-  const reviseTerrain = (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => {
-    const revisions = changes.map(({ id, geometry }) => {
-      const feature = terrainFeatures.find((item) => item.id === id);
-      return feature && feature.properties?.locked !== true && geometry.type === "Polygon"
-        ? { id, name: feature.name, geometry, properties: feature.properties ?? {} }
-        : null;
-    }).filter((revision): revision is NonNullable<typeof revision> => Boolean(revision));
-    if (revisions.length > 0) void run(() => backend.reviseFeaturesBatch({ features: revisions }), "地形を変更できませんでした。");
-  };
-
-  const shiftTerrain = (direction: -1 | 1) => {
-    const revisions = selectedFeatureIds.map((id) => terrainFeatures.find((feature) => feature.id === id))
-      .filter((feature): feature is RealmFeature => feature !== undefined && feature.properties?.locked !== true)
-      .map((feature) => ({
-        id: feature.id,
-        name: feature.name,
-        geometry: feature.geometry,
-        properties: {
-          ...feature.properties,
-          zIndex: Math.max(-1000, Math.min(1000, (typeof feature.properties?.zIndex === "number" ? feature.properties.zIndex : 0) + direction)),
-        },
-      }));
-    if (revisions.length > 0) void run(() => backend.reviseFeaturesBatch({ features: revisions }), "地形の描画順を変更できませんでした。");
+  const applyCellSelection = (ids: readonly string[]) => {
+    const nextIds = [...new Set(ids)];
+    if (locked || activeTool === "pan") {
+      setSelectedCellIds([]);
+      return;
+    }
+    setSelectedCellIds(nextIds);
+    if (nextIds.length === 0) return;
+    const value = activeTool === "terrain" ? "terrain" : null;
+    void run(() => backend.applyCellAttributes({ cellIds: nextIds, attribute: "terrain", value }), "セルの地形属性を更新できませんでした。");
   };
 
   useEffect(() => {
@@ -121,11 +123,9 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       if (key === "c" || key === "z") {
         event.preventDefault();
         setActiveTool("terrain");
-        setSelectedFeatureIds([]);
       } else if (key === "e" || key === "x") {
         event.preventDefault();
         setActiveTool("erase");
-        setSelectedFeatureIds([]);
       }
     };
     window.addEventListener("keydown", handleShortcut);
@@ -143,30 +143,22 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       <div className="editor-body">
         <aside className="left-rail" aria-label="地形ツール">
           <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => setActiveTool("pan")} disabled={locked}><Hand aria-hidden="true" size={24} /><span>移動</span></button>
-          <button className={activeTool === "terrain" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "terrain"} onClick={() => { setActiveTool("terrain"); setSelectedFeatureIds([]); }} disabled={locked}><PencilLine aria-hidden="true" size={24} /><span>地形を描く</span></button>
-          <button className={activeTool === "erase" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "erase"} onClick={() => { setActiveTool("erase"); setSelectedFeatureIds([]); }} disabled={locked}><Eraser aria-hidden="true" size={24} /><span>地形を消す</span></button>
+          <button className={activeTool === "terrain" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "terrain"} onClick={() => setActiveTool("terrain")} disabled={locked}><PencilLine aria-hidden="true" size={24} /><span>地形を描く</span></button>
+          <button className={activeTool === "erase" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "erase"} onClick={() => setActiveTool("erase")} disabled={locked}><Eraser aria-hidden="true" size={24} /><span>地形を消す</span></button>
         </aside>
 
         <section className="map-region" aria-label="地形編集領域">
           <MapCanvas
-            features={terrainFeatures}
-            mode={locked ? "pan" : activeTool}
-            selectedFeatureIds={selectedFeatureIds}
-            drawingOptions={{ gesture: "freehand", smoothingPasses: 2, snapAngleDegrees: null }}
+            features={[]}
+            mode={locked || activeTool === "pan" ? "pan" : "cell-select"}
+            cellAttributes={cellAttributes}
+            selectedCellIds={selectedCellIds}
+            cellBrushRadius={1}
             themeId={settings.themeId}
             themeOverrides={settings.themeOverrides}
-            showGrid={settings.showGrid}
-            gridOptions={{ kind: settings.gridKind, color: settings.gridColor, width: settings.gridWidth, spacingDegrees: settings.gridSpacing }}
-            onDraw={createTerrain}
-            onSelectFeatures={(ids) => setSelectedFeatureIds([...new Set(ids)].filter((id) => terrainFeatures.some((feature) => feature.id === id)))}
-            onModifyFeatures={reviseTerrain}
-            onEraseFeatures={(ids) => {
-              const terrainIds = ids.filter((id) => terrainFeatures.some((feature) => feature.id === id));
-              if (terrainIds.length === 0) return;
-              setSelectedFeatureIds([]);
-              void run(() => backend.deleteFeaturesBatch({ ids: terrainIds }), "地形を削除できませんでした。");
-            }}
-            onLayerShift={shiftTerrain}
+            showGrid={false}
+            gridOptions={{ kind: "hex", color: settings.gridColor, width: settings.gridWidth, spacingDegrees: settings.gridSpacing }}
+            onCellSelect={applyCellSelection}
             onError={(code) => setError(mapErrorMessage(code))}
             onZoomChange={setZoom}
             zoom={zoom}

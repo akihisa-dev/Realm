@@ -20,14 +20,14 @@ Rust command boundary ── validation ── current-state service
 ## State ownership
 
 - Rust owns the app-data library path, opened database, SQLite transactions, schema state, stable identifiers, current persisted map data, bounded canvas and project presentation settings, and session undo/redo stacks.
-- React owns transient terrain selection, viewport, tool mode, and form drafts awaiting the short automatic-save debounce.
-- OpenLayers owns only rendering and interaction objects derived from terrain rows in the current snapshot; map objects are not an additional source of truth. Completed terrain draw and modify gestures cross the renderer boundary as GeoJSON polygon geometry.
+- React owns transient hex-cell selection, viewport, tool mode, and serialized mutation state.
+- OpenLayers owns only rendering and interaction objects derived from terrain cell rows; map objects are not an additional source of truth. Completed brush gestures cross the renderer boundary as bounded stable cell identifiers, not GeoJSON.
 
-The active editor reads the current project snapshot; creates, revises, deletes, or batch-mutates terrain; and performs undo or redo. On launch, React restores the open world, opens the first app-library world, or creates `無題の世界` when the library is empty, then enters the editor directly. Import, file export, project-name editing, presentation settings, older non-terrain, asset, and cell commands remain compatibility infrastructure without an active editor entry. Terrain commands accept complete validated GeoJSON polygon geometry.
+The active editor reads the current project snapshot and terrain cell attributes; paints or clears a validated cell batch; and performs undo or redo. On launch, React restores the open world, opens the first app-library world, or creates `無題の世界` when the library is empty, then enters the editor directly. Import, file export, project-name editing, presentation settings, feature editing, asset commands, and non-terrain cell layers remain compatibility infrastructure without an active editor entry. Terrain cell commands accept complete bounded `x:y` identifier sets.
 
 Tauri imports are isolated in `app/src/backend/tauriRealmBackend.ts`. The browser-only memory backend implements the same interface for deterministic UI tests without pretending to be a second persistence format.
 
-OpenLayers imports are isolated below `app/src/map/`. `contracts.ts` is the UI-facing renderer contract, while drawing refinement, area measurement, geometry transforms, grid geometry, and world-bound checks remain pure modules. `MapAdapter.ts` owns the OpenLayers map, layers, interactions, and lifecycle; its factory is injected into the canvas. Theme definitions remain renderer-owned, while the selected theme identifier and grid/export preferences are persisted as bounded project settings.
+OpenLayers imports are isolated below `app/src/map/`. `contracts.ts` is the UI-facing renderer contract, while hex center, clipped-cell polygon, brush selection, measurement, geometry transforms, and world-bound checks remain pure modules. `MapAdapter.ts` owns the OpenLayers map, layers, interactions, and lifecycle; its factory is injected into the canvas. Theme definitions remain renderer-owned, while the selected theme identifier and grid/export preferences are persisted as bounded project settings.
 
 React coordinates launch restoration through `app/src/state/useRealmOperations.ts`. Operation generations reject stale project and library responses. The editor serializes automatic save and mutations so a delayed response cannot replace a newer draft or snapshot.
 

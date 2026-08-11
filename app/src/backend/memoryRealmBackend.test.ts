@@ -21,6 +21,22 @@ it("creates, edits, deletes, and undoes current features", async () => {
     expect(await backend.viewCellAttributes({})).toEqual([{ cellId: "1:2", attribute: "forest", value: "on" }]);
   });
 
+  it("stores, clears, and undoes terrain cell attributes", async () => {
+    const backend = new MemoryRealmBackend();
+    await backend.createProject({ path: "browser://terrain-cells.realmmap", name: "Terrain cells" });
+    await backend.applyCellAttributes({ cellIds: ["2:3", "3:3"], attribute: "terrain", value: "terrain" });
+    expect(await backend.viewCellAttributes({})).toEqual([
+      { cellId: "2:3", attribute: "terrain", value: "terrain" },
+      { cellId: "3:3", attribute: "terrain", value: "terrain" },
+    ]);
+    await backend.applyCellAttributes({ cellIds: ["2:3"], attribute: "terrain", value: null });
+    expect(await backend.viewCellAttributes({})).toEqual([
+      { cellId: "3:3", attribute: "terrain", value: "terrain" },
+    ]);
+    await backend.undoProject();
+    expect(await backend.viewCellAttributes({})).toHaveLength(2);
+  });
+
   it("covers library errors, import, reopen, redo, and cell validation", async () => {
     const backend = new MemoryRealmBackend();
     await expect(backend.saveProject({ name: "Nope" })).rejects.toThrow("開かれていません");
