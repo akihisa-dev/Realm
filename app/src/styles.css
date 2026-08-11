@@ -17,22 +17,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid #078c98; outline-
 textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
-.startup-screen { display: grid; min-height: 100vh; place-items: center; padding: 24px; }
-.startup-panel { width: min(600px, 100%); margin-top: -34px; text-align: center; }
-.startup-panel h1 { margin: 0; color: #121820; font-size: clamp(3.5rem, 8vw, 5.5rem); font-weight: 760; letter-spacing: -0.06em; line-height: 1; }
-.startup-panel p { margin: 32px 0 64px; color: #30363d; font-size: clamp(1.15rem, 2.5vw, 1.55rem); letter-spacing: .01em; }
-.startup-panel .library-empty { margin: -28px 0 32px; color: #747b82; font-size: 1rem; }
-.project-library { display: grid; max-height: 280px; gap: 8px; margin: -28px 0 28px; overflow-y: auto; text-align: left; }
-.project-library button { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 54px; padding: 10px 14px; border: 1px solid #d0d5d8; border-radius: 6px; background: #fff; color: #20262b; text-align: left; }
-.project-library button:hover { border-color: #7d878e; background: #f7f9fa; }
-.project-library button span { flex: 0 0 auto; color: #697178; font-size: 13px; }
-.startup-actions { display: grid; gap: 24px; }
-.startup-button { min-height: 74px; border: 1px solid #8c9197; border-radius: 6px; background: #fff; color: #282d33; font-size: 1.35rem; font-weight: 700; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
-.startup-button:hover { border-color: #3f4850; background: #f8fafb; }
-.startup-button:active { transform: translateY(1px); }
-.startup-button-primary { border-color: #005b72; background: #00657d; color: #fff; box-shadow: 0 0 0 3px #d6ebff; }
-.startup-button-primary:hover { border-color: #004c60; background: #005b72; }
-.startup-button:disabled { cursor: wait; opacity: .65; }
 .app-error { position: fixed; z-index: 20; right: 24px; bottom: 24px; max-width: min(520px, calc(100vw - 48px)); margin: 0; padding: 12px 16px; border: 1px solid #c23c42; border-radius: 6px; background: #fff6f6; color: #991b1f; box-shadow: 0 6px 24px rgba(80, 20, 20, .12); }
 
 .editor-shell { display: grid; grid-template-rows: 48px minmax(0, 1fr); height: 100vh; min-height: 480px; overflow: hidden; background: #fff; }

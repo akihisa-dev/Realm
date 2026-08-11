@@ -23,13 +23,13 @@ Rust command boundary ── validation ── current-state service
 - React owns transient terrain selection, viewport, tool mode, and form drafts awaiting the short automatic-save debounce.
 - OpenLayers owns only rendering and interaction objects derived from terrain rows in the current snapshot; map objects are not an additional source of truth. Completed terrain draw and modify gestures cross the renderer boundary as GeoJSON polygon geometry.
 
-The active editor reads the current project snapshot; creates, revises, deletes, or batch-mutates terrain; and performs undo or redo. Startup uses the coarse IPC surface to list, create, open, and import library worlds. File export, project-name editing, presentation settings, older non-terrain, asset, and cell commands remain compatibility infrastructure without an active editor entry. Terrain commands accept complete validated GeoJSON polygon geometry.
+The active editor reads the current project snapshot; creates, revises, deletes, or batch-mutates terrain; and performs undo or redo. On launch, React restores the open world, opens the first app-library world, or creates `無題の世界` when the library is empty, then enters the editor directly. Import, file export, project-name editing, presentation settings, older non-terrain, asset, and cell commands remain compatibility infrastructure without an active editor entry. Terrain commands accept complete validated GeoJSON polygon geometry.
 
 Tauri imports are isolated in `app/src/backend/tauriRealmBackend.ts`. The browser-only memory backend implements the same interface for deterministic UI tests without pretending to be a second persistence format.
 
 OpenLayers imports are isolated below `app/src/map/`. `contracts.ts` is the UI-facing renderer contract, while drawing refinement, area measurement, geometry transforms, grid geometry, and world-bound checks remain pure modules. `MapAdapter.ts` owns the OpenLayers map, layers, interactions, and lifecycle; its factory is injected into the canvas. Theme definitions remain renderer-owned, while the selected theme identifier and grid/export preferences are persisted as bounded project settings.
 
-React coordinates library operations through `app/src/state/useRealmOperations.ts`. Operation generations reject stale project and library responses. The editor serializes automatic save, mutations, exports, and close so a delayed response cannot replace a newer draft or snapshot.
+React coordinates launch restoration through `app/src/state/useRealmOperations.ts`. Operation generations reject stale project and library responses. The editor serializes automatic save and mutations so a delayed response cannot replace a newer draft or snapshot.
 
 Rust keeps `lib.rs` as the composition root and command registry. IPC data contracts, domain validation, open-session state, read models, edit application, command handlers, and storage concerns live in separate modules. Within storage, schema verification, path validation, atomic publication, library lookup, project connection setup, and artifact output are separate dependencies. Storage modules do not depend on command handlers.
 

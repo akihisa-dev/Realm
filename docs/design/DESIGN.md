@@ -6,10 +6,10 @@ Realm's editing surface stays quiet so the map remains the dominant object. The 
 
 ## Initial states
 
-- [Startup concept](concepts/initial-startup.png): no world is open; the app-managed library, create action, and transfer-data import are available.
-- A world-open editor provides the three terrain tools (move, draw, and erase) plus `戻す` and `進む`. Valid terrain edits save automatically.
+- Realm enters the editor directly. It restores the open world when one exists, otherwise opens the first world in the app-managed library, or creates `無題の世界` when the library is empty.
+- The editor provides the three terrain tools (move, draw, and erase) plus `戻す` and `進む`. Valid terrain edits save automatically.
 
-The startup concept defines composition and density. Visible controls remain code-native. The primary rail exposes exactly three tools: move, draw terrain, and erase terrain. There is no terrain list, creation form, drawing-settings panel, or presentation-settings sidebar. Terrain is drawn with the editor's fixed freehand profile and edited directly on the canvas. Non-terrain compatibility rows never appear in the editor.
+Visible controls remain code-native. The primary rail exposes exactly three tools: move, draw terrain, and erase terrain. There is no startup screen, terrain list, creation form, drawing-settings panel, or presentation-settings sidebar. Terrain is drawn with the editor's fixed freehand profile and edited directly on the canvas. Non-terrain compatibility rows never appear in the editor.
 
 ## Visual system
 
@@ -24,9 +24,9 @@ The startup concept defines composition and density. Visible controls remain cod
 
 The editor uses one native overlay title bar with only `戻す` and `進む`, a narrow three-item primary rail, and a dominant OpenLayers canvas. The rail continues to the bottom edge; no secondary sidebar, floating map buttons, or bottom zoom bar is shown. Do not draw a second set of macOS traffic lights in React. Default zoom and center are part of the map adapter contract and must not be persisted as project data.
 
-## Allowed initial copy
+## Allowed editor copy
 
-The startup state uses `Realm`, `創作世界の地図を、アプリ内で安全に管理。`, `新しい世界を作成`, and `移行データを読み込む`, together with the library worlds. The open editor uses only `戻す`, `進む`, `移動`, `地形を描く`, and `地形を消す`. File actions, export controls, world-name editing, zoom buttons, terrain lists, creation metadata, drawing configuration, presentation settings, unavailable layers, and asset management are not shown.
+The editor uses only `戻す`, `進む`, `移動`, `地形を描く`, and `地形を消す`. Startup, library, import, file actions, export controls, world-name editing, zoom buttons, terrain lists, creation metadata, drawing configuration, presentation settings, unavailable layers, and asset management are not shown.
 
 ## Renderer boundary
 
