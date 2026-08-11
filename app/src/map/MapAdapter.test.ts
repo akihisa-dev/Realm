@@ -457,6 +457,7 @@ describe("RealmMapAdapter", () => {
     const forestStyle = (cellStyleFunction?.(forestCell!, 1) as Style[])[0]!;
     expect(forestCell?.getGeometry()).toBeInstanceOf(Polygon);
     expect(forestStyle.getFill()?.getColor()).toBe("#426a45");
+    expect(host.style.background).toBe("rgb(255, 255, 255)");
     adapter.setTheme("midnight");
     expect(host.dataset.mapTheme).toBe("midnight");
     expect(host.style.background).not.toBe("");

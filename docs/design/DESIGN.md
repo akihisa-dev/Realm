@@ -13,7 +13,7 @@ Visible controls remain code-native. The primary rail exposes exactly three tool
 
 ## Visual system
 
-- Interface chrome uses true white and cool neutral gray. Cartographic themes may color the map canvas, but must not turn toolbars and panels into decorative scenery.
+- Interface chrome uses true white and cool neutral gray. The default unpainted map canvas is true white; persistent terrain cells provide the map color. Optional cartographic themes may color the canvas, but must not turn toolbars and panels into decorative scenery.
 - Text is charcoal with a restrained deep blue-green or cool blue selection accent.
 - Use the macOS system font stack. Controls use explicit compact typography rather than browser defaults.
 - Prefer rails, separators, lists, and the full map canvas over nested cards or floating panels.

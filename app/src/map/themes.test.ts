@@ -1,8 +1,8 @@
 import { DEFAULT_MAP_THEME_ID, MAP_THEMES, mapTheme, validateThemeOverrides } from "./themes";
 
 describe("map theme overrides", () => {
-  it("uses a calm light canvas for the default ink theme", () => {
-    expect(mapTheme(DEFAULT_MAP_THEME_ID).canvas).toBe("#d7e4e3");
+  it("leaves the default ink canvas white until terrain is painted", () => {
+    expect(mapTheme(DEFAULT_MAP_THEME_ID).canvas).toBe("#ffffff");
   });
 
   it("immutably merges valid color overrides without mutating the base theme", () => {
