@@ -46,6 +46,13 @@ const MAX_GRID_EDGES = 20_000;
 const DEFAULT_GRID_OPTIONS: GridOptions = { kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 };
 const DEFAULT_CELL_GRID_OPTIONS: CellGridOptions = { color: "#d1d7dc", width: 0.65 };
 
+class CancelablePointerInteraction extends PointerInteraction {
+  cancelSequence(): void {
+    this.handlingDownUpSequence = false;
+    this.targetPointers = [];
+  }
+}
+
 const fixedCellGridLines = (): Position[][] => {
   const lines: Position[][] = [];
   const seen = new Set<string>();
@@ -305,7 +312,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private gridOptions: GridOptions = { ...DEFAULT_GRID_OPTIONS };
   private gridVisible = true;
   private cellBrushRadius: number = CELL_BRUSH_RADII.medium;
-  private brush: PointerInteraction | null = null;
+  private brush: CancelablePointerInteraction | null = null;
   private eraser: PointerInteraction | null = null;
   private brushLastPoint: [number, number] | null = null;
   private brushStrokeSelection = new Set<string>();
@@ -480,6 +487,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.target.addEventListener("keyup", this.handleKeyUp);
     this.target.addEventListener("contextmenu", this.handleContextMenu);
     this.target.addEventListener("pointerleave", this.handlePointerLeave);
+    this.target.ownerDocument.defaultView?.addEventListener("pointerup", this.handleExternalPointerUp);
+    this.target.ownerDocument.defaultView?.addEventListener("blur", this.handlePointerCancel);
     this.map.on(["pointermove"], this.handlePointerMove);
     this.map.getViewport().addEventListener("pointercancel", this.handlePointerCancel);
     this.map.getViewport().addEventListener("lostpointercapture", this.handlePointerCancel);
@@ -674,7 +683,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
     if (mode === "cell-select") {
       this.setSelected(null);
-      this.brush = new PointerInteraction({
+      this.brush = new CancelablePointerInteraction({
         handleDownEvent: (event) => {
           const pointer = event.originalEvent as PointerEvent;
           if (!pointer.isPrimary || pointer.button !== 0) return false;
@@ -779,6 +788,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       return;
     }
     if (event.code === "Space" && this.activeMode !== "pan" && !this.temporaryPan) {
+      this.cancelBrushStroke();
       this.temporaryPan = true;
       this.draw?.setActive(false);
       this.brush?.setActive(false);
@@ -822,9 +832,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       return;
     }
     if (this.activeMode !== "cell-select") return;
-    this.brushLastPoint = null;
-    this.brushStrokeSelection.clear();
-    this.brushSelectionBeforeStroke = [];
+    this.cancelBrushStroke(false);
     this.setSelectedCells([]);
     for (const listener of this.cellSelectListeners) listener([]);
     event.preventDefault();
@@ -845,12 +853,23 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (this.draw) this.draw.abortDrawing();
     this.lassoPoints = [];
     this.lassoAdditive = false;
-    if (this.activeMode !== "cell-select" || !this.brushLastPoint) return;
+    this.cancelBrushStroke();
+  };
+
+  private readonly handleExternalPointerUp = (event: PointerEvent): void => {
+    const ownerWindow = this.target.ownerDocument.defaultView;
+    if (ownerWindow && event.target instanceof ownerWindow.Node && this.target.contains(event.target)) return;
+    this.handlePointerCancel();
+  };
+
+  private cancelBrushStroke(restoreSelection = true): void {
+    const hadStroke = this.brushLastPoint !== null;
+    this.brush?.cancelSequence();
     this.brushLastPoint = null;
     this.brushStrokeSelection.clear();
-    this.setSelectedCells(this.brushSelectionBeforeStroke);
+    if (hadStroke && restoreSelection) this.setSelectedCells(this.brushSelectionBeforeStroke);
     this.brushSelectionBeforeStroke = [];
-  };
+  }
 
   private readonly handlePointerMove = (event: Event | BaseEvent): void => {
     if (this.activeMode !== "cell-select" || this.temporaryPan || this.brushLastPoint) {
@@ -870,6 +889,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   };
 
   private readonly handlePointerLeave = (): void => {
+    this.cancelBrushStroke();
     this.setHoveredCells([]);
   };
 
@@ -1184,6 +1204,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.target.removeEventListener("keyup", this.handleKeyUp);
     this.target.removeEventListener("contextmenu", this.handleContextMenu);
     this.target.removeEventListener("pointerleave", this.handlePointerLeave);
+    this.target.ownerDocument.defaultView?.removeEventListener("pointerup", this.handleExternalPointerUp);
+    this.target.ownerDocument.defaultView?.removeEventListener("blur", this.handlePointerCancel);
     this.map.un(["pointermove"], this.handlePointerMove);
     this.map.getViewport().removeEventListener("pointercancel", this.handlePointerCancel);
     this.map.getViewport().removeEventListener("lostpointercapture", this.handlePointerCancel);
