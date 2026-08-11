@@ -49,7 +49,7 @@ A bounded asset-pack import validates 1 through 256 images and at most 64 MiB be
 
 ## Hexagonal cell grid and attributes
 
-The schema stores a fixed 512 by 256 EPSG:4326 odd-row-offset grid. Cell identity remains `x:y`, with `x` from 0 through 511 and `y` from 0 through 255. Interior cells derive to six-sided bounded Voronoi polygons; cells at the rectangular world edge absorb the clipped remainder so the editable plane has no gaps. The renderer derives these polygons from the stable grid and does not persist OpenLayers or GeoJSON geometry for them.
+The schema stores a fixed 512 by 256 EPSG:4326 odd-row-offset grid. Cell identity remains `x:y`, with `x` from 0 through 511 and `y` from 0 through 255. Interior cells derive to six-sided bounded Voronoi polygons; cells at the rectangular world edge absorb the clipped remainder so the editable plane has no gaps. A dedicated bounded renderer displays the complete editing grid from the empty state, while semantic cell objects are created only for persistent terrain or transient brush selection. Neither representation persists OpenLayers or GeoJSON geometry.
 
 The `terrain` layer is present when a cell belongs to the drawn map and absent when it does not. A pointer stroke applies or clears the complete selected set transactionally. Existing `forest`, `country`, and `region` cell rows are preserved unchanged but hidden from the active editor. There is no `terrain_kind` value, and the editor does not reinterpret compatibility rows as terrain.
 

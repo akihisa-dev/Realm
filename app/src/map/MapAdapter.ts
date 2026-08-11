@@ -16,14 +16,14 @@ import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
 import Fill from "ol/style/Fill";
 import Stroke from "ol/style/Stroke";
-import Style from "ol/style/Style";
+import Style, { type RenderFunction } from "ol/style/Style";
 import Text from "ol/style/Text";
 import { platformModifierKeyOnly, singleClick } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, Position, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
-import { CELL_BRUSH_RADII, cellIdsWithinBrushPath as gridCellIdsWithinBrushPath, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
+import { CELL_BRUSH_RADII, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellIdsWithinBrushPath as gridCellIdsWithinBrushPath, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
 import { MAX_SMOOTHING_PASSES, refineDrawnGeometry, snapPositionToAngle } from "./drawingGeometry";
 import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
@@ -31,9 +31,9 @@ import { createCellStyle, createFeatureStyle, MAP_LABEL_FONT } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
 import { paintMapTexture } from "./mapTexture";
 import { assertGeometryWithinWorld } from "./geometryGuard";
-import type { DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
+import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 
-export type { DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
+export type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellBrushSize } from "./gridGeometry";
 export { CELL_BRUSH_RADII, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellCenter, cellId, cellIdsWithinBrushPath, cellPolygon, parseCellId } from "./gridGeometry";
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
@@ -42,6 +42,7 @@ type Segment = readonly [Position, Position];
 const MAX_LASSO_POINTS = 4096;
 const MAX_GRID_EDGES = 20_000;
 const DEFAULT_GRID_OPTIONS: GridOptions = { kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 };
+const DEFAULT_CELL_GRID_OPTIONS: CellGridOptions = { color: "#d1d7dc", width: 0.65 };
 
 const createGraticule = (options: GridOptions): Graticule => new Graticule({
   strokeStyle: new Stroke({ color: options.color, lineDash: [4, 4], width: options.width }),
@@ -255,6 +256,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly featureStyle = createFeatureStyle(() => this.activeThemeId, (featureType) => featureType === undefined || !this.hiddenFeatureTypes.has(featureType), (assetId) => this.assetUrls[assetId], () => this.themeOverrides);
   private readonly cellSource = new VectorSource();
   private readonly cellLayer: VectorLayer;
+  private readonly cellGridSource = new VectorSource();
+  private readonly cellGridLayer: VectorLayer;
   private readonly gridSource = new VectorSource();
   private readonly gridStroke = new Stroke({ color: DEFAULT_GRID_OPTIONS.color, width: DEFAULT_GRID_OPTIONS.width });
   private readonly gridLayer = new VectorLayer({ source: this.gridSource, style: new Style({ stroke: this.gridStroke }), zIndex: -10, visible: false });
@@ -273,6 +276,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private modifierStraighten = false;
   private gridOptions: GridOptions = { ...DEFAULT_GRID_OPTIONS };
   private gridVisible = true;
+  private cellGridOptions: CellGridOptions = { ...DEFAULT_CELL_GRID_OPTIONS };
   private cellBrushRadius: number = CELL_BRUSH_RADII.medium;
   private brush: PointerInteraction | null = null;
   private eraser: PointerInteraction | null = null;
@@ -298,6 +302,55 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private lassoAdditive = false;
   private suppressSelectionUntil = 0;
   private disposed = false;
+
+  private readonly renderCellGrid: RenderFunction = (pixelCoordinates, state): void => {
+    const rings = pixelCoordinates as number[][][];
+    const ring = rings[0];
+    if (!ring || ring.length < 4) return;
+    const xs = ring.map((coordinate) => coordinate[0] ?? Number.NaN);
+    const ys = ring.map((coordinate) => coordinate[1] ?? Number.NaN);
+    const left = Math.min(...xs);
+    const right = Math.max(...xs);
+    const top = Math.min(...ys);
+    const bottom = Math.max(...ys);
+    const cellWidth = (right - left) / CELL_GRID_COLUMNS;
+    const cellHeight = (bottom - top) / CELL_GRID_ROWS;
+    if (![left, right, top, bottom, cellWidth, cellHeight].every(Number.isFinite) || cellWidth <= 0 || cellHeight <= 0) return;
+
+    const context = state.context;
+    const pixelRatio = Number.isFinite(state.pixelRatio) && state.pixelRatio > 0 ? state.pixelRatio : 1;
+    const viewportWidth = context.canvas.width / pixelRatio;
+    const viewportHeight = context.canvas.height / pixelRatio;
+    const minRow = Math.max(0, Math.floor((bottom - viewportHeight) / cellHeight) - 1);
+    const maxRow = Math.min(CELL_GRID_ROWS - 1, Math.ceil(bottom / cellHeight) + 1);
+
+    context.save();
+    context.beginPath();
+    context.rect(left, top, right - left, bottom - top);
+    context.clip();
+    context.beginPath();
+    for (let row = minRow; row <= maxRow; row += 1) {
+      const centerY = bottom - (row + 0.5) * cellHeight;
+      const offset = row % 2 === 0 ? 0 : 0.5;
+      const minColumn = Math.max(0, Math.floor((0 - left) / cellWidth - offset - 1.5));
+      const maxColumn = Math.min(CELL_GRID_COLUMNS - 1, Math.ceil((viewportWidth - left) / cellWidth - offset + 0.5));
+      if (minColumn > maxColumn) continue;
+      const firstCenterX = left + (minColumn + 0.5 + offset) * cellWidth;
+      context.moveTo(firstCenterX - cellWidth / 2, centerY - cellHeight * 0.375);
+      for (let column = minColumn; column <= maxColumn; column += 1) {
+        const centerX = left + (column + 0.5 + offset) * cellWidth;
+        context.lineTo(centerX, centerY - cellHeight * 0.625);
+        context.lineTo(centerX + cellWidth / 2, centerY - cellHeight * 0.375);
+        context.moveTo(centerX + cellWidth / 2, centerY + cellHeight * 0.375);
+        context.lineTo(centerX + cellWidth / 2, centerY - cellHeight * 0.375);
+      }
+    }
+    context.rect(left, top, right - left, bottom - top);
+    context.strokeStyle = this.cellGridOptions.color;
+    context.lineWidth = this.cellGridOptions.width;
+    context.stroke();
+    context.restore();
+  };
 
   private readonly handleSelection = (): void => {
     this.emitSelection();
@@ -375,6 +428,13 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
     this.featureLayer = new VectorLayer({ source: this.featureSource, style: this.featureStyle });
     this.cellLayer = new VectorLayer({ source: this.cellSource, style: this.cellStyle, visible: true });
+    this.cellGridSource.addFeature(new Feature({ geometry: new Polygon([[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]]) }));
+    this.cellGridLayer = new VectorLayer({
+      source: this.cellGridSource,
+      style: new Style({ renderer: this.renderCellGrid }),
+      visible: false,
+      zIndex: 4,
+    });
     this.selection = new SelectModule.default({
       layers: [this.featureLayer],
       multi: true,
@@ -426,7 +486,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
     this.map = new Map({
       target,
-      layers: [this.graticule, referenceAxes, this.featureLayer, this.cellLayer, this.gridLayer],
+      layers: [this.graticule, referenceAxes, this.featureLayer, this.cellLayer, this.gridLayer, this.cellGridLayer],
       view: new View({
         projection: "EPSG:4326",
         center: [0, 0],
@@ -554,6 +614,17 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.setGridVisible(this.gridVisible);
   }
 
+  setCellGridVisible(visible: boolean): void {
+    this.cellGridLayer.setVisible(visible);
+  }
+
+  setCellGridOptions(options: CellGridOptions): void {
+    if (!/^#[\da-f]{6}$/i.test(options.color)) throw new Error("Cell grid color must be a #RRGGBB value.");
+    if (!Number.isFinite(options.width) || options.width < 0.25 || options.width > 4) throw new Error("Cell grid width must be between 0.25 and 4.");
+    this.cellGridOptions = { ...options };
+    this.cellGridLayer.changed();
+  }
+
   setAssets(assetUrls: Readonly<Record<string, string>>): void {
     this.assetUrls = { ...assetUrls };
     this.featureLayer.changed();
@@ -615,8 +686,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.selection.setActive(mode === "pan");
     this.lasso.setActive(mode === "pan");
     this.cellLayer.setVisible(true);
-    for (const feature of this.cellSource.getFeatures()) feature.set("showGrid", mode === "cell-select", true);
-    this.cellLayer.changed();
     this.setNavigationActive(mode === "pan");
     if (mode === "erase") {
       this.setSelected(null);
@@ -854,7 +923,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       const [row, column] = parseCellId(id)!;
       const ring = gridCellPolygon(row, column);
       if (!ring) continue;
-      const feature = new Feature({ geometry: new Polygon([ring]), selected: false, showGrid: false, attributes: this.cellAttributesById.get(id) ?? [] });
+      const feature = new Feature({ geometry: new Polygon([ring]), selected: false, attributes: this.cellAttributesById.get(id) ?? [] });
       feature.setId(id);
       this.cellFeatures.set(id, feature);
       features.push(feature);
@@ -864,6 +933,14 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   private getCellFeature(id: string): Feature | undefined {
     return this.cellFeatures.get(id);
+  }
+
+  private removeUnusedCell(id: string): void {
+    if (this.selectedCellIds.has(id) || this.cellAttributesById.has(id)) return;
+    const feature = this.cellFeatures.get(id);
+    if (!feature) return;
+    this.cellSource.removeFeature(feature);
+    this.cellFeatures.delete(id);
   }
 
   private validCellIds(cellIds: readonly string[]): string[] {
@@ -894,7 +971,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.ensureCells(validIds);
     const next = new Set(validIds);
     for (const id of this.selectedCellIds) {
-      if (!next.has(id)) this.getCellFeature(id)?.set("selected", false, true);
+      if (!next.has(id)) {
+        this.getCellFeature(id)?.set("selected", false, true);
+        this.selectedCellIds.delete(id);
+        this.removeUnusedCell(id);
+      }
     }
     for (const id of next) {
       if (!this.selectedCellIds.has(id)) this.getCellFeature(id)?.set("selected", true, true);
@@ -919,6 +1000,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       if (feature) feature.set("attributes", next, true);
     }
     this.cellAttributesById = byCell;
+    for (const id of changedIds) this.removeUnusedCell(id);
     this.cellLayer.changed();
   }
 
@@ -1106,6 +1188,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellSource.clear();
     this.gridSource.clear();
     this.map.removeLayer(this.gridLayer);
+    this.cellGridSource.clear();
+    this.map.removeLayer(this.cellGridLayer);
     this.cellFeatures.clear();
     this.cellAttributesById.clear();
     this.selectedCellIds.clear();

@@ -10,11 +10,13 @@ vi.mock("./MapCanvas", () => ({
     selectedCellIds?: readonly string[];
     mode?: string;
     showGrid?: boolean;
+    showCellGrid?: boolean;
+    zoom?: number;
     onCellSelect?: (ids: readonly string[]) => void;
     onError?: (code: "drawing_self_intersection") => void;
   }) => {
     const initialCellSelect = useRef(props.onCellSelect);
-    return <div role="region" aria-label="世界地図" data-mode={props.mode} data-grid-visible={String(props.showGrid)}>
+    return <div role="region" aria-label="世界地図" data-mode={props.mode} data-grid-visible={String(props.showGrid)} data-cell-grid-visible={String(props.showCellGrid)} data-zoom={String(props.zoom)}>
       <output aria-label="描画対象">{props.features?.map(({ featureType }) => featureType).join(",")}</output>
       <button type="button" onClick={() => props.onCellSelect?.(["1:1", "1:2"])}>テストセル描画</button>
       <button type="button" onClick={() => initialCellSelect.current?.(["1:1"])}>テスト遅延セル操作</button>
@@ -64,6 +66,8 @@ it("applies terrain to selected hex cells", async () => {
 
   expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-select");
   expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-grid-visible", "false");
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-cell-grid-visible", "true");
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-zoom", "4");
   fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
 
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([

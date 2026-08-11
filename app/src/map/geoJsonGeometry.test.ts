@@ -50,17 +50,16 @@ describe("map geometry modules", () => {
     expect(unknownStyle && (Array.isArray(unknownStyle) ? unknownStyle[0]?.getText() : unknownStyle.getText())).toBeNull();
 
     const cellStyle = createCellStyle();
-    const empty = new Feature({ attributes: [], selected: false, showGrid: false });
+    const empty = new Feature({ attributes: [], selected: false });
     const layered = new Feature({
       attributes: [
         { cellId: "0:0", attribute: "country", value: "A" },
         { cellId: "0:0", attribute: "region", value: "B" },
       ],
       selected: true,
-      showGrid: true,
     });
     expect(cellStyle(empty)).toBeUndefined();
-    expect(cellStyle(layered)).toHaveLength(4);
+    expect(cellStyle(layered)).toHaveLength(3);
     expect(cellStyle(layered)).toBe(cellStyle(layered));
   });
 
@@ -118,11 +117,11 @@ describe("map geometry modules", () => {
     expect(after).not.toBe(before);
     expect((Array.isArray(after) ? after[1] : after)?.getStroke()?.getColor()).toBe("#405060");
 
-    let cellOverrides: { grid?: string } = { grid: "#102030" };
+    let cellOverrides: { land?: string } = { land: "#102030" };
     const cellStyle = createCellStyle(() => "ink", () => cellOverrides);
-    const cell = new Feature({ id: "cell", attributes: [], selected: false, showGrid: true });
+    const cell = new Feature({ id: "cell", attributes: [{ cellId: "0:0", attribute: "terrain", value: "terrain" }], selected: false });
     const cellBefore = cellStyle(cell);
-    cellOverrides = { grid: "#405060" };
+    cellOverrides = { land: "#405060" };
     const cellAfter = cellStyle(cell);
     expect(cellAfter).not.toBe(cellBefore);
   });

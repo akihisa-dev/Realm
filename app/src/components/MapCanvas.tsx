@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import {
   createRealmMapRenderer,
+  type CellGridOptions,
   type DrawingOptions,
   type GridOptions,
   type RealmMapRenderer,
@@ -26,9 +27,11 @@ type MapCanvasProps = {
   cellBrushRadius?: number;
   drawingOptions?: DrawingOptions;
   gridOptions?: GridOptions;
+  cellGridOptions?: CellGridOptions;
   themeOverrides?: ThemeOverrides;
   themeId?: MapThemeId;
   showGrid?: boolean;
+  showCellGrid?: boolean;
   onDraw?: (geometry: GeoJsonGeometry) => void;
   onSelect?: (featureId: string | null) => void;
   onSelectFeatures?: (featureIds: readonly string[]) => void;
@@ -55,9 +58,11 @@ export function MapCanvas({
   cellBrushRadius = 1,
   drawingOptions = { gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null },
   gridOptions = { kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 },
+  cellGridOptions = { color: "#d1d7dc", width: 0.65 },
   themeOverrides = {},
   themeId = DEFAULT_MAP_THEME_ID,
   showGrid = true,
+  showCellGrid = false,
   onDraw,
   onSelect,
   onSelectFeatures,
@@ -115,6 +120,8 @@ export function MapCanvas({
   useEffect(() => { adapterRef.current?.setThemeOverrides(themeOverrides); }, [themeOverrides]);
   useEffect(() => { adapterRef.current?.setGridVisible(showGrid); }, [showGrid]);
   useEffect(() => { adapterRef.current?.setGridOptions(gridOptions); }, [gridOptions]);
+  useEffect(() => { adapterRef.current?.setCellGridVisible(showCellGrid); }, [showCellGrid]);
+  useEffect(() => { adapterRef.current?.setCellGridOptions(cellGridOptions); }, [cellGridOptions]);
   useEffect(() => { adapterRef.current?.setMode(mode); }, [mode]);
   useEffect(() => { adapterRef.current?.setDrawingOptions(drawingOptions); }, [drawingOptions]);
   useEffect(() => { adapterRef.current?.setCellAttributes(cellAttributes); }, [cellAttributes]);
@@ -153,6 +160,8 @@ export function MapCanvas({
     adapter.setThemeOverrides(themeOverrides);
     adapter.setGridVisible(showGrid);
     adapter.setGridOptions(gridOptions);
+    adapter.setCellGridVisible(showCellGrid);
+    adapter.setCellGridOptions(cellGridOptions);
     adapter.setMode(mode);
     adapter.setDrawingOptions(drawingOptions);
     adapter.setCellAttributes(cellAttributes);

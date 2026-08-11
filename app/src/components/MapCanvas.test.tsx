@@ -20,6 +20,8 @@ describe("MapCanvas", () => {
       setThemeOverrides: vi.fn(),
       setGridVisible: vi.fn(),
       setGridOptions: vi.fn(),
+      setCellGridVisible: vi.fn(),
+      setCellGridOptions: vi.fn(),
       setAssets: vi.fn(),
       setLayerVisibility: vi.fn(),
       setMode: vi.fn(),
@@ -59,6 +61,8 @@ describe("MapCanvas", () => {
     expect(renderer.setZoom).toHaveBeenCalledWith(3);
     expect(onZoomChange).toHaveBeenLastCalledWith(3);
     expect(renderer.setGridVisible).toHaveBeenCalledWith(true);
+    expect(renderer.setCellGridVisible).toHaveBeenCalledWith(false);
+    expect(renderer.setCellGridOptions).toHaveBeenCalledWith({ color: "#d1d7dc", width: 0.65 });
     expect(renderer.setThemeOverrides).toHaveBeenCalledWith({});
     expect(renderer.setGridOptions).toHaveBeenCalledWith({ kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 });
     expect(renderer.setDrawingOptions).toHaveBeenCalledWith({ gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null });
@@ -80,6 +84,9 @@ describe("MapCanvas", () => {
     expect(renderer.setZoom).toHaveBeenLastCalledWith(5);
     rerender(<MapCanvas showGrid={false} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setGridVisible).toHaveBeenLastCalledWith(false);
+    rerender(<MapCanvas showCellGrid cellGridOptions={{ color: "#102030", width: 1.5 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(renderer.setCellGridVisible).toHaveBeenLastCalledWith(true);
+    expect(renderer.setCellGridOptions).toHaveBeenLastCalledWith({ color: "#102030", width: 1.5 });
     rerender(<MapCanvas gridOptions={{ kind: "hex", color: "#102030", width: 1.5, spacingDegrees: 12 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setGridOptions).toHaveBeenLastCalledWith({ kind: "hex", color: "#102030", width: 1.5, spacingDegrees: 12 });
     rerender(<MapCanvas themeOverrides={{ land: "#aabbcc" }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);

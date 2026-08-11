@@ -26,6 +26,7 @@ export type GridOptions = {
   width: number;
   spacingDegrees: number;
 };
+export type CellGridOptions = Pick<GridOptions, "color" | "width">;
 
 export interface RealmMapRenderer {
   getZoom(): number;
@@ -36,6 +37,8 @@ export interface RealmMapRenderer {
   setThemeOverrides(overrides: ThemeOverrides): void;
   setGridVisible(visible: boolean): void;
   setGridOptions(options: GridOptions): void;
+  setCellGridVisible(visible: boolean): void;
+  setCellGridOptions(options: CellGridOptions): void;
   setAssets(assetUrls: Readonly<Record<string, string>>): void;
   setLayerVisibility(featureType: FeatureType, visible: boolean): void;
   setMode(mode: RealmMapMode): void;

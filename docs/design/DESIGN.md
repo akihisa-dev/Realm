@@ -6,7 +6,7 @@ Realm's editing surface stays quiet so the map remains the dominant object. The 
 
 ## Initial states
 
-- Realm enters the editor directly. It restores the open world when one exists, otherwise opens the first world in the app-managed library, or creates `無題の世界` when the library is empty.
+- Realm enters the editor directly with the fixed hexagonal editing grid already visible at relative zoom 4 so individual cells are large enough to edit. It restores the open world when one exists, otherwise opens the first world in the app-managed library, or creates `無題の世界` when the library is empty.
 - The editor provides the three terrain tools (move, draw, and erase) plus `戻す` and `進む`. Valid terrain edits save automatically.
 
 Visible controls remain code-native. The primary rail exposes exactly three tools: move, draw terrain, and erase terrain. There is no startup screen, terrain list, creation form, brush-settings panel, or presentation-settings sidebar. Drawing and erasing use one fixed hex-cell brush, and adjacent cell edges define the map boundary. Feature rows and non-terrain compatibility cells never appear in the editor.
@@ -32,7 +32,7 @@ The editor uses only `戻す`, `進む`, `移動`, `地形を描く`, and `地�
 
 React owns transient interface state, including the terrain tool, viewport, and current brush selection. OpenLayers objects, derived hex polygons, and theme definitions live behind the map adapter and never become storage. The selected theme identifier, grid visibility, export scale, and export extent are bounded project settings that survive reopening.
 
-Only `terrain` cell attributes are passed from the editor to the cell renderer. The renderer derives a tessellating polygon for each stable cell identifier and fills it with the terrain theme; world-edge cells are clipped to the canvas boundary. Feature rows and older non-terrain cell rows remain storage compatibility data and are not rendered by the editor.
+Only `terrain` cell attributes are passed from the editor to the semantic cell renderer. A separate bounded renderer draws the complete fixed editing grid without creating persistent or selectable cell objects. The semantic renderer derives a tessellating polygon only for terrain and transient brush cells and fills it with the terrain theme; clearing terrain removes that semantic polygon so no outline trail remains. World-edge cells and the editing grid are clipped to the canvas boundary. Feature rows and older non-terrain cell rows remain storage compatibility data and are not rendered by the editor.
 
 ## App icon assets
 

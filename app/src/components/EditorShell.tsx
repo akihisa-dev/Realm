@@ -26,7 +26,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [activeTool, setActiveTool] = useState<Tool>("terrain");
   const [cellAttributes, setCellAttributes] = useState<CellAttributeSnapshot[]>([]);
   const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(4);
   const [operating, setOperating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeToolRef = useRef<Tool>("terrain");
@@ -92,6 +92,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         setViewedSnapshot(next);
         onSaved(next);
         await refreshCellAttributes(identity);
+        setSelectedCellIds([]);
       } catch (cause) {
         if (mounted.current && viewedIdentity.current === identity) setError(errorMessage(cause, fallback));
       } finally {
@@ -164,6 +165,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             themeId={settings.themeId}
             themeOverrides={settings.themeOverrides}
             showGrid={false}
+            showCellGrid
+            cellGridOptions={{ color: settings.gridColor, width: settings.gridWidth }}
             gridOptions={{ kind: "hex", color: settings.gridColor, width: settings.gridWidth, spacingDegrees: settings.gridSpacing }}
             onCellSelect={applyCellSelection}
             onError={(code) => setError(mapErrorMessage(code))}

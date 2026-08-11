@@ -237,6 +237,24 @@ describe("RealmMapAdapter", () => {
     adapter.setFeatures([{ id: "city", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [0, 0] } }]);
     adapter.setGridOptions({ kind: "hex", color: "#102030", width: 1.25, spacingDegrees: 30 });
     const hexLayer = adapter.getMap().getLayers().item(4) as VectorLayer;
+    const cellGridLayer = adapter.getMap().getLayers().item(5) as VectorLayer;
+    expect(cellGridLayer.getSource()?.getFeatures()).toHaveLength(1);
+    expect(cellGridLayer.getVisible()).toBe(false);
+    adapter.setCellGridVisible(true);
+    expect(cellGridLayer.getVisible()).toBe(true);
+    adapter.setCellGridOptions({ color: "#203040", width: 0.75 });
+    const renderer = (cellGridLayer.getStyle() as Style).getRenderer();
+    const lineTo = vi.fn();
+    const stroke = vi.fn();
+    const context = {
+      canvas: { width: 640, height: 480 }, save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(), rect: vi.fn(), clip: vi.fn(),
+      moveTo: vi.fn(), lineTo, stroke, strokeStyle: "", lineWidth: 0,
+    } as unknown as CanvasRenderingContext2D;
+    renderer?.([[[0, 480], [640, 480], [640, 0], [0, 0], [0, 480]]], { context, pixelRatio: 1 } as never);
+    expect(lineTo).toHaveBeenCalled();
+    expect(stroke).toHaveBeenCalledOnce();
+    expect(() => adapter.setCellGridOptions({ color: "gray", width: 0.75 })).toThrow(/RRGGBB/);
+    expect(() => adapter.setCellGridOptions({ color: "#203040", width: 0.1 })).toThrow(/width/);
     const firstEdges = hexLayer.getSource()?.getFeatures().map((feature) => feature.getId());
     expect(firstEdges?.length).toBeGreaterThan(0);
     for (const feature of hexLayer.getSource()?.getFeatures() ?? []) {
@@ -410,7 +428,7 @@ describe("RealmMapAdapter", () => {
     adapter.setSelectedCells(["0:0"]);
     adapter.setSelectedCells([]);
     adapter.setCellAttributes([]);
-    expect((adapter.getMap().getLayers().item(3) as VectorLayer).getSource()?.getFeatures()).toHaveLength(1);
+    expect((adapter.getMap().getLayers().item(3) as VectorLayer).getSource()?.getFeatures()).toHaveLength(0);
     adapter.setMode("river");
     const riverDraw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
     expect(riverDraw).toBeInstanceOf(Draw);
@@ -444,7 +462,18 @@ describe("RealmMapAdapter", () => {
     adapter.setMode("cell-select");
     const cellLayer = adapter.getMap().getLayers().item(3) as VectorLayer;
     expect(cellLayer.getVisible()).toBe(true);
-    expect(cellLayer.getSource()?.getFeatures()).toHaveLength(1);
+    expect(cellLayer.getSource()?.getFeatures()).toHaveLength(0);
+    adapter.setCellGridVisible(true);
+    const fixedCellGridLayer = adapter.getMap().getLayers().item(5) as VectorLayer;
+    expect(fixedCellGridLayer.getVisible()).toBe(true);
+    expect(fixedCellGridLayer.getSource()?.getFeatures()).toHaveLength(1);
+    adapter.setCellAttributes([{ cellId: "2:2", attribute: "terrain", value: "terrain" }]);
+    expect(cellLayer.getSource()?.getFeatureById("2:2")).toBeDefined();
+    adapter.setMode("pan");
+    adapter.setCellAttributes([]);
+    adapter.setMode("cell-select");
+    expect(cellLayer.getSource()?.getFeatureById("2:2")).toBeNull();
+    expect(fixedCellGridLayer.getVisible()).toBe(true);
     adapter.setCellAttributes([
       { cellId: "0:0", attribute: "terrain", value: "terrain" },
       { cellId: "1:0", attribute: "forest", value: "forest" },
