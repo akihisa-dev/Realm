@@ -34,6 +34,7 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .rail-item-active { color: #007c89; font-weight: 700; }
 .rail-item-active::before { position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: #078c98; content: ""; }
 .map-region { position: relative; grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; background: #fff; }
+.map-canvas-shell { position: relative; width: 100%; height: 100%; overflow: hidden; }
 .map-canvas { width: 100%; height: 100%; }
 .map-canvas:focus-visible { outline: 2px solid #078c98; outline-offset: -3px; }
 .map-canvas .ol-viewport { background: transparent; }
@@ -44,6 +45,10 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .map-texture { position: absolute; z-index: 2; inset: 0; pointer-events: none; opacity: .62; mix-blend-mode: multiply; background-size: 31px 37px, 53px 47px; background-image: radial-gradient(circle at 7px 11px, rgba(54,43,29,.11) 0 .7px, transparent .9px), radial-gradient(circle at 29px 31px, rgba(255,255,255,.14) 0 .6px, transparent .9px); }
 .map-texture-atlas { opacity: .34; background-size: 47px 43px, 71px 59px; }
 .map-texture-midnight { opacity: .48; mix-blend-mode: screen; background-image: radial-gradient(circle at 7px 11px, rgba(227,219,181,.12) 0 .7px, transparent .9px), radial-gradient(circle at 29px 31px, rgba(0,0,0,.18) 0 .6px, transparent .9px); }
+.radial-palette { position: absolute; z-index: 4; width: 0; height: 0; pointer-events: auto; }
+.radial-palette::before { position: absolute; left: -30px; top: -30px; width: 60px; height: 60px; border: 1px solid rgba(29, 32, 37, .18); border-radius: 50%; background: rgba(255, 255, 255, .9); box-shadow: 0 8px 24px rgba(29, 32, 37, .16); content: ""; }
+.radial-palette-core { position: absolute; left: -5px; top: -5px; z-index: 1; width: 10px; height: 10px; border: 1px solid #078c98; border-radius: 50%; background: #fff; }
+.radial-palette-slot { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border: 1px solid rgba(29, 32, 37, .2); border-radius: 50%; background: rgba(255, 255, 255, .96); box-shadow: 0 3px 10px rgba(29, 32, 37, .12); transform: rotate(calc(var(--slot) * 45deg)) translateY(-48px) rotate(calc(var(--slot) * -45deg)); transform-origin: 14px 62px; }
 .save-error { position: absolute; right: 20px; top: 15px; margin: 0; padding: 8px 12px; border: 1px solid #c23c42; border-radius: 5px; background: #fff5f5; color: #991b1f; }
 
 @media (max-width: 660px) {

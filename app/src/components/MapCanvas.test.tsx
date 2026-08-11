@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { RealmMapRenderer } from "../map/MapAdapter";
 import { MapCanvas } from "./MapCanvas";
 
@@ -70,6 +70,13 @@ describe("MapCanvas", () => {
     expect(renderer.setCellAttributes).toHaveBeenCalledWith([]);
     expect(renderer.setSelectedCells).toHaveBeenCalledWith([]);
     expect(screen.queryByRole("group", { name: "現在の地図操作" })).not.toBeInTheDocument();
+    const map = screen.getByRole("region", { name: "世界地図" });
+    fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
+    expect(document.querySelector(".radial-palette")).toHaveStyle({ left: "120px", top: "80px" });
+    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(8);
+    expect(document.querySelector(".radial-palette")?.textContent).toBe("");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
     (drawListener as ((geometry: never) => void) | null)?.({} as never);
     (selectFeaturesListener as ((ids: readonly string[]) => void) | null)?.([]);
     (cellSelectListener as ((ids: readonly string[]) => void) | null)?.(["2:3"]);

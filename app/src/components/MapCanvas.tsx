@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
   createRealmMapRenderer,
   type CellGridOptions,
@@ -14,6 +14,13 @@ import type { MapErrorCode } from "../map/errors";
 import { DEFAULT_MAP_THEME_ID, type MapThemeId, type ThemeOverrides } from "../map/themes";
 
 export type TerrainMapMode = "pan" | "cell-select";
+
+type RadialPalettePosition = {
+  x: number;
+  y: number;
+};
+
+const RADIAL_PALETTE_SLOTS = 8;
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;
@@ -78,6 +85,7 @@ export function MapCanvas({
 }: MapCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<RealmMapRenderer | null>(null);
+  const [radialPalettePosition, setRadialPalettePosition] = useState<RadialPalettePosition | null>(null);
   const onZoomChangeRef = useRef(onZoomChange);
   const onDrawRef = useRef(onDraw);
   const onSelectRef = useRef(onSelect);
@@ -189,11 +197,47 @@ export function MapCanvas({
     };
   }, [createRenderer]);
 
+  useEffect(() => {
+    if (!radialPalettePosition) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setRadialPalettePosition(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [radialPalettePosition]);
+
+  const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setRadialPalettePosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+  };
+
   return (
-    <>
+    <div className="map-canvas-shell" onPointerDown={() => setRadialPalettePosition(null)}>
       <p id="map-help" className="sr-only">{mapHelp}</p>
-      <div ref={hostRef} className={mode === "pan" ? "map-canvas" : "map-canvas map-canvas-draw"} role="region" tabIndex={0} aria-label="世界地図" aria-describedby="map-help" />
+      <div
+        ref={hostRef}
+        className={mode === "pan" ? "map-canvas" : "map-canvas map-canvas-draw"}
+        role="region"
+        tabIndex={0}
+        aria-label="世界地図"
+        aria-describedby="map-help"
+        onContextMenu={handleContextMenu}
+      />
       <span className={`map-texture map-texture-${themeId}`} aria-hidden="true" />
-    </>
+      {radialPalettePosition ? (
+        <div
+          className="radial-palette"
+          aria-hidden="true"
+          style={{ left: radialPalettePosition.x, top: radialPalettePosition.y }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <span className="radial-palette-core" />
+          {Array.from({ length: RADIAL_PALETTE_SLOTS }, (_, index) => (
+            <span className="radial-palette-slot" style={{ "--slot": index } as React.CSSProperties} key={index} />
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
