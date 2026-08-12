@@ -54,8 +54,8 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
   100% { opacity: 1; transform: rotate(calc(var(--slot) * 45deg)) translateY(-48px) rotate(calc(var(--slot) * -45deg)); }
 }
 .radial-palette-slot { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border: 1px solid rgba(29, 32, 37, .2); border-radius: 50%; background: rgba(255, 255, 255, .96); box-shadow: 0 3px 10px rgba(29, 32, 37, .12); transform: rotate(calc(var(--slot) * 45deg)) translateY(-48px) rotate(calc(var(--slot) * -45deg)); transform-origin: 14px 62px; }
-.radial-palette-opening .radial-palette-slot { animation: radial-palette-slot-spiral 180ms cubic-bezier(.22, .8, .3, 1) calc(var(--slot) * 10ms) both; }
-.radial-palette-closing .radial-palette-slot { animation: radial-palette-slot-spiral 180ms cubic-bezier(.7, 0, .78, .2) calc((7 - var(--slot)) * 10ms) both reverse; }
+.radial-palette-opening .radial-palette-slot { animation: radial-palette-slot-spiral 280ms cubic-bezier(.22, .8, .3, 1) calc(var(--slot) * 10ms) both; }
+.radial-palette-closing .radial-palette-slot { animation: radial-palette-slot-spiral 280ms cubic-bezier(.7, 0, .78, .2) calc((7 - var(--slot)) * 10ms) both reverse; }
 .save-error { position: absolute; right: 20px; top: 15px; margin: 0; padding: 8px 12px; border: 1px solid #c23c42; border-radius: 5px; background: #fff5f5; color: #991b1f; }
 
 @media (max-width: 660px) {

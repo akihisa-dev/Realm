@@ -27,7 +27,7 @@ type RadialPaletteState = RadialPalettePosition & {
 const RADIAL_PALETTE_SLOTS = 8;
 // The slots have a short staggered animation. Keep the mounted element around
 // for the same total duration while it winds back to the center on dismissal.
-const RADIAL_PALETTE_ANIMATION_MS = 260;
+const RADIAL_PALETTE_ANIMATION_MS = 360;
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;

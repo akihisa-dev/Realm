@@ -77,7 +77,7 @@ describe("MapCanvas", () => {
     expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-opening");
     expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(8);
     expect(document.querySelector(".radial-palette")?.textContent).toBe("");
-    act(() => { vi.advanceTimersByTime(260); });
+    act(() => { vi.advanceTimersByTime(360); });
     expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-open");
     fireEvent.pointerDown(document.querySelector(".radial-palette") as Element);
     expect(document.querySelector(".radial-palette")).toBeInTheDocument();
@@ -85,12 +85,12 @@ describe("MapCanvas", () => {
     map.addEventListener("pointerdown", onMapPointerDown);
     fireEvent.pointerDown(map, { button: 0 });
     expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-closing");
-    act(() => { vi.advanceTimersByTime(260); });
+    act(() => { vi.advanceTimersByTime(360); });
     expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
     expect(onMapPointerDown).not.toHaveBeenCalled();
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     fireEvent.keyDown(window, { key: "Escape" });
-    act(() => { vi.advanceTimersByTime(260); });
+    act(() => { vi.advanceTimersByTime(360); });
     expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
     (drawListener as ((geometry: never) => void) | null)?.({} as never);
     (selectFeaturesListener as ((ids: readonly string[]) => void) | null)?.([]);
