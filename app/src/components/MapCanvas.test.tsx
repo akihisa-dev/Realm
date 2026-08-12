@@ -134,6 +134,8 @@ describe("MapCanvas", () => {
     expect(renderer.setSelectedCells).toHaveBeenCalledWith([]);
     expect(screen.queryByRole("group", { name: "現在の地図操作" })).not.toBeInTheDocument();
     const map = screen.getByRole("region", { name: "世界地図" });
+    expect(map).toHaveClass("map-canvas-mode-pan");
+    expect(map).not.toHaveClass("map-canvas-disabled");
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).toHaveStyle({ left: "120px", top: "80px" });
     expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-opening");
@@ -220,11 +222,13 @@ describe("MapCanvas", () => {
     rerender(<MapCanvas mode="cell-select" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
+    expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-mode-cell-select");
     expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
 
     rerender(<MapCanvas mode="cell-erase" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("六角セルを押したままなぞって地形を消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。")).toBeInTheDocument();
     expect(renderer.setMode).toHaveBeenLastCalledWith("cell-erase");
+    expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-mode-cell-erase");
 
     const syncOrder: string[] = [];
     renderer.setCellAttributes = vi.fn(() => { syncOrder.push("attributes"); });
@@ -238,9 +242,10 @@ describe("MapCanvas", () => {
     expect(renderer.setDrawingOptions).toHaveBeenLastCalledWith({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
     expect(screen.getByText("六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
 
-    rerender(<MapCanvas mode="pan" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    rerender(<MapCanvas mode="pan" disabled zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。")).toBeInTheDocument();
     expect(renderer.setMode).toHaveBeenLastCalledWith("pan");
+    expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-disabled");
     unmount();
     expect(renderer.dispose).toHaveBeenCalledOnce();
     vi.useRealTimers();

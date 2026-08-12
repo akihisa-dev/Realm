@@ -26,6 +26,8 @@ The editor uses one native overlay title bar with only `戻す` and `進む`, a 
 
 The move tool pans the viewpoint with a primary-button drag. A middle-button drag pans in every tool without changing the active tool, and Space plus a primary-button drag provides the same temporary navigation path. Viewpoint movement remains constrained to the fixed editing world so the grid cannot be dragged aside to expose empty canvas. Wheel rotation zooms the canvas.
 
+The canvas cursor reflects the active operation: `grab` for move/navigation, a crosshair for terrain painting, and a small eraser cursor for terrain removal. An explicitly disabled canvas uses `not-allowed`; OpenLayers' `grab`/`grabbing` feedback remains the highest-priority state while a pan drag is active.
+
 ## Allowed editor copy
 
 The editor uses only `戻す` and `進む` in the top row; `地形を描く（太さ調整）` and `消しゴム` with their transient settings are available from the map palette. Startup, library, import, file actions, export controls, world-name editing, zoom buttons, terrain lists, creation metadata, persistent drawing configuration, presentation settings, unavailable layers, and asset management are not shown. There is no separate move button; natural map pan gestures remain available.

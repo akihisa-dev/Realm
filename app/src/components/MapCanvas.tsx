@@ -81,6 +81,8 @@ type MapCanvasProps = {
   zoom?: number;
   features?: RealmFeature[];
   mode?: TerrainMapMode;
+  /** Prevents the mode cursor from suggesting an available editing action. */
+  disabled?: boolean;
   selectedFeatureId?: string | null;
   selectedFeatureIds?: readonly string[];
   cellAttributes?: readonly CellAttributeSnapshot[];
@@ -112,6 +114,7 @@ export function MapCanvas({
   zoom,
   features = [],
   mode = "pan",
+  disabled = false,
   selectedFeatureId = null,
   selectedFeatureIds,
   cellAttributes = [],
@@ -430,6 +433,11 @@ export function MapCanvas({
   const portalRoot = typeof document === "undefined" ? null : document.body;
   const paintPosition = paintRangeFlyoutPosition ?? FLYOUT_FALLBACK_POSITION;
   const erasePosition = eraseFlyoutPosition ?? FLYOUT_FALLBACK_POSITION;
+  const modeClass = mode === "pan"
+    ? "map-canvas-mode-pan"
+    : mode === "cell-erase"
+      ? "map-canvas-mode-cell-erase"
+      : "map-canvas-mode-cell-select";
   const paintRangeFlyout = paintRangeFlyoutOpen && portalRoot ? createPortal(
     <div
       ref={paintRangeFlyoutRef}
@@ -518,7 +526,7 @@ export function MapCanvas({
       <p id="map-help" className="sr-only">{mapHelp}</p>
       <div
         ref={hostRef}
-        className={mode === "pan" ? "map-canvas" : "map-canvas map-canvas-draw"}
+        className={`map-canvas ${modeClass}${mode === "pan" ? "" : " map-canvas-draw"}${disabled ? " map-canvas-disabled" : ""}`}
         role="region"
         tabIndex={0}
         aria-label="世界地図"

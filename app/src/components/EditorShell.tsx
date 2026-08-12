@@ -191,6 +191,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
           <MapCanvas
             features={[]}
             mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : "cell-select"}
+            disabled={busy}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}
             themeId={settings.themeId}
