@@ -8,6 +8,7 @@ import Stroke from "ol/style/Stroke";
 import Style from "ol/style/Style";
 import Text from "ol/style/Text";
 import type { CellAttributeSnapshot, FeatureType } from "../backend";
+import { canonicalValueSignature } from "../canonicalValue";
 import { DEFAULT_MAP_THEME_ID, mapTheme, type MapThemeId, type ThemeOverrides } from "./themes";
 
 export const MAP_LABEL_FONT = '12px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif';
@@ -359,9 +360,9 @@ const scaleBarRenderer = (
   context.restore();
 };
 
-const presentationPropertiesKey = (feature: FeatureLike, type: FeatureType | undefined, themeId: MapThemeId, overrides: ThemeOverrides = {}): string => {
+const presentationPropertiesKey = (feature: FeatureLike, type: FeatureType | undefined, themeId: MapThemeId, overrides: ThemeOverrides = {}): Record<string, unknown> => {
   const options = labelOptions(feature, type, themeId, overrides);
-  return JSON.stringify({
+  return {
     width: numericProperty(feature, "width", type === "road" ? 2.2 : 2.4, 0.5, 24),
     scale: numericProperty(feature, "scale", 1, 0.25, 8),
     rotation: numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2),
@@ -391,7 +392,7 @@ const presentationPropertiesKey = (feature: FeatureLike, type: FeatureType | und
     cropBottom: numericProperty(feature, "cropBottom", 0, 0, 0.49),
     label: options,
     labelPath: labelPathGeometry(feature)?.getCoordinates() ?? null,
-  });
+  };
 };
 
 export const createFeatureStyle = (
@@ -400,7 +401,11 @@ export const createFeatureStyle = (
   getAssetUrl: (assetId: string) => string | undefined = () => undefined,
   getThemeOverrides: () => ThemeOverrides = () => ({}),
 ): ((feature: FeatureLike) => Style | Style[] | undefined) => {
-  const featureStyles = new Map<string, Style | Style[]>();
+  type CachedStyle = { key: string; styles: Style | Style[] };
+  // Keep only the latest style for each live OpenLayers feature. A feature can
+  // change presentation properties during an edit, so a global key cache would
+  // retain every historical Style/Canvas/Icon instance for the session.
+  const featureStyles = new WeakMap<object, CachedStyle>();
   return (feature: FeatureLike): Style | Style[] | undefined => {
     const type = feature.get("featureType") as FeatureType | undefined;
     if (!isVisible(type)) return undefined;
@@ -412,9 +417,17 @@ export const createFeatureStyle = (
     const theme = mapTheme(themeId, overrides);
     const assetId = stringProperty(feature, ["assetId"], "");
     const assetUrl = assetId ? localImageUrl(getAssetUrl(assetId)) : undefined;
-    const key = `${themeId}\u0000${JSON.stringify(overrides)}\u0000${type ?? "unknown"}\u0000${name}\u0000${presentationPropertiesKey(feature, type, themeId, overrides)}\u0000${assetId}\u0000${assetUrl ?? ""}`;
-    const cached = featureStyles.get(key);
-    if (cached) return cached;
+    const key = canonicalValueSignature({
+      themeId,
+      overrides,
+      type: type ?? null,
+      name,
+      presentation: presentationPropertiesKey(feature, type, themeId, overrides),
+      assetId,
+      assetUrl: assetUrl ?? null,
+    });
+    const cached = featureStyles.get(feature as object);
+    if (cached?.key === key) return cached.styles;
     const opacity = featureOpacity(feature);
     const label = featureLabel(feature, type, name, themeId, opacity, overrides);
     let styles: Style | Style[];
@@ -520,7 +533,7 @@ export const createFeatureStyle = (
     applyFeatureOpacity(styles, opacity);
     const zOffset = numericProperty(feature, "zIndex", 0, -1000, 1000);
     for (const style of Array.isArray(styles) ? styles : [styles]) style.setZIndex((style.getZIndex() ?? 0) + zOffset);
-    featureStyles.set(key, styles);
+    featureStyles.set(feature as object, { key, styles });
     return styles;
   };
 };
@@ -537,7 +550,8 @@ const stableVariant = (value: string): number => {
 };
 
 export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP_THEME_ID, getThemeOverrides: () => ThemeOverrides = () => ({})): ((feature: FeatureLike) => Style | Style[] | undefined) => {
-  const cellStyles = new Map<string, Style | Style[]>();
+  type CachedStyle = { key: string; styles: Style | Style[] };
+  const cellStyles = new WeakMap<object, CachedStyle>();
   return (feature: FeatureLike): Style | Style[] | undefined => {
     const attributes = feature.get("attributes") as CellAttributeSnapshot[] | undefined;
     const has = (attribute: CellAttributeSnapshot["attribute"]): boolean => attributes?.some((item) => item.attribute === attribute) ?? false;
@@ -555,9 +569,14 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     const theme = mapTheme(themeId, overrides);
     const variant = stableVariant(String(feature.getId() ?? "")) % 7;
     const flags = (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0) | (preview ? 64 : 0) | (paintPreview ? 128 : 0);
-    const key = `${themeId}:${JSON.stringify(overrides)}:${flags}:${hasPhysical ? variant : 0}`;
-    const cached = cellStyles.get(key);
-    if (cached) return cached;
+    const key = canonicalValueSignature({
+      themeId,
+      overrides,
+      flags,
+      variant: hasPhysical ? variant : 0,
+    });
+    const cached = cellStyles.get(feature as object);
+    if (cached?.key === key) return cached.styles;
     const styles: Style[] = [];
     if (hasTerrain) styles.push(new Style({ fill: new Fill({ color: theme.land }), stroke: new Stroke({ color: theme.landInk, width: 0.7 }), zIndex: 6 }));
     if (hasPhysical) styles.push(new Style({ fill: new Fill({ color: theme.forest }), stroke: new Stroke({ color: theme.labelHalo, width: 0.55 + variant * 0.03 }), zIndex: 8 }));
@@ -565,7 +584,7 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     if (hasRegion) styles.push(new Style({ fill: new Fill({ color: `${theme.region}0d` }), stroke: new Stroke({ color: theme.region, width: 1.1, lineDash: [3, 2] }), zIndex: 10 }));
     if (selected) styles.push(new Style({ fill: new Fill({ color: paintPreview ? theme.land : "rgba(7, 140, 152, 0.16)" }), stroke: new Stroke({ color: paintPreview ? theme.landInk : "#078c98", width: 1.4 }), zIndex: 85 }));
     if (preview) styles.push(new Style({ fill: new Fill({ color: "rgba(7, 140, 152, 0.08)" }), stroke: new Stroke({ color: "#078c98", width: 1.2, lineDash: [3, 2] }), zIndex: 84 }));
-    cellStyles.set(key, styles);
+    cellStyles.set(feature as object, { key, styles });
     return styles;
   };
 };

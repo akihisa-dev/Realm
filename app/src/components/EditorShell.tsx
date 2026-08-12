@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { errorMessage, type CellAttributeSnapshot, type RealmBackend, type RealmSnapshot } from "../backend";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { errorMessage, type CellAttributeSnapshot, type RealmBackend, type RealmFeature, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { mapErrorMessage } from "../locales/ja";
 
@@ -23,6 +23,8 @@ type RunOptions = {
   refreshOnSuccess?: boolean;
   isCurrent?: () => boolean;
 };
+
+const EMPTY_FEATURES: RealmFeature[] = [];
 
 export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellProps) {
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
@@ -59,6 +61,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
 
   const settings = viewedSnapshot.settings;
   const locked = busy || operating;
+  const cellGridOptions = useMemo(() => ({ color: settings.gridColor, width: settings.gridWidth }), [settings.gridColor, settings.gridWidth]);
+  const gridOptions = useMemo(() => ({ kind: "hex" as const, color: settings.gridColor, width: settings.gridWidth, spacingDegrees: settings.gridSpacing }), [settings.gridColor, settings.gridWidth, settings.gridSpacing]);
 
   const selectTool = (tool: Tool) => {
     activeToolRef.current = tool;
@@ -189,7 +193,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       <div className="editor-body">
         <section className="map-region" aria-label="地形編集領域">
           <MapCanvas
-            features={[]}
+            features={EMPTY_FEATURES}
             mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : "cell-select"}
             disabled={busy}
             cellAttributes={cellAttributes}
@@ -198,8 +202,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             themeOverrides={settings.themeOverrides}
             showGrid={false}
             showCellGrid
-            cellGridOptions={{ color: settings.gridColor, width: settings.gridWidth }}
-            gridOptions={{ kind: "hex", color: settings.gridColor, width: settings.gridWidth, spacingDegrees: settings.gridSpacing }}
+            cellGridOptions={cellGridOptions}
+            gridOptions={gridOptions}
             onCellSelect={applyCellSelection}
             onToolChange={selectTool}
             onError={(code) => setError(mapErrorMessage(code))}

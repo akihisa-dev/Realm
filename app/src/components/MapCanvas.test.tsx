@@ -1,4 +1,6 @@
+import { StrictMode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import type { RealmFeature } from "../backend";
 import type { RealmMapRenderer } from "../map/MapAdapter";
 import { MapCanvas } from "./MapCanvas";
 import { positionPaletteFlyout } from "./paletteFlyout";
@@ -65,6 +67,85 @@ describe("positionPaletteFlyout", () => {
 });
 
 describe("MapCanvas", () => {
+  it("cleans each adapter instance exactly once across StrictMode effect replay", () => {
+    const firstRenderer = createPaletteRenderer();
+    const secondRenderer = createPaletteRenderer();
+    const renderers = [firstRenderer, secondRenderer];
+    const createRenderer = vi.fn(() => renderers.shift()!);
+    const exporterEvents: string[] = [];
+    const { unmount } = render(
+      <StrictMode>
+        <MapCanvas
+          onZoomChange={vi.fn()}
+          onExporterReady={(exporter) => exporterEvents.push(exporter ? "ready" : "clear")}
+          createRenderer={createRenderer}
+        />
+      </StrictMode>,
+    );
+
+    expect(createRenderer).toHaveBeenCalledTimes(2);
+    expect(firstRenderer.dispose).toHaveBeenCalledOnce();
+    expect(secondRenderer.dispose).not.toHaveBeenCalled();
+    unmount();
+    expect(firstRenderer.dispose).toHaveBeenCalledOnce();
+    expect(secondRenderer.dispose).toHaveBeenCalledOnce();
+    expect(exporterEvents).toEqual(["ready", "clear", "ready", "clear"]);
+  });
+
+  it("does not resync semantically unchanged renderer collections or grid options", () => {
+    const renderer = createPaletteRenderer();
+    const createRenderer = vi.fn(() => renderer);
+    const feature: RealmFeature = {
+      id: "city-1",
+      featureType: "city",
+      name: "City",
+      geometry: { type: "Point", coordinates: [0, 0] },
+      properties: { zIndex: 2, labelColor: "#102030" },
+    };
+    const firstGrid = { kind: "hex" as const, color: "#102030", width: 1, spacingDegrees: 12 };
+    const firstCellGrid = { color: "#102030", width: 1 };
+    const { rerender } = render(
+      <MapCanvas
+        features={[feature]}
+        gridOptions={firstGrid}
+        cellGridOptions={firstCellGrid}
+        onZoomChange={vi.fn()}
+        createRenderer={createRenderer}
+      />,
+    );
+    const initialCalls = {
+      features: (renderer.setFeatures as ReturnType<typeof vi.fn>).mock.calls.length,
+      grid: (renderer.setGridOptions as ReturnType<typeof vi.fn>).mock.calls.length,
+      cellGrid: (renderer.setCellGridOptions as ReturnType<typeof vi.fn>).mock.calls.length,
+    };
+
+    rerender(
+      <MapCanvas
+        features={[{ ...feature, properties: { labelColor: "#102030", zIndex: 2 } }]}
+        gridOptions={{ ...firstGrid }}
+        cellGridOptions={{ ...firstCellGrid }}
+        onZoomChange={vi.fn()}
+        createRenderer={createRenderer}
+      />,
+    );
+    expect(renderer.setFeatures).toHaveBeenCalledTimes(initialCalls.features);
+    expect(renderer.setGridOptions).toHaveBeenCalledTimes(initialCalls.grid);
+    expect(renderer.setCellGridOptions).toHaveBeenCalledTimes(initialCalls.cellGrid);
+
+    rerender(
+      <MapCanvas
+        features={[{ ...feature, name: "Updated city" }]}
+        gridOptions={{ ...firstGrid, spacingDegrees: 15 }}
+        cellGridOptions={{ ...firstCellGrid, width: 1.5 }}
+        onZoomChange={vi.fn()}
+        createRenderer={createRenderer}
+      />,
+    );
+    expect(renderer.setFeatures).toHaveBeenCalledTimes(initialCalls.features + 1);
+    expect(renderer.setGridOptions).toHaveBeenCalledTimes(initialCalls.grid + 1);
+    expect(renderer.setCellGridOptions).toHaveBeenCalledTimes(initialCalls.cellGrid + 1);
+  });
+
   it("drives the canvas only through the replaceable renderer contract", () => {
     vi.useFakeTimers();
     let zoom = 1;

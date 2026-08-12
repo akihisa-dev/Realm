@@ -67,7 +67,12 @@ mod tests {
     use super::*;
     use rusqlite::Connection;
     use serde_json::Value;
-    use std::{fs, path::Path};
+    use std::{
+        fs,
+        io::{Seek, SeekFrom, Write},
+        os::unix::{ffi::OsStrExt, fs::MetadataExt},
+        path::Path,
+    };
     use tempfile::tempdir;
     use uuid::Uuid;
 
@@ -222,6 +227,35 @@ mod tests {
         publish_new_project(&staged, &destination).unwrap();
         assert_eq!(fs::read(&destination).unwrap(), b"complete project");
         assert!(!staged.exists());
+    }
+
+    #[test]
+    fn parent_sync_failure_reports_durability_error_without_removing_published_file() {
+        let directory = tempdir().unwrap();
+        let destination = directory.path().join("durability.realmmap");
+        let publisher = AtomicPublisher::new(&destination, "durability-test").unwrap();
+        fs::write(publisher.staged_path(), b"complete project").unwrap();
+        publisher.sync_staged_file().unwrap();
+
+        let error = publisher
+            .publish_with_parent_sync_for_test(|_| {
+                Err(AppError::new(
+                    "storage_error",
+                    "injected parent sync failure",
+                ))
+            })
+            .unwrap_err();
+        assert_eq!(error.code, "published_durability_uncertain");
+        assert_eq!(fs::read(&destination).unwrap(), b"complete project");
+        assert!(
+            fs::read_dir(directory.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .all(|entry| !entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|name| name.contains("durability-test")))
+        );
     }
 
     #[test]
@@ -411,6 +445,317 @@ mod tests {
             .name,
             "Source"
         );
+    }
+
+    #[test]
+    fn sqlite_snapshot_import_includes_uncheckpointed_wal_rows_and_preserves_source() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("wal-source.realmmap");
+        let destination = directory.path().join("wal-copy.realmmap");
+        create(&source, "WAL source").unwrap();
+
+        let writer = Connection::open(&source).unwrap();
+        writer.pragma_update(None, "journal_mode", "WAL").unwrap();
+        writer
+            .execute(
+                "INSERT INTO features(id, feature_type, name, geometry_json, properties_json)
+                 VALUES ('00000000-0000-4000-8000-000000000099', 'city', 'WAL row',
+                         '{\"type\":\"Point\",\"coordinates\":[1,2]}', '{}')",
+                [],
+            )
+            .unwrap();
+        let source_bytes = fs::read(&source).unwrap();
+        let source_wal = fs::read(path_with_suffix(&source, "-wal")).unwrap();
+        let source_shm = fs::read(path_with_suffix(&source, "-shm")).unwrap();
+
+        copy_sqlite_snapshot(&source, &destination, "wal-test").unwrap();
+        let copied = Connection::open(&destination).unwrap();
+        assert_eq!(
+            copied
+                .query_row(
+                    "SELECT name FROM features WHERE id = '00000000-0000-4000-8000-000000000099'",
+                    [],
+                    |row| row.get::<_, String>(0)
+                )
+                .unwrap(),
+            "WAL row"
+        );
+        assert_eq!(fs::read(&source).unwrap(), source_bytes);
+        assert_eq!(
+            fs::read(path_with_suffix(&source, "-wal")).unwrap(),
+            source_wal
+        );
+        assert_eq!(
+            fs::read(path_with_suffix(&source, "-shm")).unwrap(),
+            source_shm
+        );
+        drop(copied);
+        drop(writer);
+    }
+
+    #[test]
+    fn sqlite_snapshot_failure_cleans_staging_and_does_not_publish_destination() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("invalid-source.realmmap");
+        let destination = directory.path().join("invalid-copy.realmmap");
+        fs::write(&source, b"not a sqlite database").unwrap();
+        assert!(copy_sqlite_snapshot(&source, &destination, "failure").is_err());
+        assert!(!destination.exists());
+        let leftovers = fs::read_dir(directory.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.file_name())
+            .filter_map(|name| name.to_str().map(str::to_owned))
+            .filter(|name| name.contains("failure"))
+            .collect::<Vec<_>>();
+        assert!(leftovers.is_empty(), "staging leftovers: {leftovers:?}");
+    }
+
+    #[test]
+    fn sqlite_snapshot_rejects_source_path_replacement_after_preflight() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("race-source.realmmap");
+        let destination = directory.path().join("race-copy.realmmap");
+        create(&source, "Race source").unwrap();
+        let validated = preflight_existing_project_with_connection(&source).unwrap();
+
+        let moved = directory.path().join("moved-source.realmmap");
+        fs::rename(&source, &moved).unwrap();
+        fs::write(&source, b"SQLite format 3\0replacement").unwrap();
+
+        let error =
+            copy_sqlite_snapshot_from_validated(&validated, &destination, "race-test").unwrap_err();
+        assert_eq!(error.code, "invalid_path");
+        assert!(!destination.exists());
+        assert!(
+            fs::read_dir(directory.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .all(|entry| !entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|name| name.contains("race-test")))
+        );
+    }
+
+    #[test]
+    fn snapshot_rejects_same_size_mtime_restored_in_place_mutation_and_cleans_private_copy() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("digest-race.realmmap");
+        create(&source, "Digest race").unwrap();
+        let before = fs::metadata(&source).unwrap();
+        let result =
+            preflight_existing_project_with_connection_after_copy_for_test(&source, |path| {
+                let mut file = fs::OpenOptions::new().write(true).open(path).unwrap();
+                file.seek(SeekFrom::Start(100)).unwrap();
+                file.write_all(&[0x7f]).unwrap();
+                file.sync_all().unwrap();
+                let c_path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+                let times = [
+                    libc::timespec {
+                        tv_sec: before.mtime(),
+                        tv_nsec: before.mtime_nsec(),
+                    },
+                    libc::timespec {
+                        tv_sec: before.mtime(),
+                        tv_nsec: before.mtime_nsec(),
+                    },
+                ];
+                assert_eq!(
+                    unsafe { libc::utimensat(libc::AT_FDCWD, c_path.as_ptr(), times.as_ptr(), 0) },
+                    0
+                );
+                Ok(())
+            });
+        let error = match result {
+            Ok(_) => panic!("mutation should be rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code, "invalid_path");
+        assert!(
+            fs::read_dir(directory.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .all(|entry| !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".realm-source-"))
+        );
+    }
+
+    #[test]
+    fn validated_snapshot_drop_does_not_remove_foreign_replacement() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("drop-foreign.realmmap");
+        create(&source, "Drop foreign").unwrap();
+        let validated = preflight_existing_project_with_connection(&source).unwrap();
+        let snapshot = validated.snapshot_path_for_test().to_path_buf();
+        let moved = directory.path().join("moved-private-snapshot");
+        fs::rename(&snapshot, &moved).unwrap();
+        fs::write(&snapshot, b"foreign replacement").unwrap();
+        drop(validated);
+        assert_eq!(fs::read(&snapshot).unwrap(), b"foreign replacement");
+        fs::remove_file(&snapshot).unwrap();
+        fs::remove_file(&moved).unwrap();
+    }
+
+    #[test]
+    fn parent_replacement_is_rejected_without_publishing_to_new_directory() {
+        let directory = tempdir().unwrap();
+        let parent = directory.path().join("publish-parent");
+        fs::create_dir(&parent).unwrap();
+        let destination = parent.join("project.realmmap");
+        let publisher = AtomicPublisher::new(&destination, "parent-race").unwrap();
+        fs::write(publisher.staged_path(), b"complete project").unwrap();
+        publisher.sync_staged_file().unwrap();
+        let moved = directory.path().join("publish-parent-moved");
+        fs::rename(&parent, &moved).unwrap();
+        fs::create_dir(&parent).unwrap();
+        let error = publisher.publish().unwrap_err();
+        assert_eq!(error.code, "invalid_path");
+        assert!(!destination.exists());
+        assert!(
+            fs::read_dir(&parent)
+                .unwrap()
+                .filter_map(Result::ok)
+                .all(|entry| !entry.file_name().to_string_lossy().contains("parent-race"))
+        );
+        assert!(
+            fs::read_dir(&moved)
+                .unwrap()
+                .filter_map(Result::ok)
+                .all(|entry| !entry.file_name().to_string_lossy().contains("parent-race"))
+        );
+    }
+
+    #[test]
+    fn staging_foreign_replacement_is_rejected_and_preserved_without_destination() {
+        let directory = tempdir().unwrap();
+        let destination = directory.path().join("staging-race.realmmap");
+        let publisher = AtomicPublisher::new(&destination, "staging-race").unwrap();
+        let staged = publisher.staged_path().to_path_buf();
+        fs::rename(&staged, directory.path().join("owned-staging-moved")).unwrap();
+        fs::write(&staged, b"foreign valid sqlite placeholder").unwrap();
+        let error = publisher.open_staged_read_write().unwrap_err();
+        assert_eq!(error.code, "invalid_path");
+        assert_eq!(
+            fs::read(&staged).unwrap(),
+            b"foreign valid sqlite placeholder"
+        );
+        drop(publisher);
+        assert!(!destination.exists());
+        assert_eq!(
+            fs::read(&staged).unwrap(),
+            b"foreign valid sqlite placeholder"
+        );
+        fs::remove_file(&staged).unwrap();
+        fs::remove_file(directory.path().join("owned-staging-moved")).unwrap();
+    }
+
+    #[test]
+    fn open_rejects_path_replacement_before_writable_open() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("open-race.realmmap");
+        create(&path, "Open race").unwrap();
+        let replacement = directory.path().join("open-race-moved.realmmap");
+        let error = open_connection_after_validation_for_test(&path, |validated_path| {
+            fs::rename(validated_path, &replacement).unwrap();
+            fs::write(validated_path, b"SQLite format 3\0replacement").unwrap();
+            Ok(())
+        })
+        .unwrap_err();
+        assert_eq!(error.code, "invalid_path");
+        assert!(
+            fs::read(&replacement)
+                .unwrap()
+                .starts_with(b"SQLite format 3\0")
+        );
+        assert!(fs::read(&path).unwrap().starts_with(b"SQLite format 3\0"));
+    }
+
+    #[test]
+    fn open_rejects_same_inode_content_mutation_before_migration() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("open-digest-race.realmmap");
+        create(&path, "Open digest race").unwrap();
+        let before = fs::metadata(&path).unwrap();
+        let result = open_connection_after_validation_for_test(&path, |validated_path| {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .open(validated_path)
+                .unwrap();
+            file.seek(SeekFrom::Start(100)).unwrap();
+            file.write_all(&[0x7e]).unwrap();
+            file.sync_all().unwrap();
+            let c_path = std::ffi::CString::new(validated_path.as_os_str().as_bytes()).unwrap();
+            let times = [
+                libc::timespec {
+                    tv_sec: before.mtime(),
+                    tv_nsec: before.mtime_nsec(),
+                },
+                libc::timespec {
+                    tv_sec: before.mtime(),
+                    tv_nsec: before.mtime_nsec(),
+                },
+            ];
+            assert_eq!(
+                unsafe { libc::utimensat(libc::AT_FDCWD, c_path.as_ptr(), times.as_ptr(), 0) },
+                0
+            );
+            Ok(())
+        });
+        let error = match result {
+            Ok(_) => panic!("same-inode mutation should be rejected"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code, "invalid_path");
+    }
+
+    #[test]
+    fn transfer_services_round_trip_wal_without_source_mutation() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("service-source.realmmap");
+        let imported = directory.path().join("service-import.realmmap");
+        let exported = directory.path().join("service-export.realmmap");
+        create(&source, "Service source").unwrap();
+        let writer = Connection::open(&source).unwrap();
+        writer.pragma_update(None, "journal_mode", "WAL").unwrap();
+        writer
+            .execute(
+                "INSERT INTO features(id, feature_type, name, geometry_json, properties_json)
+                 VALUES ('00000000-0000-4000-8000-000000000098', 'city', 'Service WAL',
+                         '{\"type\":\"Point\",\"coordinates\":[2,3]}', '{}')",
+                [],
+            )
+            .unwrap();
+        let before = fs::read(&source).unwrap();
+        let before_wal = fs::read(path_with_suffix(&source, "-wal")).unwrap();
+        let before_shm = fs::read(path_with_suffix(&source, "-shm")).unwrap();
+        let state = direct_state();
+        import_project_at(&state, source.clone(), imported.clone()).unwrap();
+        export_project_at(&state, exported.clone(), &imported).unwrap();
+        let exported_connection = Connection::open(&exported).unwrap();
+        assert_eq!(
+            exported_connection
+                .query_row(
+                    "SELECT name FROM features WHERE id = '00000000-0000-4000-8000-000000000098'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap(),
+            "Service WAL"
+        );
+        assert_eq!(fs::read(&source).unwrap(), before);
+        assert_eq!(
+            fs::read(path_with_suffix(&source, "-wal")).unwrap(),
+            before_wal
+        );
+        assert_eq!(
+            fs::read(path_with_suffix(&source, "-shm")).unwrap(),
+            before_shm
+        );
+        drop(exported_connection);
+        drop(writer);
     }
 
     #[test]

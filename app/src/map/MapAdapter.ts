@@ -2,7 +2,7 @@ import Feature from "ol/Feature";
 import Map from "ol/Map";
 import type BaseEvent from "ol/events/Event";
 import View from "ol/View";
-import LineString from "ol/geom/LineString";
+import type Graticule from "ol/layer/Graticule";
 import MultiLineString from "ol/geom/MultiLineString";
 import Polygon from "ol/geom/Polygon";
 import Draw from "ol/interaction/Draw";
@@ -13,38 +13,37 @@ import * as SelectModule from "ol/interaction/Select";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import MouseWheelZoom from "ol/interaction/MouseWheelZoom";
-import Graticule from "ol/layer/Graticule";
 import VectorLayer from "ol/layer/Vector";
 import VectorSource from "ol/source/Vector";
-import Fill from "ol/style/Fill";
 import Stroke from "ol/style/Stroke";
 import Style from "ol/style/Style";
-import Text from "ol/style/Text";
 import { singleClick } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, Position, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
-import { CELL_PAINT_RADII, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
+import { CELL_PAINT_RADII, WORLD_EXTENT, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
 import { MAX_SMOOTHING_PASSES, refineDrawnGeometry, snapPositionToAngle } from "./drawingGeometry";
 import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
-import { createCellStyle, createFeatureStyle, MAP_LABEL_FONT } from "./styles";
+import { createCellStyle, createFeatureStyle } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
 import { paintMapTexture } from "./mapTexture";
 import { assertGeometryWithinWorld } from "./geometryGuard";
+import { expandConnectedEraseCells } from "./cellErase";
+import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
+import { selectFeatureIdsWithinLasso } from "./lassoSelection";
 import type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 
 export type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellPaintSize } from "./gridGeometry";
 export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
+export { selectFeatureIdsWithinLasso } from "./lassoSelection";
 
-type Segment = readonly [Position, Position];
 const MAX_LASSO_POINTS = 4096;
-const MAX_GRID_EDGES = 20_000;
-const DEFAULT_GRID_OPTIONS: GridOptions = { kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 };
 const DEFAULT_CELL_GRID_OPTIONS: CellGridOptions = { color: "#d1d7dc", width: 0.65 };
+const samePosition = (first: Position, second: Position): boolean => first[0] === second[0] && first[1] === second[1];
 
 /**
  * Returns the resolution that covers an extent in both viewport dimensions.
@@ -72,189 +71,6 @@ class CancelablePointerInteraction extends PointerInteraction {
     this.targetPointers = [];
   }
 }
-
-const fixedCellGridLines = (): Position[][] => {
-  const lines: Position[][] = [];
-  const seen = new Set<string>();
-  for (let row = 0; row < CELL_GRID_ROWS; row += 1) {
-    for (let column = 0; column < CELL_GRID_COLUMNS; column += 1) {
-      const ring = gridCellPolygon(row, column);
-      if (!ring) continue;
-      for (let index = 1; index < ring.length; index += 1) {
-        const first = ring[index - 1]!;
-        const second = ring[index]!;
-        const firstKey = `${first[0].toFixed(9)},${first[1].toFixed(9)}`;
-        const secondKey = `${second[0].toFixed(9)},${second[1].toFixed(9)}`;
-        const key = firstKey < secondKey ? `${firstKey}:${secondKey}` : `${secondKey}:${firstKey}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        lines.push([first, second]);
-      }
-    }
-  }
-  return lines;
-};
-
-const createGraticule = (options: GridOptions): Graticule => new Graticule({
-  strokeStyle: new Stroke({ color: options.color, lineDash: [4, 4], width: options.width }),
-  intervals: [options.spacingDegrees],
-  showLabels: true,
-  targetSize: 170,
-  lonLabelPosition: 0.96,
-  latLabelPosition: 0.035,
-  lonLabelStyle: new Text({
-    font: MAP_LABEL_FONT,
-    textBaseline: "bottom",
-    fill: new Fill({ color: options.color }),
-    stroke: new Stroke({ color: "#ffffff", width: 3 }),
-  }),
-  latLabelStyle: new Text({
-    font: MAP_LABEL_FONT,
-    textAlign: "start",
-    textBaseline: "middle",
-    fill: new Fill({ color: options.color }),
-    stroke: new Stroke({ color: "#ffffff", width: 3 }),
-  }),
-  wrapX: false,
-});
-
-const boundedSquareGrid = (spacing: number): Feature[] => {
-  const features: Feature[] = [];
-  let index = 0;
-  for (let longitude = -180; longitude <= 180 + 1e-9; longitude += spacing) {
-    features.push(new Feature({ geometry: new LineString([[longitude, -90], [longitude, 90]]) }));
-    features[index++]!.setId(`square-v-${index}`);
-  }
-  for (let latitude = -90; latitude <= 90 + 1e-9; latitude += spacing) {
-    features.push(new Feature({ geometry: new LineString([[-180, latitude], [180, latitude]]) }));
-    features[index++]!.setId(`square-h-${index}`);
-  }
-  return features;
-};
-
-const boundedHexGrid = (spacing: number): Feature[] => {
-  const features: Feature[] = [];
-  const seen = new Set<string>();
-  const rowStep = spacing * 1.5;
-  const columnStep = Math.sqrt(3) * spacing;
-  let edgeIndex = 0;
-  for (let row = 0, centerY = -90; centerY <= 90 + spacing && edgeIndex < MAX_GRID_EDGES; row += 1, centerY += rowStep) {
-    const offset = row % 2 === 0 ? 0 : columnStep / 2;
-    for (let centerX = -180 - columnStep; centerX <= 180 + columnStep && edgeIndex < MAX_GRID_EDGES; centerX += columnStep) {
-      const cx = centerX + offset;
-      const vertices: Position[] = [];
-      for (let vertex = 0; vertex < 6; vertex += 1) {
-        const angle = (Math.PI / 180) * (30 + vertex * 60);
-        vertices.push([cx + spacing * Math.cos(angle), centerY + spacing * Math.sin(angle)]);
-      }
-      if (vertices.some(([x, y]) => x < -180 || x > 180 || y < -90 || y > 90)) continue;
-      for (let vertex = 0; vertex < 6 && edgeIndex < MAX_GRID_EDGES; vertex += 1) {
-        const first = vertices[vertex]!;
-        const second = vertices[(vertex + 1) % 6]!;
-        const key = `${first[0].toFixed(6)},${first[1].toFixed(6)}:${second[0].toFixed(6)},${second[1].toFixed(6)}`;
-        const reverse = `${second[0].toFixed(6)},${second[1].toFixed(6)}:${first[0].toFixed(6)},${first[1].toFixed(6)}`;
-        if (seen.has(key) || seen.has(reverse)) continue;
-        seen.add(key);
-        const feature = new Feature({ geometry: new LineString([first, second]) });
-        feature.setId(`hex-edge-${edgeIndex}`);
-        features.push(feature);
-        edgeIndex += 1;
-      }
-    }
-  }
-  return features;
-};
-
-const samePosition = (first: Position, second: Position): boolean => first[0] === second[0] && first[1] === second[1];
-
-const orientation = (first: Position, second: Position, third: Position): number =>
-  (second[0] - first[0]) * (third[1] - first[1]) - (second[1] - first[1]) * (third[0] - first[0]);
-
-const onSegment = (first: Position, second: Position, point: Position): boolean =>
-  point[0] >= Math.min(first[0], second[0]) && point[0] <= Math.max(first[0], second[0])
-  && point[1] >= Math.min(first[1], second[1]) && point[1] <= Math.max(first[1], second[1]);
-
-const segmentsIntersect = (first: Segment, second: Segment): boolean => {
-  const epsilon = 1e-10;
-  const [a, b] = first;
-  const [c, d] = second;
-  const abC = orientation(a, b, c);
-  const abD = orientation(a, b, d);
-  const cdA = orientation(c, d, a);
-  const cdB = orientation(c, d, b);
-  if (((abC > epsilon && abD < -epsilon) || (abC < -epsilon && abD > epsilon))
-    && ((cdA > epsilon && cdB < -epsilon) || (cdA < -epsilon && cdB > epsilon))) return true;
-  return (Math.abs(abC) <= epsilon && onSegment(a, b, c))
-    || (Math.abs(abD) <= epsilon && onSegment(a, b, d))
-    || (Math.abs(cdA) <= epsilon && onSegment(c, d, a))
-    || (Math.abs(cdB) <= epsilon && onSegment(c, d, b));
-};
-
-const pointInRing = (point: Position, ring: readonly Position[]): boolean => {
-  if (ring.length < 3) return false;
-  let inside = false;
-  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
-    const current = ring[index]!;
-    const prior = ring[previous]!;
-    if (segmentsIntersect([prior, current], [point, point])) return true;
-    const crosses = (current[1] > point[1]) !== (prior[1] > point[1]);
-    if (crosses && point[0] < ((prior[0] - current[0]) * (point[1] - current[1])) / (prior[1] - current[1]) + current[0]) inside = !inside;
-  }
-  return inside;
-};
-
-const pointInPolygon = (point: Position, rings: readonly (readonly Position[])[]): boolean =>
-  rings.length > 0 && pointInRing(point, rings[0]!) && rings.slice(1).every((hole) => !pointInRing(point, hole));
-
-const ringSegments = (ring: readonly Position[]): Segment[] => {
-  if (ring.length < 2) return [];
-  const segments: Segment[] = [];
-  for (let index = 0; index < ring.length; index += 1) {
-    const next = (index + 1) % ring.length;
-    if (!samePosition(ring[index]!, ring[next]!)) segments.push([ring[index]!, ring[next]!]);
-  }
-  return segments;
-};
-
-const geometryCoordinates = (geometry: GeoJsonGeometry): Position[][] => {
-  if (geometry.type === "Point") return [[geometry.coordinates]];
-  if (geometry.type === "LineString") return [geometry.coordinates];
-  return geometry.coordinates;
-};
-
-const geometryIntersectsLasso = (geometry: GeoJsonGeometry, lassoRing: readonly Position[]): boolean => {
-  const lassoSegments = ringSegments(lassoRing);
-  const coordinates = geometryCoordinates(geometry);
-  if (geometry.type === "Point") return pointInRing(geometry.coordinates, lassoRing);
-
-  // A vertex in either polygon is enough for containment; segment checks cover
-  // the case where two shapes cross without containing one another's vertices.
-  if (coordinates.some((line) => line.some((point) => pointInRing(point, lassoRing)))) return true;
-  if (geometry.type === "Polygon" && lassoRing.some((point) => pointInPolygon(point, geometry.coordinates))) return true;
-
-  const geometrySegments = coordinates.flatMap((line) => {
-    const segments: Segment[] = [];
-    for (let index = 1; index < line.length; index += 1) segments.push([line[index - 1]!, line[index]!]);
-    if (geometry.type === "Polygon" && line.length > 1 && !samePosition(line[0]!, line[line.length - 1]!)) segments.push([line[line.length - 1]!, line[0]!]);
-    return segments;
-  });
-  return geometrySegments.some((segment) => lassoSegments.some((lassoSegment) => segmentsIntersect(segment, lassoSegment)));
-};
-
-/**
- * Returns feature ids whose geometry intersects or is contained by a lasso.
- * This pure helper keeps lasso semantics testable without requiring a browser
- * pointer sequence and intentionally treats polygon holes as non-selectable.
- */
-export const selectFeatureIdsWithinLasso = (
-  features: readonly Pick<RealmFeature, "id" | "geometry">[],
-  lasso: readonly Position[],
-): string[] => {
-  const valid = lasso.length >= 3 && lasso.every((point) => point.length === 2 && point.every(Number.isFinite));
-  if (!valid) return [];
-  const ring = samePosition(lasso[0]!, lasso[lasso.length - 1]!) ? [...lasso] : [...lasso, lasso[0]!];
-  return features.filter((feature) => geometryIntersectsLasso(feature.geometry, ring)).map((feature) => feature.id);
-};
 
 const snapFinalSegment = (geometry: GeoJsonGeometry, stepDegrees: number): GeoJsonGeometry => {
   if (geometry.type === "Point") return geometry;
@@ -903,7 +719,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private finishPaintStroke(): void {
     if (this.paintLastPoint === null) return;
     let selected = [...this.paintStrokeSelection];
-    if (this.activeMode === "cell-erase" && this.cellEraseMode === "cluster") selected = this.expandConnectedEraseCells(selected);
+    if (this.activeMode === "cell-erase" && this.cellEraseMode === "cluster") selected = expandConnectedEraseCells(this.cellAttributesById, selected);
     this.setSelectedCells(selected);
     for (const listener of this.cellSelectListeners) listener([...selected]);
     this.paint?.cancelSequence();
@@ -1005,31 +821,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellEraseMode = options.mode;
     this.cellEraseRadius = Math.max(0, Math.min(32, options.radiusCells));
     this.refreshHoveredCells();
-  }
-
-  private expandConnectedEraseCells(seedIds: readonly string[]): string[] {
-    const terrain = new Set<string>();
-    for (const [id, attributes] of this.cellAttributesById) {
-      if (attributes.some((attribute) => attribute.attribute === "terrain" && attribute.value.trim().length > 0)) terrain.add(id);
-    }
-    const expanded = new Set<string>();
-    const queue = [...seedIds];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      if (expanded.has(current) || !terrain.has(current)) continue;
-      expanded.add(current);
-      const parsed = parseCellId(current);
-      if (!parsed) continue;
-      const [row, column] = parsed;
-      const neighbors: [number, number][] = row % 2 === 0
-        ? [[row, column - 1], [row, column + 1], [row - 1, column - 1], [row - 1, column], [row + 1, column - 1], [row + 1, column]]
-        : [[row, column - 1], [row, column + 1], [row - 1, column], [row - 1, column + 1], [row + 1, column], [row + 1, column + 1]];
-      for (const [nextRow, nextColumn] of neighbors) {
-        const id = nextRow >= 0 && nextRow < CELL_GRID_ROWS && nextColumn >= 0 && nextColumn < CELL_GRID_COLUMNS ? `${nextColumn}:${nextRow}` : null;
-        if (id && !expanded.has(id) && terrain.has(id)) queue.push(id);
-      }
-    }
-    return [...expanded];
   }
 
   private setHoveredCells(cellIds: readonly string[]): void {

@@ -1,13 +1,11 @@
 use crate::error::AppError;
-use crate::storage::atomic::publish_new_project;
+use crate::storage::atomic::AtomicPublisher;
 use crate::storage::path::path_with_canonical_parent;
 use std::{
     fs,
-    fs::OpenOptions,
     io::{self, Write},
     path::{Path, PathBuf},
 };
-use uuid::Uuid;
 
 pub(crate) const MAX_ARTIFACT_BYTES: usize = 50 * 1024 * 1024;
 
@@ -79,25 +77,17 @@ pub(crate) fn write_artifact(path: String, bytes: Vec<u8>) -> Result<(), AppErro
             "The artifact content does not match its file extension.",
         ));
     }
-    let parent = destination
-        .parent()
-        .ok_or_else(|| AppError::new("invalid_path", "The artifact folder is unavailable."))?;
-    let staged_path = parent.join(format!(".realm-artifact-{}.staging", Uuid::new_v4()));
-    let result = (|| {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&staged_path)
+    let publisher = AtomicPublisher::new(&destination, "realm-artifact")?;
+    (|| {
+        let mut file = publisher
+            .open_staged_read_write()
             .map_err(|_| AppError::new("invalid_path", "The artifact could not be created."))?;
         file.write_all(&bytes)
             .map_err(|_| AppError::new("storage_error", "The artifact could not be written."))?;
         file.sync_all().map_err(|_| {
             AppError::new("storage_error", "The artifact could not be synchronized.")
         })?;
-        publish_new_project(&staged_path, &destination)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&staged_path);
-    }
-    result
+        publisher.sync_staged_file()?;
+        publisher.publish()
+    })()
 }
