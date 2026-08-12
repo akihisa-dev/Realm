@@ -23,6 +23,15 @@ pnpm install --frozen-lockfile
 
 Do not commit global configuration or machine-specific paths. Each developer is responsible for using the pinned environment locally; this repository does not use GitHub Actions.
 
+All Rust-dependent package scripts enter through `script/with_rust_toolchain.sh`.
+The resolver keeps a `cargo` already present on `PATH` as the first choice. If
+Cargo is not visible, it asks the active `rustup` override (including the
+repository's `rust-toolchain.toml`) for Cargo and adds that toolchain's `bin`
+directory to the child process `PATH`, so Node SBOM and license checks see the
+same toolchain. It changes only the current process; it never edits shell
+dotfiles. If neither Cargo nor rustup can provide a complete Cargo/Rust toolchain,
+the command fails before verification starts.
+
 ## Development and verification
 
 From `app/`:
@@ -54,6 +63,12 @@ The SBOM is deterministic after normalization and must be refreshed whenever eit
 ```sh
 pnpm sbom:generate
 pnpm sbom:check
+```
+
+To exercise the resolver's normal-PATH, rustup-fallback, and fail-closed cases:
+
+```sh
+pnpm rust:toolchain:test
 ```
 
 ## Version updates
