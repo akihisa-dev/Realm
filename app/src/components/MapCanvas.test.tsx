@@ -4,6 +4,7 @@ import { MapCanvas } from "./MapCanvas";
 
 describe("MapCanvas", () => {
   it("drives the canvas only through the replaceable renderer contract", () => {
+    vi.useFakeTimers();
     let zoom = 1;
     let zoomListener: ((nextZoom: number) => void) | null = null;
     let drawListener: ((geometry: never) => void) | null = null;
@@ -73,17 +74,23 @@ describe("MapCanvas", () => {
     const map = screen.getByRole("region", { name: "世界地図" });
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).toHaveStyle({ left: "120px", top: "80px" });
+    expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-opening");
     expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(8);
     expect(document.querySelector(".radial-palette")?.textContent).toBe("");
+    act(() => { vi.advanceTimersByTime(260); });
+    expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-open");
     fireEvent.pointerDown(document.querySelector(".radial-palette") as Element);
     expect(document.querySelector(".radial-palette")).toBeInTheDocument();
     const onMapPointerDown = vi.fn();
     map.addEventListener("pointerdown", onMapPointerDown);
     fireEvent.pointerDown(map, { button: 0 });
+    expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-closing");
+    act(() => { vi.advanceTimersByTime(260); });
     expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
     expect(onMapPointerDown).not.toHaveBeenCalled();
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     fireEvent.keyDown(window, { key: "Escape" });
+    act(() => { vi.advanceTimersByTime(260); });
     expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
     (drawListener as ((geometry: never) => void) | null)?.({} as never);
     (selectFeaturesListener as ((ids: readonly string[]) => void) | null)?.([]);
@@ -133,5 +140,6 @@ describe("MapCanvas", () => {
     expect(renderer.setMode).toHaveBeenLastCalledWith("pan");
     unmount();
     expect(renderer.dispose).toHaveBeenCalledOnce();
+    vi.useRealTimers();
   });
 });

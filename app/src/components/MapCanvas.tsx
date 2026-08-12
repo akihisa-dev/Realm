@@ -20,7 +20,14 @@ type RadialPalettePosition = {
   y: number;
 };
 
+type RadialPaletteState = RadialPalettePosition & {
+  phase: "opening" | "open" | "closing";
+};
+
 const RADIAL_PALETTE_SLOTS = 8;
+// The slots have a short staggered animation. Keep the mounted element around
+// for the same total duration while it winds back to the center on dismissal.
+const RADIAL_PALETTE_ANIMATION_MS = 260;
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;
@@ -86,7 +93,7 @@ export function MapCanvas({
   const hostRef = useRef<HTMLDivElement>(null);
   const radialPaletteRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<RealmMapRenderer | null>(null);
-  const [radialPalettePosition, setRadialPalettePosition] = useState<RadialPalettePosition | null>(null);
+  const [radialPalette, setRadialPalette] = useState<RadialPaletteState | null>(null);
   const onZoomChangeRef = useRef(onZoomChange);
   const onDrawRef = useRef(onDraw);
   const onSelectRef = useRef(onSelect);
@@ -204,37 +211,50 @@ export function MapCanvas({
   }, [createRenderer]);
 
   useEffect(() => {
-    if (!radialPalettePosition) return undefined;
+    if (!radialPalette) return undefined;
+    const reducedMotion = typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const animationTimer = window.setTimeout(() => {
+      setRadialPalette((current) => {
+        if (!current) return null;
+        if (reducedMotion || current.phase === "closing") return current.phase === "closing" ? null : { ...current, phase: "open" };
+        return current.phase === "opening" ? { ...current, phase: "open" } : current;
+      });
+    }, reducedMotion ? 0 : RADIAL_PALETTE_ANIMATION_MS);
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setRadialPalettePosition(null);
+      if (event.key === "Escape") setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
     };
     const handlePointerDown = (event: PointerEvent) => {
       if (event.target instanceof window.Node && radialPaletteRef.current?.contains(event.target)) return;
-      setRadialPalettePosition(null);
+      setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
       if (event.target instanceof window.Node && hostRef.current?.contains(event.target)) {
         event.preventDefault();
         event.stopPropagation();
       }
     };
-    const handleBlur = () => setRadialPalettePosition(null);
+    const handleBlur = () => setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("blur", handleBlur);
     return () => {
+      window.clearTimeout(animationTimer);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("blur", handleBlur);
     };
-  }, [radialPalettePosition]);
+  }, [radialPalette]);
 
   const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     const bounds = event.currentTarget.getBoundingClientRect();
-    setRadialPalettePosition({ x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+    setRadialPalette({ x: event.clientX - bounds.left, y: event.clientY - bounds.top, phase: "opening" });
   };
 
   return (
-    <div className="map-canvas-shell" onPointerDown={() => setRadialPalettePosition(null)}>
+    <div
+      className="map-canvas-shell"
+      onPointerDown={() => setRadialPalette((current) => current ? { ...current, phase: "closing" } : null)}
+    >
       <p id="map-help" className="sr-only">{mapHelp}</p>
       <div
         ref={hostRef}
@@ -246,12 +266,12 @@ export function MapCanvas({
         onContextMenu={handleContextMenu}
       />
       <span className={`map-texture map-texture-${themeId}`} aria-hidden="true" />
-      {radialPalettePosition ? (
+      {radialPalette ? (
         <div
           ref={radialPaletteRef}
-          className="radial-palette"
+          className={`radial-palette radial-palette-${radialPalette.phase}`}
           aria-hidden="true"
-          style={{ left: radialPalettePosition.x, top: radialPalettePosition.y }}
+          style={{ left: radialPalette.x, top: radialPalette.y }}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <span className="radial-palette-core" />
