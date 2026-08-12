@@ -683,7 +683,7 @@ describe("RealmMapAdapter", () => {
     adapter.updateSize();
     expect(adapter.getZoom()).toBe(1);
     const view = adapter.getMap().getView();
-    const fittedResolution = resolutionForCoveringExtent([-180, -90, 180, 90], [592, 432]);
+    const fittedResolution = resolutionForCoveringExtent([-180, -90, 180, 90], [624, 464]);
     expect(view.getResolution()).toBeCloseTo(fittedResolution);
     expect(view.getZoom()).toBeCloseTo(view.getMinZoom());
     view.setViewportSize([640, 480]);
@@ -704,7 +704,7 @@ describe("RealmMapAdapter", () => {
     adapter.getMap().setSize([900, 400]);
     adapter.updateSize();
     expect(adapter.getZoom()).toBe(3);
-    const resizedFitResolution = resolutionForCoveringExtent([-180, -90, 180, 90], [852, 352]);
+    const resizedFitResolution = resolutionForCoveringExtent([-180, -90, 180, 90], [884, 384]);
     const resizedFitZoom = view.getZoomForResolution(resizedFitResolution);
     expect(resizedFitZoom).not.toBeUndefined();
     expect(view.getResolution()).toBeCloseTo(view.getResolutionForZoom((resizedFitZoom ?? 0) + 2));
