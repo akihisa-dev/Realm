@@ -14,4 +14,4 @@ description: Realmの完了済み変更を、最終結果の報告直前に目�
 7. 件名はtype、version、日本語説明とし、scopeは件名へ書かない。
 8. 本文はscope、目的、内容、確認、影響を基本とし、機微値と絶対pathを一般化する。
 9. commit後にID、version、残存差分を確認する。
-10. commit失敗時は完了扱いにせず、pushは明示時だけrealm-publish-githubへ渡す。
+10. commit失敗時は完了扱いにせず、権限不足、index lock、並行差分、version所有競合を理由に終了しない。最新状態を再読し、短時間再試行、安全なhunk分離、必要な権限承認、明示許可を得たworktreeなどで継続する。新しいユーザー判断が不可欠なら具体的な許可を求めてblockedとし、完了報告しない。無関係差分の混入、勝手なunstage、worktreeの無断使用は禁止する。pushは明示時だけrealm-publish-githubへ渡す。

@@ -15,7 +15,7 @@ A Homebrew-based local setup is:
 
 ```sh
 brew install node@24 pnpm rustup cargo-deny
-export PATH="/opt/homebrew/opt/node@24/bin:/opt/homebrew/opt/rustup/bin:$PATH"
+export PATH="$(brew --prefix node@24)/bin:$(brew --prefix rustup)/bin:$PATH"
 rustup show
 cd app
 pnpm install --frozen-lockfile
@@ -43,7 +43,20 @@ pnpm skills:check
 pnpm verify:full
 ```
 
-`verify` covers strict TypeScript, frontend tests with enforced coverage thresholds, Rust formatting, Clippy with warnings denied, and Rust tests. `skills:check` validates the repository-owned Realm Skills, their routing metadata, and stale cross-project assumptions. `verify:full` adds that Skill gate plus source-boundary, documentation, transitive-license, committed-SBOM, and web-build checks. Commit-to-commit version sequencing is checked by the pre-push hook because it requires the outgoing Git range. `verify:ci` is a reusable strict local command that additionally runs production dependency advisories; it is not connected to GitHub Actions.
+`verify` covers strict TypeScript, frontend tests with enforced coverage thresholds, Rust formatting, Clippy with warnings denied, and Rust tests. `skills:check` validates the repository-owned Realm Skills, their routing metadata, and stale cross-project assumptions. `verify:full` adds that Skill gate plus source-boundary, documentation, transitive-license, committed-SBOM, web-build, and Node runtime resolver checks. Commit-to-commit version sequencing is checked by the pre-push hook because it requires the outgoing Git range. `verify:ci` is a reusable strict local command that additionally runs production dependency advisories; it is not connected to GitHub Actions.
+
+The public verification scripts (`verify`, `verify:full`, `verify:ci`, and both
+`verify:local:*` gates) enter through `script/with_node_runtime.sh`. If the
+interactive shell currently exposes another Node version, the resolver checks
+the repository's `.node-version`, then validates an explicitly supplied local
+runtime, configured version-manager locations, Homebrew's discovered prefix,
+and any later PATH entry. It never downloads or changes a tool installation.
+Every candidate must report the exact pinned version; if none is available the
+gate stops with the required version and a local setup instruction. The inner
+scripts are intentionally separate so verification cannot perform its first
+dependency or test command under an unpinned Node process. Run
+`pnpm node:runtime:test` to exercise normal, mismatch, argument/exit-status,
+and missing-runtime cases in isolation.
 
 ### Finder shortcuts
 
