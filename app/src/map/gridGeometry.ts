@@ -6,6 +6,7 @@ export const CELL_PAINT_RANGE_MIN = 1;
 export const CELL_PAINT_RANGE_MAX = 5;
 export type CellPaintSize = keyof typeof CELL_PAINT_RADII;
 export type CellPosition = [number, number];
+export const WORLD_EXTENT = [-180, -90, 180, 90] as const;
 
 /** Converts the user-facing cell range to a hex-grid distance radius. */
 export const cellPaintRadiusForRange = (range: number): number => {
@@ -27,6 +28,37 @@ export const cellCenter = (row: number, column: number): [number, number] => [
   FIRST_CELL_CENTER_Y + row * CELL_ROW_STEP,
 ];
 
+const clipPolygonToWorld = (polygon: readonly CellPosition[]): CellPosition[] => {
+  let clipped = polygon.map(([x, y]) => [x, y] as CellPosition);
+  const edges: readonly ((point: CellPosition) => boolean)[] = [
+    ([x]) => x >= WORLD_EXTENT[0],
+    ([, y]) => y >= WORLD_EXTENT[1],
+    ([x]) => x <= WORLD_EXTENT[2],
+    ([, y]) => y <= WORLD_EXTENT[3],
+  ];
+  const intersections: readonly ((start: CellPosition, end: CellPosition) => CellPosition)[] = [
+    ([x1, y1], [x2, y2]) => [WORLD_EXTENT[0], y1 + (y2 - y1) * (WORLD_EXTENT[0] - x1) / (x2 - x1)],
+    ([x1, y1], [x2, y2]) => [x1 + (x2 - x1) * (WORLD_EXTENT[1] - y1) / (y2 - y1), WORLD_EXTENT[1]],
+    ([x1, y1], [x2, y2]) => [WORLD_EXTENT[2], y1 + (y2 - y1) * (WORLD_EXTENT[2] - x1) / (x2 - x1)],
+    ([x1, y1], [x2, y2]) => [x1 + (x2 - x1) * (WORLD_EXTENT[3] - y1) / (y2 - y1), WORLD_EXTENT[3]],
+  ];
+  for (let edge = 0; edge < edges.length && clipped.length > 0; edge += 1) {
+    const inside = edges[edge]!;
+    const intersect = intersections[edge]!;
+    const next: CellPosition[] = [];
+    for (let index = 0; index < clipped.length; index += 1) {
+      const start = clipped[index]!;
+      const end = clipped[(index + 1) % clipped.length]!;
+      const startInside = inside(start);
+      const endInside = inside(end);
+      if (startInside !== endInside) next.push(intersect(start, end));
+      if (endInside) next.push(end);
+    }
+    clipped = next;
+  }
+  return clipped;
+};
+
 /**
  * Returns one regular point-topped hexagon in the fixed odd-row offset grid.
  */
@@ -38,7 +70,8 @@ export const cellPolygon = (row: number, column: number): CellPosition[] | null 
     const angle = ((-90 + vertex * 60) * Math.PI) / 180;
     return [centerX + CELL_RADIUS * Math.cos(angle), centerY + CELL_RADIUS * Math.sin(angle)];
   });
-  return [...polygon, [...polygon[0]!] as CellPosition];
+  const clipped = clipPolygonToWorld(polygon);
+  return clipped.length >= 3 ? [...clipped, [...clipped[0]!] as CellPosition] : null;
 };
 
 export const parseCellId = (value: string): [number, number] | null => {
@@ -68,7 +101,9 @@ const distanceSquaredToSegment = (point: [number, number], start: [number, numbe
 /** Returns cells whose centers fall within the paint radius of every tested stroke segment. */
 export const cellIdsWithinPaintPath = (path: readonly [number, number][], radiusCells: number): string[] => {
   if (path.length === 0 || !Number.isFinite(radiusCells) || radiusCells < 0) return [];
-  if (path.some(([longitude, latitude]) => !Number.isFinite(longitude) || !Number.isFinite(latitude))) return [];
+  if (path.some(([longitude, latitude]) => !Number.isFinite(longitude) || !Number.isFinite(latitude)
+    || longitude < WORLD_EXTENT[0] || longitude > WORLD_EXTENT[2]
+    || latitude < WORLD_EXTENT[1] || latitude > WORLD_EXTENT[3])) return [];
   const gridPath = path.map(gridCoordinate);
   const radiusSquared = radiusCells ** 2;
   let minPathColumn = Number.POSITIVE_INFINITY;
@@ -102,7 +137,9 @@ export const cellIdsWithinPaintPath = (path: readonly [number, number][], radius
 
 /** Returns a fixed hexagonal footprint centered on the cell under the pointer. */
 export const cellIdsWithinPaintPosition = (position: [number, number], radiusCells: number): string[] => {
-  if (!Number.isFinite(position[0]) || !Number.isFinite(position[1]) || !Number.isFinite(radiusCells) || radiusCells < 0) return [];
+  if (!Number.isFinite(position[0]) || !Number.isFinite(position[1]) || !Number.isFinite(radiusCells) || radiusCells < 0
+    || position[0] < WORLD_EXTENT[0] || position[0] > WORLD_EXTENT[2]
+    || position[1] < WORLD_EXTENT[1] || position[1] > WORLD_EXTENT[3]) return [];
   const [gridColumn, gridRow] = gridCoordinate(position);
   let centerRow = Math.round(gridRow);
   let centerColumn = Math.round(gridColumn - (centerRow % 2 === 0 ? 0 : 0.5));

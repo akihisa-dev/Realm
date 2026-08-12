@@ -25,7 +25,7 @@ import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, Position, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
-import { CELL_PAINT_RADII, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
+import { CELL_PAINT_RADII, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
 import { MAX_SMOOTHING_PASSES, refineDrawnGeometry, snapPositionToAngle } from "./drawingGeometry";
 import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
@@ -37,7 +37,7 @@ import type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, 
 
 export type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellPaintSize } from "./gridGeometry";
-export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
+export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
 
 type Segment = readonly [Position, Position];
@@ -295,7 +295,7 @@ const nudgeGeometry = (geometry: GeoJsonGeometry, offset: Position): GeoJsonGeom
 /** Owns OpenLayers objects and leaves project state in React/Rust. */
 export class RealmMapAdapter implements RealmMapRenderer {
   private readonly map: Map;
-  private readonly worldExtent = [-180, -90, 180, 90] as const;
+  private readonly worldExtent = WORLD_EXTENT;
   private readonly fitPadding = 8;
   private activeThemeId: MapThemeId = DEFAULT_MAP_THEME_ID;
   private themeOverrides: ThemeOverrides = {};
@@ -343,6 +343,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private cellAttributesById = new globalThis.Map<string, CellAttributeSnapshot[]>();
   private selectedCellIds = new Set<string>();
   private hoveredCellIds = new Set<string>();
+  /** Most recent in-bounds pointer position, used to refresh transient previews after state changes. */
+  private lastPointerCoordinate: [number, number] | null = null;
+  private pointerInside = false;
   private readonly drawListeners = new Set<(geometry: GeoJsonGeometry) => void>();
   private readonly selectFeaturesListeners = new Set<(featureIds: readonly string[]) => void>();
   private readonly selectListeners = new Set<(featureId: string | null) => void>();
@@ -690,6 +693,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.lasso.setActive(mode === "pan");
     this.cellLayer.setVisible(true);
     this.setNavigationActive(mode === "pan");
+    this.refreshHoveredCells();
     if (mode === "erase") {
       this.setSelected(null);
       this.eraser = new PointerInteraction({
@@ -711,14 +715,17 @@ export class RealmMapAdapter implements RealmMapRenderer {
         handleDownEvent: (event) => {
           const pointer = event.originalEvent as PointerEvent;
           if (!pointer.isPrimary || pointer.button !== 0) return false;
+          const point = event.coordinate as [number, number];
+          if (!this.positionWithinWorld(point)) return false;
           this.paintSelectionBeforeStroke = [...this.selectedCellIds];
-          this.paintLastPoint = event.coordinate as [number, number];
+          this.paintLastPoint = point;
           this.paintStrokeSelection = new Set(gridCellIdsWithinPaintPosition(this.paintLastPoint, this.paintRadiusForEvent(event.originalEvent)));
           this.setSelectedCells([...this.paintStrokeSelection]);
           return true;
         },
         handleDragEvent: (event) => {
           const nextPoint = event.coordinate as [number, number];
+          if (!this.positionWithinWorld(nextPoint)) return;
           if (!this.paintLastPoint) this.paintLastPoint = nextPoint;
           for (const id of gridCellIdsWithinPaintPosition(nextPoint, this.paintRadiusForEvent(event.originalEvent))) this.paintStrokeSelection.add(id);
           this.paintLastPoint = nextPoint;
@@ -726,6 +733,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
         },
         handleUpEvent: (event) => {
           const nextPoint = event.coordinate as [number, number];
+          if (!this.positionWithinWorld(nextPoint)) {
+            this.finishPaintStroke();
+            return false;
+          }
           if (!this.paintLastPoint) this.paintLastPoint = nextPoint;
           for (const id of gridCellIdsWithinPaintPath([this.paintLastPoint, nextPoint], this.paintRadiusForEvent(event.originalEvent))) this.paintStrokeSelection.add(id);
           this.finishPaintStroke();
@@ -865,6 +876,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.setNavigationActive(false);
     this.draw?.setActive(true);
     this.paint?.setActive(true);
+    this.refreshHoveredCells();
     event.preventDefault();
   };
 
@@ -898,6 +910,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.paintLastPoint = null;
     this.paintStrokeSelection.clear();
     this.paintSelectionBeforeStroke = [];
+    this.refreshHoveredCells();
   }
 
   private cancelPaintStroke(restoreSelection = true): void {
@@ -910,25 +923,33 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   private readonly handlePointerMove = (event: Event | BaseEvent): void => {
-    if ((this.activeMode !== "cell-select" && this.activeMode !== "cell-erase") || this.temporaryPan || this.paintLastPoint) {
-      this.setHoveredCells([]);
-      return;
-    }
     if (!("coordinate" in event) || !Array.isArray(event.coordinate)) {
+      this.lastPointerCoordinate = null;
+      this.pointerInside = false;
       this.setHoveredCells([]);
       return;
     }
     const [longitude, latitude] = event.coordinate;
-    if (longitude === undefined || latitude === undefined || longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
+    if (longitude === undefined || latitude === undefined || !this.positionWithinWorld([longitude, latitude])) {
+      this.lastPointerCoordinate = null;
+      this.pointerInside = false;
       this.setHoveredCells([]);
       return;
     }
-    this.setHoveredCells(gridCellIdsWithinPaintPosition([longitude, latitude], this.paintRadiusForMode()));
+    this.lastPointerCoordinate = [longitude, latitude];
+    this.pointerInside = true;
+    if ((this.activeMode !== "cell-select" && this.activeMode !== "cell-erase") || this.temporaryPan || this.paintLastPoint) {
+      this.setHoveredCells([]);
+      return;
+    }
+    this.refreshHoveredCells();
   };
 
   private readonly handlePointerLeave = (): void => {
     // Keep an active paint stroke alive while the pointer crosses the canvas
     // boundary. The external pointerup handler commits the visited cells.
+    this.lastPointerCoordinate = null;
+    this.pointerInside = false;
     this.setHoveredCells([]);
   };
 
@@ -958,6 +979,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
     return this.activeMode === "cell-erase" ? this.cellEraseRadius : this.cellPaintRadius;
   }
 
+  private positionWithinWorld(position: readonly [number, number]): boolean {
+    return Number.isFinite(position[0]) && Number.isFinite(position[1])
+      && position[0] >= this.worldExtent[0] && position[0] <= this.worldExtent[2]
+      && position[1] >= this.worldExtent[1] && position[1] <= this.worldExtent[3];
+  }
+
   private paintRadiusForEvent(originalEvent: Event): number {
     const radius = this.paintRadiusForMode();
     if (typeof PointerEvent !== "undefined" && originalEvent instanceof PointerEvent && originalEvent.pointerType === "pen" && originalEvent.pressure > 0) {
@@ -969,6 +996,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   setCellPaintRadius(radiusCells: number): void {
     if (!Number.isFinite(radiusCells)) return;
     this.cellPaintRadius = Math.max(0, Math.min(32, radiusCells));
+    this.refreshHoveredCells();
   }
 
   setCellEraseOptions(options: { mode: CellEraseMode; radiusCells: number }): void {
@@ -976,6 +1004,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (!Number.isFinite(options.radiusCells)) return;
     this.cellEraseMode = options.mode;
     this.cellEraseRadius = Math.max(0, Math.min(32, options.radiusCells));
+    this.refreshHoveredCells();
   }
 
   private expandConnectedEraseCells(seedIds: readonly string[]): string[] {
@@ -1023,6 +1052,16 @@ export class RealmMapAdapter implements RealmMapRenderer {
       feature?.set("erasePreview", erasing, true);
     }
     this.cellLayer.changed();
+  }
+
+  private refreshHoveredCells(): void {
+    if (!this.pointerInside || !this.lastPointerCoordinate
+      || (this.activeMode !== "cell-select" && this.activeMode !== "cell-erase")
+      || this.temporaryPan || this.paintLastPoint) {
+      this.setHoveredCells([]);
+      return;
+    }
+    this.setHoveredCells(gridCellIdsWithinPaintPosition(this.lastPointerCoordinate, this.paintRadiusForMode()));
   }
 
   private ensureCells(cellIds: Iterable<string>): void {
@@ -1317,6 +1356,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellAttributesById.clear();
     this.selectedCellIds.clear();
     this.hoveredCellIds.clear();
+    this.lastPointerCoordinate = null;
+    this.pointerInside = false;
     this.map.setTarget(undefined);
     this.map.dispose();
   }

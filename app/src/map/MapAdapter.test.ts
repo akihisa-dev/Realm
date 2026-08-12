@@ -1,4 +1,4 @@
-import { CELL_PAINT_RANGE_MAX, CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellPaintRadiusForRange, cellCenter, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, isGeometryWithinWorld, resolutionForCoveringExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
+import { CELL_PAINT_RANGE_MAX, CELL_GRID_CELL_COUNT, WORLD_EXTENT, RealmMapAdapter, assertGeometryWithinWorld, cellPaintRadiusForRange, cellCenter, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, isGeometryWithinWorld, resolutionForCoveringExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -45,6 +45,53 @@ describe("RealmMapAdapter", () => {
     }] as const;
     expect(selectFeatureIdsWithinLasso(features, [[-1, -1], [1, -1], [1, 1], [-1, 1]])).toEqual([]);
     expect(selectFeatureIdsWithinLasso(features, [[-3, -1], [-2, -1], [-2, 1], [-3, 1]])).toEqual(["donut"]);
+  });
+
+  it("refreshes the transient paint preview after mode and range changes without resurrecting it after pointerleave", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
+    const center = cellCenter(10, 10);
+
+    adapter.setMode("cell-select");
+    adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: center } as never);
+    const initialPreviewIds = cellIdsWithinPaintPosition(center, 2);
+    expect(initialPreviewIds.every((id) => cellLayer.getSource()?.getFeatureById(id)?.get("preview") === true)).toBe(true);
+
+    adapter.setCellPaintRadius(0);
+    const narrowPreviewIds = cellIdsWithinPaintPosition(center, 0);
+    expect(narrowPreviewIds).toHaveLength(1);
+    expect(narrowPreviewIds[0] && cellLayer.getSource()?.getFeatureById(narrowPreviewIds[0])?.get("preview")).toBe(true);
+    expect(initialPreviewIds.filter((id) => !narrowPreviewIds.includes(id)).every((id) => cellLayer.getSource()?.getFeatureById(id) === null)).toBe(true);
+
+    adapter.setCellPaintRadius(4);
+    const widePreviewIds = cellIdsWithinPaintPosition(center, 4);
+    expect(widePreviewIds.every((id) => cellLayer.getSource()?.getFeatureById(id)?.get("preview") === true)).toBe(true);
+
+    adapter.setCellEraseOptions({ mode: "grid", radiusCells: 4 });
+    adapter.setMode("cell-erase");
+    expect(widePreviewIds.every((id) => {
+      const feature = cellLayer.getSource()?.getFeatureById(id);
+      return feature?.get("preview") !== true && feature?.get("erasePreview") === true;
+    })).toBe(true);
+    adapter.setMode("cell-select");
+    expect(widePreviewIds.every((id) => cellLayer.getSource()?.getFeatureById(id)?.get("preview") === true)).toBe(true);
+
+    host.dispatchEvent(new Event("pointerleave"));
+    expect(cellLayer.getSource()?.getFeatures()).toHaveLength(0);
+    adapter.setCellPaintRadius(0);
+    expect(cellLayer.getSource()?.getFeatures()).toHaveLength(0);
+    adapter.setMode("cell-erase");
+    adapter.setMode("cell-select");
+    expect(cellLayer.getSource()?.getFeatures()).toHaveLength(0);
+
+    adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: center } as never);
+    expect(cellLayer.getSource()?.getFeatureById(narrowPreviewIds[0]!)?.get("preview")).toBe(true);
+    adapter.dispose();
+    host.remove();
   });
 
   it("keeps locked and hidden features out of multi-selection and clears all ids on Escape", () => {
@@ -391,6 +438,21 @@ describe("RealmMapAdapter", () => {
     expect(Math.max(...edgeSideLengths) - Math.min(...edgeSideLengths)).toBeLessThan(1e-8);
     expect(cellPolygon(-1, 0)).toBeNull();
     expect(cellPolygon(0, 64)).toBeNull();
+    for (const [row, column] of [[0, 0], [0, 63], [36, 0], [36, 63]] as const) {
+      const boundaryCell = cellPolygon(row, column);
+      expect(boundaryCell).not.toBeNull();
+      expect(boundaryCell?.every(([longitude, latitude]) => longitude >= WORLD_EXTENT[0]
+        && longitude <= WORLD_EXTENT[2] && latitude >= WORLD_EXTENT[1] && latitude <= WORLD_EXTENT[3])).toBe(true);
+    }
+  });
+
+  it("rejects paint positions and paths outside the finite world extent", () => {
+    expect(cellIdsWithinPaintPosition([-180.01, 0], 1)).toEqual([]);
+    expect(cellIdsWithinPaintPosition([180.01, 0], 1)).toEqual([]);
+    expect(cellIdsWithinPaintPosition([0, -90.01], 1)).toEqual([]);
+    expect(cellIdsWithinPaintPosition([0, 90.01], 1)).toEqual([]);
+    expect(cellIdsWithinPaintPath([[0, 0], [180.01, 0]], 1)).toEqual([]);
+    expect(cellIdsWithinPaintPath([[-180, -90], [180, 90]], 1).length).toBeGreaterThan(0);
   });
 
   it("guards feature geometry at the bounded world edge", () => {
