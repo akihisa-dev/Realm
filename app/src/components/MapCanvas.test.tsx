@@ -1,6 +1,25 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { RealmMapRenderer } from "../map/MapAdapter";
 import { MapCanvas } from "./MapCanvas";
+import { positionPaletteFlyout } from "./paletteFlyout";
+
+describe("positionPaletteFlyout", () => {
+  const palette = { left: 100, top: 100, right: 200, bottom: 200 };
+  const size = { width: 176, height: 58 };
+  it.each([
+    ["right", palette, { left: 210, top: 130, right: 238, bottom: 158 }, { width: 500, height: 400 }],
+    ["left", { left: 250, top: 100, right: 350, bottom: 200 }, { left: 250, top: 130, right: 278, bottom: 158 }, { width: 390, height: 400 }],
+    ["bottom", palette, { left: 130, top: 180, right: 158, bottom: 208 }, { width: 300, height: 300 }],
+    ["top", palette, { left: 130, top: 102, right: 158, bottom: 130 }, { width: 300, height: 180 }],
+  ])("chooses %s outside the palette with a gap", (side, paletteRect, anchor, viewport) => {
+    const position = positionPaletteFlyout(paletteRect, anchor, viewport, size);
+    expect(position.side).toBe(side);
+    expect(position.left >= 0 && position.top >= 0).toBe(true);
+    expect(position.left + size.width <= viewport.width).toBe(true);
+    expect(position.top + size.height <= viewport.height).toBe(true);
+    expect(position.left >= paletteRect.right || position.left + size.width <= paletteRect.left || position.top >= paletteRect.bottom || position.top + size.height <= paletteRect.top).toBe(true);
+  });
+});
 
 describe("MapCanvas", () => {
   it("drives the canvas only through the replaceable renderer contract", () => {
@@ -27,7 +46,7 @@ describe("MapCanvas", () => {
       setLayerVisibility: vi.fn(),
       setMode: vi.fn(),
       setDrawingOptions: vi.fn(),
-      setCellBrushRadius: vi.fn(),
+      setCellPaintRadius: vi.fn(),
       setSelected: vi.fn(),
       setSelectedFeatures: vi.fn(),
       setSelectedCells: vi.fn(),
@@ -67,7 +86,7 @@ describe("MapCanvas", () => {
     expect(renderer.setThemeOverrides).toHaveBeenCalledWith({});
     expect(renderer.setGridOptions).toHaveBeenCalledWith({ kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 });
     expect(renderer.setDrawingOptions).toHaveBeenCalledWith({ gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null });
-    expect(renderer.setCellBrushRadius).toHaveBeenCalledWith(0);
+    expect(renderer.setCellPaintRadius).toHaveBeenCalledWith(0);
     expect(renderer.setCellAttributes).toHaveBeenCalledWith([]);
     expect(renderer.setSelectedCells).toHaveBeenCalledWith([]);
     expect(screen.queryByRole("group", { name: "現在の地図操作" })).not.toBeInTheDocument();
@@ -75,32 +94,48 @@ describe("MapCanvas", () => {
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).toHaveStyle({ left: "120px", top: "80px" });
     expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-opening");
-    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(8);
-    expect(document.querySelector(".radial-palette")?.textContent).toContain("筆");
+    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(9);
+    expect(document.querySelector(".radial-palette")?.textContent).not.toContain("描画範囲");
+    expect(document.querySelector(".radial-palette-range-tool .radial-palette-range-button")?.textContent).toBe("");
     expect(screen.getByRole("toolbar", { name: "地図ツールパレット" })).toBeInTheDocument();
     const onMapPointerDown = vi.fn();
     map.addEventListener("pointerdown", onMapPointerDown);
-    const brushButton = screen.getByRole("button", { name: "筆の太さ" });
-    fireEvent.pointerEnter(brushButton);
-    let brushSlider = screen.getByRole("slider", { name: "筆の太さ" });
-    expect(brushSlider).toHaveAttribute("aria-valuetext", "1セル");
-    fireEvent.change(brushSlider, { target: { value: "3" } });
-    expect(brushSlider).toHaveAttribute("aria-valuetext", "3セル");
-    expect(renderer.setCellBrushRadius).toHaveBeenLastCalledWith(0);
-    fireEvent.blur(brushButton, { relatedTarget: document.body });
-    expect(screen.queryByRole("group", { name: "筆の太さ調整" })).not.toBeInTheDocument();
-    fireEvent.focus(brushButton);
-    expect(screen.getByRole("group", { name: "筆の太さ調整" })).toBeInTheDocument();
-    brushSlider = screen.getByRole("slider", { name: "筆の太さ" });
+    const rangeButton = screen.getByRole("button", { name: "描画範囲" });
+    fireEvent.pointerEnter(rangeButton);
+    expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
+    fireEvent.click(rangeButton);
+    expect(document.querySelector(".palette-flyout")).toBeInTheDocument();
+    let rangeSlider = screen.getByRole("slider", { name: "描画範囲" });
+    expect(rangeSlider).toHaveAttribute("aria-valuetext", "描画範囲1セル");
+    fireEvent.pointerLeave(rangeButton);
+    expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
+    const rangeFlyout = screen.getByRole("group", { name: "描画範囲の調整" });
+    fireEvent.pointerEnter(rangeFlyout);
+    fireEvent.pointerDown(rangeFlyout);
+    fireEvent.change(rangeSlider, { target: { value: "3" } });
+    expect(rangeSlider).toHaveAttribute("aria-valuetext", "描画範囲3セル");
+    expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(0);
+    fireEvent.click(rangeButton);
+    expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
+    fireEvent.click(rangeButton);
+    expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
+    fireEvent.keyDown(rangeButton, { key: "Escape" });
+    expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
+    fireEvent.focus(rangeButton);
+    fireEvent.keyDown(rangeButton, { key: "Enter" });
+    fireEvent.click(rangeButton);
+    expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
+    rangeSlider = screen.getByRole("slider", { name: "描画範囲" });
     rerender(<MapCanvas mode="cell-select" zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
-    expect(renderer.setCellBrushRadius).toHaveBeenLastCalledWith(2);
+    expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(2);
     rerender(<MapCanvas mode="cell-erase" zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
-    expect(renderer.setCellBrushRadius).toHaveBeenLastCalledWith(0);
-    const brushPopover = screen.getByRole("group", { name: "筆の太さ調整" });
-    fireEvent.pointerEnter(brushPopover);
-    expect(screen.getByRole("group", { name: "筆の太さ調整" })).toBeInTheDocument();
-    fireEvent.pointerDown(brushSlider);
+    expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(0);
+    const rangePopover = screen.getByRole("group", { name: "描画範囲の調整" });
+    fireEvent.pointerEnter(rangePopover);
+    expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
+    fireEvent.pointerDown(rangeSlider);
     expect(onMapPointerDown).not.toHaveBeenCalled();
+    fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     act(() => { vi.advanceTimersByTime(360); });
     expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-open");
     fireEvent.pointerDown(document.querySelector(".radial-palette") as Element);
@@ -163,5 +198,23 @@ describe("MapCanvas", () => {
     unmount();
     expect(renderer.dispose).toHaveBeenCalledOnce();
     vi.useRealTimers();
+  });
+
+  it("moves eraser selection into the map palette and exposes mode and thickness controls", () => {
+    const renderer: RealmMapRenderer = {
+      getZoom: vi.fn(() => 1), setZoom: vi.fn(), resetView: vi.fn(), setFeatures: vi.fn(), setTheme: vi.fn(), setThemeOverrides: vi.fn(),
+      setGridVisible: vi.fn(), setGridOptions: vi.fn(), setCellGridVisible: vi.fn(), setCellGridOptions: vi.fn(), setAssets: vi.fn(), setLayerVisibility: vi.fn(),
+      setMode: vi.fn(), setDrawingOptions: vi.fn(), setCellPaintRadius: vi.fn(), setCellEraseOptions: vi.fn(), setSelected: vi.fn(), setSelectedFeatures: vi.fn(), setSelectedCells: vi.fn(), setCellAttributes: vi.fn(),
+      onDraw: vi.fn(() => vi.fn()), onSelectFeatures: vi.fn(() => vi.fn()), onSelect: vi.fn(() => vi.fn()), onCellSelect: vi.fn(() => vi.fn()), onModifyFeatures: vi.fn(() => vi.fn()), onModify: vi.fn(() => vi.fn()), onEraseFeatures: vi.fn(() => vi.fn()), onErase: vi.fn(() => vi.fn()), onLayerShift: vi.fn(() => vi.fn()), onError: vi.fn(() => vi.fn()), onZoomChange: vi.fn(() => vi.fn()), updateSize: vi.fn(), exportRaster: vi.fn(async () => ({ bytes: [], width: 1, height: 1 })), dispose: vi.fn(),
+    };
+    const onToolChange = vi.fn();
+    render(<MapCanvas onToolChange={onToolChange} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
+    fireEvent.contextMenu(screen.getByRole("region", { name: "世界地図" }), { clientX: 100, clientY: 100 });
+    fireEvent.click(screen.getByRole("button", { name: "消しゴム" }));
+    expect(onToolChange).toHaveBeenCalledWith("erase");
+    expect(screen.getByRole("group", { name: "消しゴムの調整" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "塊ごと" }));
+    fireEvent.change(screen.getByRole("slider", { name: "消しゴムの太さ" }), { target: { value: "4" } });
+    expect(renderer.setCellEraseOptions).toHaveBeenLastCalledWith({ mode: "cluster", radiusCells: 3 });
   });
 });

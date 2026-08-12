@@ -1,4 +1,4 @@
-import { CELL_BRUSH_THICKNESS_MAX, CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellBrushRadiusForThickness, cellCenter, cellIdsWithinBrushPath, cellIdsWithinBrushPosition, cellPolygon, isGeometryWithinWorld, resolutionForCoveringExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
+import { CELL_PAINT_RANGE_MAX, CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellPaintRadiusForRange, cellCenter, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, isGeometryWithinWorld, resolutionForCoveringExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -248,30 +248,30 @@ describe("RealmMapAdapter", () => {
     host.remove();
   });
 
-  it("selects a thick brush stroke and expands its footprint with radius", () => {
+  it("selects a thick paint stroke and expands its footprint with radius", () => {
     const oneCell = cellCenter(18, 32);
-    const narrow = cellIdsWithinBrushPath([oneCell, [oneCell[0] + 0.7, oneCell[1]]], 0.25);
-    const wide = cellIdsWithinBrushPath([oneCell, [oneCell[0] + 0.7, oneCell[1]]], 2);
+    const narrow = cellIdsWithinPaintPath([oneCell, [oneCell[0] + 0.7, oneCell[1]]], 0.25);
+    const wide = cellIdsWithinPaintPath([oneCell, [oneCell[0] + 0.7, oneCell[1]]], 2);
     expect(narrow).toContain("32:18");
     expect(wide.length).toBeGreaterThan(narrow.length);
-    expect(cellIdsWithinBrushPath([], 1)).toEqual([]);
-    expect(cellIdsWithinBrushPath([oneCell], -1)).toEqual([]);
-    expect(cellIdsWithinBrushPath([oneCell], Number.NaN)).toEqual([]);
-    expect(cellIdsWithinBrushPath([cellCenter(0, 0)], 0)).toEqual(["0:0"]);
-    expect(cellIdsWithinBrushPath([[-180, -90]], 1)).toContain("0:0");
-    expect(cellIdsWithinBrushPath([cellCenter(36, 63)], 1)).toContain("63:36");
-    expect(cellIdsWithinBrushPath([[-Infinity, -90], [Infinity, 90]], 1)).toEqual([]);
+    expect(cellIdsWithinPaintPath([], 1)).toEqual([]);
+    expect(cellIdsWithinPaintPath([oneCell], -1)).toEqual([]);
+    expect(cellIdsWithinPaintPath([oneCell], Number.NaN)).toEqual([]);
+    expect(cellIdsWithinPaintPath([cellCenter(0, 0)], 0)).toEqual(["0:0"]);
+    expect(cellIdsWithinPaintPath([[-180, -90]], 1)).toContain("0:0");
+    expect(cellIdsWithinPaintPath([cellCenter(36, 63)], 1)).toContain("63:36");
+    expect(cellIdsWithinPaintPath([[-Infinity, -90], [Infinity, 90]], 1)).toEqual([]);
   });
 
-  it("maps discrete thickness to hex-distance footprints without duplicates or out-of-bounds cells", () => {
-    expect(cellBrushRadiusForThickness(1)).toBe(0);
-    expect(cellBrushRadiusForThickness(CELL_BRUSH_THICKNESS_MAX)).toBe(4);
+  it("maps discrete range to hex-distance footprints without duplicates or out-of-bounds cells", () => {
+    expect(cellPaintRadiusForRange(1)).toBe(0);
+    expect(cellPaintRadiusForRange(CELL_PAINT_RANGE_MAX)).toBe(4);
     const center = cellCenter(18, 32);
-    expect(cellIdsWithinBrushPosition(center, cellBrushRadiusForThickness(1))).toEqual(["32:18"]);
-    const footprint = cellIdsWithinBrushPosition(center, cellBrushRadiusForThickness(3));
+    expect(cellIdsWithinPaintPosition(center, cellPaintRadiusForRange(1))).toEqual(["32:18"]);
+    const footprint = cellIdsWithinPaintPosition(center, cellPaintRadiusForRange(3));
     expect(footprint).toHaveLength(19);
     expect(new Set(footprint).size).toBe(footprint.length);
-    const edgeFootprint = cellIdsWithinBrushPosition(cellCenter(0, 0), cellBrushRadiusForThickness(CELL_BRUSH_THICKNESS_MAX));
+    const edgeFootprint = cellIdsWithinPaintPosition(cellCenter(0, 0), cellPaintRadiusForRange(CELL_PAINT_RANGE_MAX));
     expect(new Set(edgeFootprint).size).toBe(edgeFootprint.length);
     expect(edgeFootprint.every((id) => /^\d+:\d+$/.test(id))).toBe(true);
     expect(edgeFootprint).not.toContain("-1:0");
@@ -285,7 +285,7 @@ describe("RealmMapAdapter", () => {
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
     adapter.setCellAttributes([{ cellId: "10:10", attribute: "terrain", value: "terrain" }]);
-    adapter.setCellBrushRadius(4);
+    adapter.setCellPaintRadius(4);
     adapter.setMode("cell-erase");
     const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
     const style = cellLayer.getStyleFunction();
@@ -296,21 +296,47 @@ describe("RealmMapAdapter", () => {
     expect(cellLayer.getSource()?.getFeatures().filter((feature) => feature.get("erasePreview")).map((feature) => feature.getId())).toEqual(["10:10"]);
     expect(style?.(hovered!, 1)).toBeUndefined();
 
-    const cellBrush = adapter.getMap().getInteractions().getArray().at(-1);
+    const cellPaint = adapter.getMap().getInteractions().getArray().at(-1);
     const pointerDown = new MouseEvent("pointerdown", { button: 0, bubbles: true });
     Object.defineProperty(pointerDown, "isPrimary", { value: true });
-    cellBrush?.handleEvent({ type: "pointerdown", originalEvent: pointerDown, coordinate: cellCenter(10, 10), activePointers: [pointerDown] } as never);
+    cellPaint?.handleEvent({ type: "pointerdown", originalEvent: pointerDown, coordinate: cellCenter(10, 10), activePointers: [pointerDown] } as never);
     const selected = cellLayer.getSource()?.getFeatureById("10:10");
     expect(selected?.get("selected")).not.toBe(true);
     expect(selected?.get("erasePreview")).toBe(true);
     expect(style?.(selected!, 1)).toBeUndefined();
 
-    cellBrush?.handleEvent({ type: "pointerdrag", originalEvent: pointerDown, coordinate: cellCenter(10, 11), activePointers: [pointerDown] } as never);
+    cellPaint?.handleEvent({ type: "pointerdrag", originalEvent: pointerDown, coordinate: cellCenter(10, 11), activePointers: [pointerDown] } as never);
     const dragged = cellLayer.getSource()?.getFeatureById("11:10");
     expect(dragged?.get("erasePreview")).toBe(true);
     expect(cellLayer.getSource()?.getFeatures().filter((feature) => feature.get("erasePreview")).map((feature) => feature.getId())).toEqual(["10:10", "11:10"]);
     expect(style?.(dragged!, 1)).toBeUndefined();
 
+    adapter.dispose();
+    host.remove();
+  });
+
+  it("erases one connected terrain cluster while leaving a separated cell intact", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    adapter.setCellAttributes([
+      { cellId: "10:10", attribute: "terrain", value: "terrain" },
+      { cellId: "11:10", attribute: "terrain", value: "terrain" },
+      { cellId: "13:10", attribute: "terrain", value: "terrain" },
+    ]);
+    adapter.setCellEraseOptions({ mode: "cluster", radiusCells: 0 });
+    adapter.setMode("cell-erase");
+    const erased = vi.fn();
+    adapter.onCellSelect(erased);
+    const interaction = adapter.getMap().getInteractions().getArray().at(-1);
+    const pointer = new MouseEvent("pointerdown", { button: 0, bubbles: true });
+    Object.defineProperty(pointer, "isPrimary", { value: true });
+    const center = cellCenter(10, 10);
+    interaction?.handleEvent({ type: "pointerdown", originalEvent: pointer, coordinate: center, activePointers: [pointer] } as never);
+    interaction?.handleEvent({ type: "pointerup", originalEvent: pointer, coordinate: center, activePointers: [] } as never);
+    expect(erased).toHaveBeenCalledWith(["10:10", "11:10"]);
     adapter.dispose();
     host.remove();
   });
@@ -568,7 +594,7 @@ describe("RealmMapAdapter", () => {
     const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
     expect(cellLayer.getVisible()).toBe(true);
     expect(cellLayer.getSource()?.getFeatures()).toHaveLength(0);
-    const hoverCellIds = cellIdsWithinBrushPosition(cellCenter(10, 10), 1);
+    const hoverCellIds = cellIdsWithinPaintPosition(cellCenter(10, 10), 1);
     expect(hoverCellIds).toHaveLength(7);
     adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: cellCenter(10, 10) } as never);
     expect(hoverCellIds.length).toBeGreaterThan(0);
@@ -609,21 +635,21 @@ describe("RealmMapAdapter", () => {
     expect(host.style.background).toBe("rgb(1, 2, 3)");
     expect(() => adapter.setThemeOverrides({ canvas: "rgb(1, 2, 3)" })).toThrow(/RRGGBB/);
     expect(() => adapter.setThemeOverrides({ unknown: "#010203" } as never)).toThrow(/Unknown theme override/);
-    const cellBrush = adapter.getMap().getInteractions().getArray().at(-1);
-    expect(cellBrush).toBeInstanceOf(PointerInteraction);
+    const cellPaint = adapter.getMap().getInteractions().getArray().at(-1);
+    expect(cellPaint).toBeInstanceOf(PointerInteraction);
     expect(interactions.find((interaction) => interaction instanceof DragPan)?.getActive()).toBe(false);
     expect(interactions.find((interaction) => interaction instanceof KeyboardPan)?.getActive()).toBe(false);
     const pointerDown = new MouseEvent("pointerdown", { button: 0, bubbles: true });
     Object.defineProperty(pointerDown, "isPrimary", { value: true });
-    cellBrush?.handleEvent({ type: "pointerdown", originalEvent: pointerDown, coordinate: cellCenter(10, 10), activePointers: [pointerDown] } as never);
-    expect((cellBrush as unknown as { handlingDownUpSequence: boolean }).handlingDownUpSequence).toBe(true);
+    cellPaint?.handleEvent({ type: "pointerdown", originalEvent: pointerDown, coordinate: cellCenter(10, 10), activePointers: [pointerDown] } as never);
+    expect((cellPaint as unknown as { handlingDownUpSequence: boolean }).handlingDownUpSequence).toBe(true);
     const paintedPreview = cellLayer.getSource()?.getFeatures().find((feature) => feature.get("selected") === true);
     expect(paintedPreview).toBeDefined();
     expect(paintedPreview?.get("paintPreview")).toBe(true);
     const paintedStyles = cellLayer.getStyleFunction()?.(paintedPreview!, 1) as Style[];
     expect(paintedStyles.at(-1)?.getFill()?.getColor()).toBe("#35463f");
     window.dispatchEvent(new MouseEvent("pointerup", { button: 0 }));
-    expect((cellBrush as unknown as { handlingDownUpSequence: boolean }).handlingDownUpSequence).toBe(false);
+    expect((cellPaint as unknown as { handlingDownUpSequence: boolean }).handlingDownUpSequence).toBe(false);
     expect(cellLayer.getSource()?.getFeatures().some((feature) => feature.get("selected") === true)).toBe(false);
     const onCellSelect = vi.fn();
     const stopCellSelect = adapter.onCellSelect(onCellSelect);
@@ -644,8 +670,8 @@ describe("RealmMapAdapter", () => {
     expect(adapter.getZoom()).toBe(1);
     host.dispatchEvent(new KeyboardEvent("keydown", { key: "1", ctrlKey: true, bubbles: true }));
     expect(adapter.getZoom()).toBe(1);
-    adapter.setCellBrushRadius(Number.NaN);
-    adapter.setCellBrushRadius(999);
+    adapter.setCellPaintRadius(Number.NaN);
+    adapter.setCellPaintRadius(999);
     adapter.setSelected("missing");
     adapter.getMap().getView().setCenter([42, -20]);
     adapter.setZoom(5);

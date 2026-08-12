@@ -25,7 +25,7 @@ import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, Position, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
-import { CELL_BRUSH_RADII, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellIdsWithinBrushPath as gridCellIdsWithinBrushPath, cellIdsWithinBrushPosition as gridCellIdsWithinBrushPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
+import { CELL_PAINT_RADII, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
 import { MAX_SMOOTHING_PASSES, refineDrawnGeometry, snapPositionToAngle } from "./drawingGeometry";
 import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
@@ -33,11 +33,11 @@ import { createCellStyle, createFeatureStyle, MAP_LABEL_FONT } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
 import { paintMapTexture } from "./mapTexture";
 import { assertGeometryWithinWorld } from "./geometryGuard";
-import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
+import type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 
-export type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
-export type { CellBrushSize } from "./gridGeometry";
-export { CELL_BRUSH_RADII, CELL_BRUSH_THICKNESS_MAX, CELL_BRUSH_THICKNESS_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellBrushRadiusForThickness, cellCenter, cellId, cellIdsWithinBrushPath, cellIdsWithinBrushPosition, cellPolygon, parseCellId } from "./gridGeometry";
+export type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
+export type { CellPaintSize } from "./gridGeometry";
+export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
 
 type Segment = readonly [Position, Position];
@@ -331,12 +331,14 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private modifierStraighten = false;
   private gridOptions: GridOptions = { ...DEFAULT_GRID_OPTIONS };
   private gridVisible = true;
-  private cellBrushRadius: number = CELL_BRUSH_RADII.medium;
-  private brush: CancelablePointerInteraction | null = null;
+  private cellPaintRadius: number = CELL_PAINT_RADII.medium;
+  private cellEraseMode: CellEraseMode = "grid";
+  private cellEraseRadius = 0;
+  private paint: CancelablePointerInteraction | null = null;
   private eraser: PointerInteraction | null = null;
-  private brushLastPoint: [number, number] | null = null;
-  private brushStrokeSelection = new Set<string>();
-  private brushSelectionBeforeStroke: string[] = [];
+  private paintLastPoint: [number, number] | null = null;
+  private paintStrokeSelection = new Set<string>();
+  private paintSelectionBeforeStroke: string[] = [];
   private readonly cellFeatures = new globalThis.Map<string, Feature>();
   private cellAttributesById = new globalThis.Map<string, CellAttributeSnapshot[]>();
   private selectedCellIds = new Set<string>();
@@ -663,13 +665,13 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.draw.dispose();
       this.draw = null;
     }
-    if (this.brush) {
-      this.map.removeInteraction(this.brush);
-      this.brush.dispose();
-      this.brush = null;
-      this.brushLastPoint = null;
-      this.brushStrokeSelection.clear();
-      this.brushSelectionBeforeStroke = [];
+    if (this.paint) {
+      this.map.removeInteraction(this.paint);
+      this.paint.dispose();
+      this.paint = null;
+      this.paintLastPoint = null;
+      this.paintStrokeSelection.clear();
+      this.paintSelectionBeforeStroke = [];
     }
     if (this.eraser) {
       this.map.removeInteraction(this.eraser);
@@ -705,37 +707,38 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
     if (isCellMode) {
       this.setSelected(null);
-      this.brush = new CancelablePointerInteraction({
+      this.paint = new CancelablePointerInteraction({
         handleDownEvent: (event) => {
           const pointer = event.originalEvent as PointerEvent;
           if (!pointer.isPrimary || pointer.button !== 0) return false;
-          this.brushSelectionBeforeStroke = [...this.selectedCellIds];
-          this.brushLastPoint = event.coordinate as [number, number];
-          this.brushStrokeSelection = new Set(gridCellIdsWithinBrushPosition(this.brushLastPoint, this.brushRadiusForEvent(event.originalEvent)));
-          this.setSelectedCells([...this.brushStrokeSelection]);
+          this.paintSelectionBeforeStroke = [...this.selectedCellIds];
+          this.paintLastPoint = event.coordinate as [number, number];
+          this.paintStrokeSelection = new Set(gridCellIdsWithinPaintPosition(this.paintLastPoint, this.paintRadiusForEvent(event.originalEvent)));
+          this.setSelectedCells([...this.paintStrokeSelection]);
           return true;
         },
         handleDragEvent: (event) => {
           const nextPoint = event.coordinate as [number, number];
-          if (!this.brushLastPoint) this.brushLastPoint = nextPoint;
-          for (const id of gridCellIdsWithinBrushPosition(nextPoint, this.brushRadiusForEvent(event.originalEvent))) this.brushStrokeSelection.add(id);
-          this.brushLastPoint = nextPoint;
-          this.setSelectedCells([...this.brushStrokeSelection]);
+          if (!this.paintLastPoint) this.paintLastPoint = nextPoint;
+          for (const id of gridCellIdsWithinPaintPosition(nextPoint, this.paintRadiusForEvent(event.originalEvent))) this.paintStrokeSelection.add(id);
+          this.paintLastPoint = nextPoint;
+          this.setSelectedCells([...this.paintStrokeSelection]);
         },
         handleUpEvent: (event) => {
           const nextPoint = event.coordinate as [number, number];
-          if (!this.brushLastPoint) this.brushLastPoint = nextPoint;
-          for (const id of gridCellIdsWithinBrushPath([this.brushLastPoint, nextPoint], this.brushRadiusForEvent(event.originalEvent))) this.brushStrokeSelection.add(id);
-          const selected = [...this.brushStrokeSelection];
+          if (!this.paintLastPoint) this.paintLastPoint = nextPoint;
+          for (const id of gridCellIdsWithinPaintPath([this.paintLastPoint, nextPoint], this.paintRadiusForEvent(event.originalEvent))) this.paintStrokeSelection.add(id);
+          let selected = [...this.paintStrokeSelection];
+          if (this.activeMode === "cell-erase" && this.cellEraseMode === "cluster") selected = this.expandConnectedEraseCells(selected);
           this.setSelectedCells(selected);
           for (const listener of this.cellSelectListeners) listener([...selected]);
-          this.brushLastPoint = null;
-          this.brushStrokeSelection.clear();
-          this.brushSelectionBeforeStroke = [];
+          this.paintLastPoint = null;
+          this.paintStrokeSelection.clear();
+          this.paintSelectionBeforeStroke = [];
           return false;
         },
       });
-      this.map.addInteraction(this.brush);
+      this.map.addInteraction(this.paint);
       return;
     }
     if (mode === "pan") return;
@@ -810,10 +813,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
       return;
     }
     if (event.code === "Space" && this.activeMode !== "pan" && !this.temporaryPan) {
-      this.cancelBrushStroke();
+      this.cancelPaintStroke();
       this.temporaryPan = true;
       this.draw?.setActive(false);
-      this.brush?.setActive(false);
+      this.paint?.setActive(false);
       this.setNavigationActive(true);
       event.preventDefault();
       return;
@@ -854,7 +857,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       return;
     }
     if (this.activeMode !== "cell-select" && this.activeMode !== "cell-erase") return;
-    this.cancelBrushStroke(false);
+    this.cancelPaintStroke(false);
     this.setSelectedCells([]);
     for (const listener of this.cellSelectListeners) listener([]);
     event.preventDefault();
@@ -867,7 +870,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.temporaryPan = false;
     this.setNavigationActive(false);
     this.draw?.setActive(true);
-    this.brush?.setActive(true);
+    this.paint?.setActive(true);
     event.preventDefault();
   };
 
@@ -875,7 +878,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (this.draw) this.draw.abortDrawing();
     this.lassoPoints = [];
     this.lassoAdditive = false;
-    this.cancelBrushStroke();
+    this.cancelPaintStroke();
   };
 
   private readonly handleExternalPointerUp = (event: PointerEvent): void => {
@@ -884,17 +887,17 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.handlePointerCancel();
   };
 
-  private cancelBrushStroke(restoreSelection = true): void {
-    const hadStroke = this.brushLastPoint !== null;
-    this.brush?.cancelSequence();
-    this.brushLastPoint = null;
-    this.brushStrokeSelection.clear();
-    if (hadStroke && restoreSelection) this.setSelectedCells(this.brushSelectionBeforeStroke);
-    this.brushSelectionBeforeStroke = [];
+  private cancelPaintStroke(restoreSelection = true): void {
+    const hadStroke = this.paintLastPoint !== null;
+    this.paint?.cancelSequence();
+    this.paintLastPoint = null;
+    this.paintStrokeSelection.clear();
+    if (hadStroke && restoreSelection) this.setSelectedCells(this.paintSelectionBeforeStroke);
+    this.paintSelectionBeforeStroke = [];
   }
 
   private readonly handlePointerMove = (event: Event | BaseEvent): void => {
-    if ((this.activeMode !== "cell-select" && this.activeMode !== "cell-erase") || this.temporaryPan || this.brushLastPoint) {
+    if ((this.activeMode !== "cell-select" && this.activeMode !== "cell-erase") || this.temporaryPan || this.paintLastPoint) {
       this.setHoveredCells([]);
       return;
     }
@@ -907,11 +910,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.setHoveredCells([]);
       return;
     }
-    this.setHoveredCells(gridCellIdsWithinBrushPosition([longitude, latitude], this.brushRadiusForMode()));
+    this.setHoveredCells(gridCellIdsWithinPaintPosition([longitude, latitude], this.paintRadiusForMode()));
   };
 
   private readonly handlePointerLeave = (): void => {
-    this.cancelBrushStroke();
+    this.cancelPaintStroke();
     this.setHoveredCells([]);
   };
 
@@ -937,21 +940,53 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
   }
 
-  private brushRadiusForMode(): number {
-    return this.activeMode === "cell-erase" ? 0 : this.cellBrushRadius;
+  private paintRadiusForMode(): number {
+    return this.activeMode === "cell-erase" ? this.cellEraseRadius : this.cellPaintRadius;
   }
 
-  private brushRadiusForEvent(originalEvent: Event): number {
-    const radius = this.brushRadiusForMode();
+  private paintRadiusForEvent(originalEvent: Event): number {
+    const radius = this.paintRadiusForMode();
     if (typeof PointerEvent !== "undefined" && originalEvent instanceof PointerEvent && originalEvent.pointerType === "pen" && originalEvent.pressure > 0) {
       return radius * (0.45 + originalEvent.pressure * 0.9);
     }
     return radius;
   }
 
-  setCellBrushRadius(radiusCells: number): void {
+  setCellPaintRadius(radiusCells: number): void {
     if (!Number.isFinite(radiusCells)) return;
-    this.cellBrushRadius = Math.max(0, Math.min(32, radiusCells));
+    this.cellPaintRadius = Math.max(0, Math.min(32, radiusCells));
+  }
+
+  setCellEraseOptions(options: { mode: CellEraseMode; radiusCells: number }): void {
+    if (options.mode !== "grid" && options.mode !== "cluster") return;
+    if (!Number.isFinite(options.radiusCells)) return;
+    this.cellEraseMode = options.mode;
+    this.cellEraseRadius = Math.max(0, Math.min(32, options.radiusCells));
+  }
+
+  private expandConnectedEraseCells(seedIds: readonly string[]): string[] {
+    const terrain = new Set<string>();
+    for (const [id, attributes] of this.cellAttributesById) {
+      if (attributes.some((attribute) => attribute.attribute === "terrain" && attribute.value.trim().length > 0)) terrain.add(id);
+    }
+    const expanded = new Set<string>();
+    const queue = [...seedIds];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (expanded.has(current) || !terrain.has(current)) continue;
+      expanded.add(current);
+      const parsed = parseCellId(current);
+      if (!parsed) continue;
+      const [row, column] = parsed;
+      const neighbors: [number, number][] = row % 2 === 0
+        ? [[row, column - 1], [row, column + 1], [row - 1, column - 1], [row - 1, column], [row + 1, column - 1], [row + 1, column]]
+        : [[row, column - 1], [row, column + 1], [row - 1, column], [row - 1, column + 1], [row + 1, column], [row + 1, column + 1]];
+      for (const [nextRow, nextColumn] of neighbors) {
+        const id = nextRow >= 0 && nextRow < CELL_GRID_ROWS && nextColumn >= 0 && nextColumn < CELL_GRID_COLUMNS ? `${nextColumn}:${nextRow}` : null;
+        if (id && !expanded.has(id) && terrain.has(id)) queue.push(id);
+      }
+    }
+    return [...expanded];
   }
 
   private setHoveredCells(cellIds: readonly string[]): void {
@@ -1222,10 +1257,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.draw.dispose();
       this.draw = null;
     }
-    if (this.brush) {
-      this.map.removeInteraction(this.brush);
-      this.brush.dispose();
-      this.brush = null;
+    if (this.paint) {
+      this.map.removeInteraction(this.paint);
+      this.paint.dispose();
+      this.paint = null;
     }
     if (this.eraser) {
       this.map.removeInteraction(this.eraser);

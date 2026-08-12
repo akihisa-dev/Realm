@@ -1,16 +1,16 @@
 export const CELL_GRID_COLUMNS = 64;
 export const CELL_GRID_ROWS = 37;
 export const CELL_GRID_CELL_COUNT = CELL_GRID_COLUMNS * CELL_GRID_ROWS;
-export const CELL_BRUSH_RADII = { small: 1, medium: 2, large: 4 } as const;
-export const CELL_BRUSH_THICKNESS_MIN = 1;
-export const CELL_BRUSH_THICKNESS_MAX = 5;
-export type CellBrushSize = keyof typeof CELL_BRUSH_RADII;
+export const CELL_PAINT_RADII = { small: 1, medium: 2, large: 4 } as const;
+export const CELL_PAINT_RANGE_MIN = 1;
+export const CELL_PAINT_RANGE_MAX = 5;
+export type CellPaintSize = keyof typeof CELL_PAINT_RADII;
 export type CellPosition = [number, number];
 
-/** Converts the user-facing cell thickness to a hex-grid distance radius. */
-export const cellBrushRadiusForThickness = (thickness: number): number => {
-  if (!Number.isFinite(thickness)) return 0;
-  return Math.max(0, Math.min(CELL_BRUSH_THICKNESS_MAX - 1, Math.round(thickness) - 1));
+/** Converts the user-facing cell range to a hex-grid distance radius. */
+export const cellPaintRadiusForRange = (range: number): number => {
+  if (!Number.isFinite(range)) return 0;
+  return Math.max(0, Math.min(CELL_PAINT_RANGE_MAX - 1, Math.round(range) - 1));
 };
 
 const CELL_RADIUS = 180 / (1.5 * CELL_GRID_ROWS + 0.5);
@@ -65,8 +65,8 @@ const distanceSquaredToSegment = (point: [number, number], start: [number, numbe
   return ((point[0] - closest[0]) ** 2) + ((point[1] - closest[1]) ** 2);
 };
 
-/** Returns cells whose centers fall within the brush radius of every tested stroke segment. */
-export const cellIdsWithinBrushPath = (path: readonly [number, number][], radiusCells: number): string[] => {
+/** Returns cells whose centers fall within the paint radius of every tested stroke segment. */
+export const cellIdsWithinPaintPath = (path: readonly [number, number][], radiusCells: number): string[] => {
   if (path.length === 0 || !Number.isFinite(radiusCells) || radiusCells < 0) return [];
   if (path.some(([longitude, latitude]) => !Number.isFinite(longitude) || !Number.isFinite(latitude))) return [];
   const gridPath = path.map(gridCoordinate);
@@ -101,7 +101,7 @@ export const cellIdsWithinBrushPath = (path: readonly [number, number][], radius
 };
 
 /** Returns a fixed hexagonal footprint centered on the cell under the pointer. */
-export const cellIdsWithinBrushPosition = (position: [number, number], radiusCells: number): string[] => {
+export const cellIdsWithinPaintPosition = (position: [number, number], radiusCells: number): string[] => {
   if (!Number.isFinite(position[0]) || !Number.isFinite(position[1]) || !Number.isFinite(radiusCells) || radiusCells < 0) return [];
   const [gridColumn, gridRow] = gridCoordinate(position);
   let centerRow = Math.round(gridRow);

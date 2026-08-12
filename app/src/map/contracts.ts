@@ -8,6 +8,7 @@ export type MapAdapterOptions = {
 };
 
 export type RealmMapMode = "pan" | "cell-select" | "cell-erase" | "erase" | "polygon-hole" | "label-path" | FeatureType;
+export type CellEraseMode = "grid" | "cluster";
 export type FeatureGeometryChange = { id: string; geometry: GeoJsonGeometry };
 export type ExportCanvasSize = {
   width: number;
@@ -43,7 +44,8 @@ export interface RealmMapRenderer {
   setLayerVisibility(featureType: FeatureType, visible: boolean): void;
   setMode(mode: RealmMapMode): void;
   setDrawingOptions(options: DrawingOptions): void;
-  setCellBrushRadius(radiusCells: number): void;
+  setCellPaintRadius(radiusCells: number): void;
+  setCellEraseOptions?(options: { mode: CellEraseMode; radiusCells: number }): void;
   setSelected(featureId: string | null): void;
   /** Replace the controlled selectable feature set; this sync does not emit. */
   setSelectedFeatures(featureIds: readonly string[]): void;

@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
-  CELL_BRUSH_THICKNESS_MAX,
-  CELL_BRUSH_THICKNESS_MIN,
-  cellBrushRadiusForThickness,
+  CELL_PAINT_RANGE_MAX,
+  CELL_PAINT_RANGE_MIN,
+  cellPaintRadiusForRange,
   createRealmMapRenderer,
   type CellGridOptions,
   type DrawingOptions,
   type GridOptions,
   type RealmMapRenderer,
   type RealmMapRendererFactory,
+  type CellEraseMode,
 } from "../map/MapAdapter";
 import type { CellAttributeSnapshot, GeoJsonGeometry, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { ExportCanvasSize } from "../map/contracts";
 import type { MapErrorCode } from "../map/errors";
 import { DEFAULT_MAP_THEME_ID, type MapThemeId, type ThemeOverrides } from "../map/themes";
+import { positionPaletteFlyout } from "./paletteFlyout";
 
 export type TerrainMapMode = "pan" | "cell-select" | "cell-erase";
 
@@ -26,9 +28,10 @@ type RadialPalettePosition = {
 type RadialPaletteState = RadialPalettePosition & {
   phase: "opening" | "open" | "closing";
 };
+type FlyoutPosition = { left: number; top: number; side: "left" | "right" | "top" | "bottom" };
 
 const RADIAL_PALETTE_SLOTS = 8;
-const BRUSH_THICKNESS_POPOVER_ID = "map-brush-thickness-popover";
+const PAINT_RANGE_FLYOUT_ID = "map-paint-range-flyout";
 // The slots have a short staggered animation. Keep the mounted element around
 // for the same total duration while it winds back to the center on dismissal.
 const RADIAL_PALETTE_ANIMATION_MS = 360;
@@ -53,6 +56,7 @@ type MapCanvasProps = {
   onSelect?: (featureId: string | null) => void;
   onSelectFeatures?: (featureIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
+  onToolChange?: (tool: "pan" | "terrain" | "erase") => void;
   onModify?: (featureId: string, geometry: GeoJsonGeometry) => void;
   onModifyFeatures?: (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void;
   onErase?: (featureId: string) => void;
@@ -83,6 +87,7 @@ export function MapCanvas({
   onSelect,
   onSelectFeatures,
   onCellSelect,
+  onToolChange,
   onModify,
   onModifyFeatures,
   onErase,
@@ -96,8 +101,13 @@ export function MapCanvas({
   const radialPaletteRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<RealmMapRenderer | null>(null);
   const [radialPalette, setRadialPalette] = useState<RadialPaletteState | null>(null);
-  const [brushThickness, setBrushThickness] = useState(CELL_BRUSH_THICKNESS_MIN);
-  const [brushPopoverOpen, setBrushPopoverOpen] = useState(false);
+  const [paintRange, setPaintRange] = useState(CELL_PAINT_RANGE_MIN);
+  const [paintRangeFlyoutOpen, setPaintRangeFlyoutOpen] = useState(false);
+  const [paintRangeFlyoutPosition, setPaintRangeFlyoutPosition] = useState<FlyoutPosition | null>(null);
+  const [eraseMode, setEraseMode] = useState<CellEraseMode>("grid");
+  const [eraseRange, setEraseRange] = useState(CELL_PAINT_RANGE_MIN);
+  const [eraseFlyoutOpen, setEraseFlyoutOpen] = useState(false);
+  const [eraseFlyoutPosition, setEraseFlyoutPosition] = useState<FlyoutPosition | null>(null);
   const onZoomChangeRef = useRef(onZoomChange);
   const onDrawRef = useRef(onDraw);
   const onSelectRef = useRef(onSelect);
@@ -110,13 +120,45 @@ export function MapCanvas({
   const onLayerShiftRef = useRef(onLayerShift);
   const onErrorRef = useRef(onError);
   const onExporterReadyRef = useRef(onExporterReady);
-  const brushRadius = cellBrushRadiusForThickness(brushThickness);
-  const effectiveBrushRadius = mode === "cell-select" ? brushRadius : 0;
+  const paintRadius = cellPaintRadiusForRange(paintRange);
+  const effectivePaintRadius = mode === "cell-select" ? paintRadius : 0;
+  const eraseRadius = cellPaintRadiusForRange(eraseRange);
   const mapHelp = mode === "pan"
     ? "ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
     : mode === "cell-erase"
       ? "六角セルを押したままなぞって地形を消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。"
       : "六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。";
+  const openPaintRangeFlyout = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    const paletteElement = radialPaletteRef.current;
+    const anchorElement = event.currentTarget;
+    if (paletteElement) {
+      const paletteRect = paletteElement.getBoundingClientRect();
+      const anchorRect = anchorElement.getBoundingClientRect();
+      setPaintRangeFlyoutPosition(positionPaletteFlyout(
+        paletteRect,
+        anchorRect,
+        { width: window.innerWidth, height: window.innerHeight },
+        { width: 176, height: 58 },
+      ));
+    }
+    setPaintRangeFlyoutOpen((open) => !open);
+    setEraseFlyoutOpen(false);
+    event.stopPropagation();
+  };
+  const openEraseFlyout = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (radialPaletteRef.current) {
+      setEraseFlyoutPosition(positionPaletteFlyout(
+        radialPaletteRef.current.getBoundingClientRect(),
+        event.currentTarget.getBoundingClientRect(),
+        { width: window.innerWidth, height: window.innerHeight },
+        { width: 220, height: 100 },
+      ));
+    }
+    onToolChange?.("erase");
+    setEraseFlyoutOpen((open) => !open);
+    setPaintRangeFlyoutOpen(false);
+    event.stopPropagation();
+  };
 
   useEffect(() => {
     onZoomChangeRef.current = onZoomChange;
@@ -153,7 +195,8 @@ export function MapCanvas({
   useEffect(() => { adapterRef.current?.setCellAttributes(cellAttributes); }, [cellAttributes]);
   useEffect(() => { adapterRef.current?.setMode(mode); }, [mode]);
   useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [selectedCellIds]);
-  useEffect(() => { adapterRef.current?.setCellBrushRadius(effectiveBrushRadius); }, [effectiveBrushRadius]);
+  useEffect(() => { adapterRef.current?.setCellPaintRadius(effectivePaintRadius); }, [effectivePaintRadius]);
+  useEffect(() => { adapterRef.current?.setCellEraseOptions?.({ mode: eraseMode, radiusCells: eraseRadius }); }, [eraseMode, eraseRadius]);
   useEffect(() => {
     adapterRef.current?.setSelectedFeatures(selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []));
   }, [selectedFeatureId, selectedFeatureIds]);
@@ -193,7 +236,8 @@ export function MapCanvas({
     adapter.setDrawingOptions(drawingOptions);
     adapter.setCellAttributes(cellAttributes);
     adapter.setSelectedCells(selectedCellIds);
-    adapter.setCellBrushRadius(effectiveBrushRadius);
+    adapter.setCellPaintRadius(effectivePaintRadius);
+    adapter.setCellEraseOptions?.({ mode: eraseMode, radiusCells: eraseRadius });
     adapter.setSelectedFeatures(selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []));
     onZoomChangeRef.current(adapter.getZoom());
 
@@ -229,38 +273,35 @@ export function MapCanvas({
     }, reducedMotion ? 0 : RADIAL_PALETTE_ANIMATION_MS);
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setBrushPopoverOpen(false);
+        setPaintRangeFlyoutOpen(false);
+        setEraseFlyoutOpen(false);
         setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
       }
     };
     const handlePointerDown = (event: PointerEvent) => {
       if (event.target instanceof window.Node && radialPaletteRef.current?.contains(event.target)) return;
-      setBrushPopoverOpen(false);
+      setPaintRangeFlyoutOpen(false);
+      setEraseFlyoutOpen(false);
       setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
       if (event.target instanceof window.Node && hostRef.current?.contains(event.target)) {
         event.preventDefault();
         event.stopPropagation();
       }
     };
-    const handleBlur = () => {
-      setBrushPopoverOpen(false);
-      setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
-    };
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("pointerdown", handlePointerDown, true);
-    window.addEventListener("blur", handleBlur);
     return () => {
       window.clearTimeout(animationTimer);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("pointerdown", handlePointerDown, true);
-      window.removeEventListener("blur", handleBlur);
     };
   }, [radialPalette]);
 
   const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     const bounds = event.currentTarget.getBoundingClientRect();
-    setBrushPopoverOpen(false);
+    setPaintRangeFlyoutOpen(false);
+    setEraseFlyoutOpen(false);
     setRadialPalette({ x: event.clientX - bounds.left, y: event.clientY - bounds.top, phase: "opening" });
   };
 
@@ -268,7 +309,8 @@ export function MapCanvas({
     <div
       className="map-canvas-shell"
       onPointerDown={() => {
-        setBrushPopoverOpen(false);
+        setPaintRangeFlyoutOpen(false);
+        setEraseFlyoutOpen(false);
         setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
       }}
     >
@@ -293,61 +335,77 @@ export function MapCanvas({
           onPointerDown={(event) => event.stopPropagation()}
         >
           <span className="radial-palette-core" />
+          <div className="radial-palette-slot radial-palette-eraser-tool" style={{ "--slot": 0 } as React.CSSProperties}>
+            <button
+              className="radial-palette-range-button"
+              type="button"
+              aria-label="消しゴム"
+              aria-pressed={mode === "cell-erase"}
+              aria-haspopup="true"
+              aria-expanded={eraseFlyoutOpen}
+              aria-controls="map-eraser-flyout"
+              onClick={openEraseFlyout}
+            >
+              消しゴム
+            </button>
+            {eraseFlyoutOpen ? (
+              <div id="map-eraser-flyout" className="palette-flyout" style={eraseFlyoutPosition ? { left: eraseFlyoutPosition.left, top: eraseFlyoutPosition.top } : undefined} role="group" aria-label="消しゴムの調整" onPointerDown={(event) => event.stopPropagation()}>
+                <span>性質</span>
+                <span className="eraser-mode-options">
+                  <label><input type="radio" name="map-eraser-mode" value="grid" checked={eraseMode === "grid"} onChange={() => setEraseMode("grid")} />グリッドごと</label>
+                  <label><input type="radio" name="map-eraser-mode" value="cluster" checked={eraseMode === "cluster"} onChange={() => setEraseMode("cluster")} />塊ごと</label>
+                </span>
+                <label htmlFor="map-eraser-range">太さ</label>
+                <output htmlFor="map-eraser-range">{eraseRange}セル</output>
+                <input id="map-eraser-range" type="range" min={CELL_PAINT_RANGE_MIN} max={CELL_PAINT_RANGE_MAX} step={1} value={eraseRange} aria-label="消しゴムの太さ" aria-valuetext={`消しゴムの太さ${eraseRange}セル`} onChange={(event) => setEraseRange(Math.max(CELL_PAINT_RANGE_MIN, Math.min(CELL_PAINT_RANGE_MAX, Math.round(Number(event.currentTarget.value)) || CELL_PAINT_RANGE_MIN)))} />
+              </div>
+            ) : null}
+          </div>
           <div
-            className="radial-palette-slot radial-palette-brush-tool"
-            style={{ "--slot": 0 } as React.CSSProperties}
-            onPointerEnter={() => setBrushPopoverOpen(true)}
-            onPointerLeave={(event) => {
-              if (!(event.relatedTarget instanceof window.Node) || !event.currentTarget.contains(event.relatedTarget)) setBrushPopoverOpen(false);
-            }}
-            onFocus={() => setBrushPopoverOpen(true)}
-            onBlur={(event) => {
-              if (!(event.relatedTarget instanceof window.Node) || !event.currentTarget.contains(event.relatedTarget)) setBrushPopoverOpen(false);
-            }}
+            className="radial-palette-slot radial-palette-range-tool"
+            style={{ "--slot": 1 } as React.CSSProperties}
           >
             <button
-              className="radial-palette-brush-button"
+              className="radial-palette-range-button"
               type="button"
-              aria-label="筆の太さ"
+              aria-label="描画範囲"
               aria-haspopup="true"
-              aria-expanded={brushPopoverOpen}
-              aria-controls={BRUSH_THICKNESS_POPOVER_ID}
-              onClick={(event) => {
-                event.stopPropagation();
-                setBrushPopoverOpen(true);
-              }}
+              aria-expanded={paintRangeFlyoutOpen}
+              aria-controls={PAINT_RANGE_FLYOUT_ID}
+              onClick={openPaintRangeFlyout}
             >
-              筆
+              <span className="radial-palette-range-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 12h16M7 8v8M17 8v8" /></svg></span>
             </button>
-            {brushPopoverOpen ? (
+            {paintRangeFlyoutOpen ? (
               <div
-                id={BRUSH_THICKNESS_POPOVER_ID}
-                className="radial-palette-brush-popover"
+                id={PAINT_RANGE_FLYOUT_ID}
+                className={`palette-flyout radial-palette-flyout-${paintRangeFlyoutPosition?.side ?? "right"}`}
+                style={paintRangeFlyoutPosition ? { left: paintRangeFlyoutPosition.left, top: paintRangeFlyoutPosition.top } : undefined}
                 role="group"
-                aria-label="筆の太さ調整"
+                aria-label="描画範囲の調整"
                 onPointerDown={(event) => event.stopPropagation()}
               >
-                <label htmlFor="map-brush-thickness">筆の太さ</label>
-                <output htmlFor="map-brush-thickness">{brushThickness}セル</output>
+                <label htmlFor="map-paint-range">描画範囲</label>
+                <output htmlFor="map-paint-range">{paintRange}セル</output>
                 <input
-                  id="map-brush-thickness"
+                  id="map-paint-range"
                   type="range"
-                  min={CELL_BRUSH_THICKNESS_MIN}
-                  max={CELL_BRUSH_THICKNESS_MAX}
+                  min={CELL_PAINT_RANGE_MIN}
+                  max={CELL_PAINT_RANGE_MAX}
                   step={1}
-                  value={brushThickness}
-                  aria-label="筆の太さ"
-                  aria-valuetext={`${brushThickness}セル`}
-                  onChange={(event) => setBrushThickness(Math.max(
-                    CELL_BRUSH_THICKNESS_MIN,
-                    Math.min(CELL_BRUSH_THICKNESS_MAX, Math.round(Number(event.currentTarget.value)) || CELL_BRUSH_THICKNESS_MIN),
+                  value={paintRange}
+                  aria-label="描画範囲"
+                  aria-valuetext={`描画範囲${paintRange}セル`}
+                  onChange={(event) => setPaintRange(Math.max(
+                    CELL_PAINT_RANGE_MIN,
+                    Math.min(CELL_PAINT_RANGE_MAX, Math.round(Number(event.currentTarget.value)) || CELL_PAINT_RANGE_MIN),
                   ))}
                 />
               </div>
             ) : null}
           </div>
           {Array.from({ length: RADIAL_PALETTE_SLOTS - 1 }, (_, index) => (
-            <span className="radial-palette-slot" aria-hidden="true" style={{ "--slot": index + 1 } as React.CSSProperties} key={index + 1} />
+            <span className="radial-palette-slot" aria-hidden="true" style={{ "--slot": index + 2 } as React.CSSProperties} key={index + 2} />
           ))}
         </div>
       ) : null}

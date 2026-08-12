@@ -14,6 +14,7 @@ vi.mock("./MapCanvas", () => ({
     showCellGrid?: boolean;
     zoom?: number;
     onCellSelect?: (ids: readonly string[]) => void;
+    onToolChange?: (tool: "pan" | "terrain" | "erase") => void;
     onError?: (code: "drawing_self_intersection") => void;
   }) => {
     const initialCellSelect = useRef(props.onCellSelect);
@@ -25,6 +26,7 @@ vi.mock("./MapCanvas", () => ({
       <button type="button" onClick={() => initialCellSelect.current?.(["1:1"])}>テスト遅延セル操作</button>
       <button type="button" onClick={() => props.onCellSelect?.([])}>テスト選択解除</button>
       <button type="button" onClick={() => props.onError?.("drawing_self_intersection")}>テスト描画エラー</button>
+      <button type="button" onClick={() => props.onToolChange?.("erase")}>テスト消しゴム</button>
     </div>;
   },
 }));
@@ -38,14 +40,14 @@ const renderEditor = (backend: MemoryRealmBackend, snapshot: RealmSnapshot) => r
   />,
 );
 
-it("shows exactly the three requested terrain tools and no sidebar", async () => {
+it("shows drawing and pan tools while keeping eraser out of the sidebar", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://terrain-only.realmmap", name: "Terrain" });
   renderEditor(backend, snapshot);
 
   const tools = screen.getByRole("complementary", { name: "地形ツール" });
-  expect(within(tools).getAllByRole("button").map((button) => button.textContent)).toEqual(["移動", "地形を描く", "地形を消す"]);
-  expect(tools.querySelectorAll("svg")).toHaveLength(3);
+  expect(within(tools).getAllByRole("button").map((button) => button.textContent)).toEqual(["移動", "地形を描く"]);
+  expect(tools.querySelectorAll("svg")).toHaveLength(2);
   expect(screen.getByRole("button", { name: "地形を描く" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("navigation", { name: "編集履歴" })).toBeInTheDocument();
   expect(screen.getByRole("navigation", { name: "編集履歴" }).closest("header")).toHaveAttribute("data-tauri-drag-region", "deep");
@@ -153,7 +155,7 @@ it("erases terrain cells through an already registered map callback without dele
   if (!snapshot) throw new Error("snapshot missing");
   renderEditor(backend, snapshot);
 
-  fireEvent.click(screen.getByRole("button", { name: "地形を消す" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト消しゴム" }));
   expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-erase");
   fireEvent.click(screen.getByRole("button", { name: "テスト遅延セル操作" }));
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([]));
@@ -174,7 +176,7 @@ it("removes an erased cell from the map before save completes and restores it on
   const saveFailure = new Promise<RealmSnapshot>((_resolve, reject) => { rejectSave = reject; });
   vi.spyOn(backend, "applyCellAttributes").mockReturnValue(saveFailure);
 
-  fireEvent.click(screen.getByRole("button", { name: "地形を消す" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト消しゴム" }));
   fireEvent.click(screen.getByRole("button", { name: "テスト遅延セル操作" }));
   expect(visibleCells).not.toHaveTextContent("1:1");
 
@@ -201,7 +203,7 @@ it("restores persisted terrain after a painted save fails", async () => {
   expect(await backend.viewCellAttributes({})).toEqual([{ cellId: "1:1", attribute: "terrain", value: "terrain" }]);
 });
 
-it("clears the controlled cell selection when an empty brush selection arrives", async () => {
+it("clears the controlled cell selection when an empty paint selection arrives", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://empty-selection.realmmap", name: "Empty selection" });
   renderEditor(backend, snapshot);
@@ -215,7 +217,7 @@ it("clears the controlled cell selection when an empty brush selection arrives",
   expect(screen.getByRole("status", { name: "選択中の地形セル" })).toHaveTextContent("");
 });
 
-it("keeps the three terrain tool shortcuts", async () => {
+it("keeps terrain tool shortcuts including the palette eraser mode", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://shortcuts.realmmap", name: "Shortcuts" });
   renderEditor(backend, snapshot);
@@ -225,7 +227,7 @@ it("keeps the three terrain tool shortcuts", async () => {
   fireEvent.keyDown(window, { key: "c" });
   expect(screen.getByRole("button", { name: "地形を描く" })).toHaveAttribute("aria-pressed", "true");
   fireEvent.keyDown(window, { key: "e" });
-  expect(screen.getByRole("button", { name: "地形を消す" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-erase");
 });
 
 it("returns and reapplies the latest terrain edit", async () => {

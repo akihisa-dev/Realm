@@ -13,7 +13,7 @@ Schema version 8 is the current single-state format. It records the same value i
 - A world has one stable identifier, one current name, and one bounded project-settings object.
 - An editable terrain cell has one stable `x:y` identifier and one current `terrain` cell-attribute value. Its bounded polygon is derived from the fixed grid and is not persisted as geometry.
 - Painting or clearing terrain validates and deduplicates the complete selected cell set before changing its current rows transactionally in one undo step.
-- Project settings preserve only the selected renderer theme, bounded project-local color overrides, grid visibility/kind/color/width/spacing, raster export scale and extent, and integer canvas width and height from 512 through 8192 pixels. Theme overrides accept only the documented palette keys and `#RRGGBB` values; grid kind is geographic, square, or hexagonal. The command boundary accepts exactly the documented keys and values. Viewport, zoom, active tool, selection, draw-brush thickness, drawing gesture, and per-class visibility remain transient.
+- Project settings preserve only the selected renderer theme, bounded project-local color overrides, grid visibility/kind/color/width/spacing, raster export scale and extent, and integer canvas width and height from 512 through 8192 pixels. Theme overrides accept only the documented palette keys and `#RRGGBB` values; grid kind is geographic, square, or hexagonal. The command boundary accepts exactly the documented keys and values. Viewport, zoom, active tool, selection, draw-paint range, drawing gesture, and per-class visibility remain transient.
 - Undo and redo are session state, not persisted map history. They restore the complete before or after state of one edit operation while the project remains open.
 - Reopening a project clears the undo and redo stacks without changing the saved map.
 
@@ -49,7 +49,7 @@ A bounded asset-pack import validates 1 through 256 images and at most 64 MiB be
 
 ## Hexagonal cell grid and attributes
 
-The active editor uses a fixed 64 by 37 EPSG:4326 odd-row-offset grid of regular point-topped hexagons. Active cell identity remains `x:y`, with `x` from 0 through 63 and `y` from 0 through 36. Every active cell derives to the same regular six-sided polygon; boundary cells are not stretched or clipped to imitate a rectangular cell. A dedicated renderer displays the complete editing grid from the empty state, while semantic cell objects are created only for persistent terrain or transient brush selection. Neither representation persists OpenLayers or GeoJSON geometry.
+The active editor uses a fixed 64 by 37 EPSG:4326 odd-row-offset grid of regular point-topped hexagons. Active cell identity remains `x:y`, with `x` from 0 through 63 and `y` from 0 through 36. Every active cell derives to the same regular six-sided polygon; boundary cells are not stretched or clipped to imitate a rectangular cell. A dedicated renderer displays the complete editing grid from the empty state, while semantic cell objects are created only for persistent terrain or transient paint selection. Neither representation persists OpenLayers or GeoJSON geometry.
 
 The version 8 SQLite schema retains its original 512 by 256 coordinate envelope so projects written by earlier builds remain structurally valid. Rows outside the active 64 by 37 editor grid are compatibility data: they remain stored unchanged but are excluded from active rendering, selection, reads, and new mutations.
 

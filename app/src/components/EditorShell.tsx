@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { errorMessage, type CellAttributeSnapshot, type RealmBackend, type RealmSnapshot } from "../backend";
-import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
 import { Hand } from "@phosphor-icons/react/dist/csr/Hand";
 import { PencilLine } from "@phosphor-icons/react/dist/csr/PencilLine";
 import { MapCanvas } from "./MapCanvas";
@@ -113,7 +112,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
 
   const updateOptimisticCellAttributes = (cellIds: readonly string[], value: string | null): void => {
     // Invalidate an in-flight read before publishing the optimistic state. Its
-    // old read result must not overwrite a newer brush operation.
+    // old read result must not overwrite a newer paint operation.
     ++cellRequest.current;
     const selected = new Set(cellIds);
     setCellAttributes((current) => {
@@ -193,7 +192,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         <aside className="left-rail" aria-label="地形ツール">
           <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => selectTool("pan")} disabled={locked}><Hand aria-hidden="true" size={24} /><span>移動</span></button>
           <button className={activeTool === "terrain" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "terrain"} onClick={() => selectTool("terrain")} disabled={locked}><PencilLine aria-hidden="true" size={24} /><span>地形を描く</span></button>
-          <button className={activeTool === "erase" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "erase"} onClick={() => selectTool("erase")} disabled={locked}><Eraser aria-hidden="true" size={24} /><span>地形を消す</span></button>
         </aside>
 
         <section className="map-region" aria-label="地形編集領域">
@@ -209,6 +207,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             cellGridOptions={{ color: settings.gridColor, width: settings.gridWidth }}
             gridOptions={{ kind: "hex", color: settings.gridColor, width: settings.gridWidth, spacingDegrees: settings.gridSpacing }}
             onCellSelect={applyCellSelection}
+            onToolChange={selectTool}
             onError={(code) => setError(mapErrorMessage(code))}
             onZoomChange={setZoom}
             zoom={zoom}
