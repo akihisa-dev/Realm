@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
+import { SlidersHorizontal } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { createPortal } from "react-dom";
 import {
   CELL_PAINT_RANGE_MAX,
@@ -37,7 +39,6 @@ const ERASE_FLYOUT_SIZE = { width: 220, height: 100 };
 const PALETTE_FLYOUT_GAP = 12;
 const FLYOUT_FALLBACK_POSITION: FlyoutPosition = { left: 12, top: 12, side: "right" };
 
-const RADIAL_PALETTE_SLOTS = 8;
 const PAINT_RANGE_FLYOUT_ID = "map-paint-range-flyout";
 // The slots have a short staggered animation. Keep the mounted element around
 // for the same total duration while it winds back to the center on dismissal.
@@ -542,7 +543,7 @@ export function MapCanvas({
               aria-controls="map-eraser-flyout"
               onClick={openEraseFlyout}
             >
-              消しゴム
+              <Eraser aria-hidden="true" size={16} weight="bold" />
             </button>
           </div>
           <div
@@ -559,12 +560,9 @@ export function MapCanvas({
               aria-controls={PAINT_RANGE_FLYOUT_ID}
               onClick={openPaintRangeFlyout}
             >
-              <span className="radial-palette-range-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 12h16M7 8v8M17 8v8" /></svg></span>
+              <SlidersHorizontal aria-hidden="true" size={16} weight="bold" />
             </button>
           </div>
-          {Array.from({ length: RADIAL_PALETTE_SLOTS - 1 }, (_, index) => (
-            <span className="radial-palette-slot" aria-hidden="true" style={{ "--slot": index + 2 } as React.CSSProperties} key={index + 2} />
-          ))}
         </div>
       ) : null}
       {paintRangeFlyout}

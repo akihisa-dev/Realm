@@ -137,9 +137,12 @@ describe("MapCanvas", () => {
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).toHaveStyle({ left: "120px", top: "80px" });
     expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-opening");
-    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(9);
+    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(2);
+    expect(document.querySelectorAll(".radial-palette-slot[aria-hidden='true']")).toHaveLength(0);
     expect(document.querySelector(".radial-palette")?.textContent).not.toContain("描画範囲");
     expect(document.querySelector(".radial-palette-range-tool .radial-palette-range-button")?.textContent).toBe("");
+    expect(screen.getByRole("button", { name: "消しゴム" }).querySelector("svg")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "描画範囲" }).querySelector("svg")).toBeInTheDocument();
     expect(screen.getByRole("toolbar", { name: "地図ツールパレット" })).toBeInTheDocument();
     const onMapPointerDown = vi.fn();
     map.addEventListener("pointerdown", onMapPointerDown);
