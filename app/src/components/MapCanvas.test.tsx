@@ -2,6 +2,49 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { RealmMapRenderer } from "../map/MapAdapter";
 import { MapCanvas } from "./MapCanvas";
 import { positionPaletteFlyout } from "./paletteFlyout";
+import "../styles.css";
+
+const createPaletteRenderer = (): RealmMapRenderer => ({
+  getZoom: vi.fn(() => 1),
+  setZoom: vi.fn(),
+  resetView: vi.fn(),
+  setFeatures: vi.fn(),
+  setTheme: vi.fn(),
+  setThemeOverrides: vi.fn(),
+  setGridVisible: vi.fn(),
+  setGridOptions: vi.fn(),
+  setCellGridVisible: vi.fn(),
+  setCellGridOptions: vi.fn(),
+  setAssets: vi.fn(),
+  setLayerVisibility: vi.fn(),
+  setMode: vi.fn(),
+  setDrawingOptions: vi.fn(),
+  setCellPaintRadius: vi.fn(),
+  setSelected: vi.fn(),
+  setSelectedFeatures: vi.fn(),
+  setSelectedCells: vi.fn(),
+  setCellAttributes: vi.fn(),
+  setCellEraseOptions: vi.fn(),
+  onDraw: vi.fn(() => vi.fn()),
+  onSelectFeatures: vi.fn(() => vi.fn()),
+  onSelect: vi.fn(() => vi.fn()),
+  onCellSelect: vi.fn(() => vi.fn()),
+  onModifyFeatures: vi.fn(() => vi.fn()),
+  onModify: vi.fn(() => vi.fn()),
+  onEraseFeatures: vi.fn(() => vi.fn()),
+  onErase: vi.fn(() => vi.fn()),
+  onLayerShift: vi.fn(() => vi.fn()),
+  onError: vi.fn(() => vi.fn()),
+  onZoomChange: vi.fn(() => vi.fn()),
+  updateSize: vi.fn(),
+  exportRaster: vi.fn(async () => ({ bytes: [], width: 1, height: 1 })),
+  dispose: vi.fn(),
+});
+
+const rect = (left: number, top: number, right: number, bottom: number): DOMRect => ({
+  left, top, right, bottom, width: right - left, height: bottom - top,
+  x: left, y: top, toJSON: () => ({}),
+} as DOMRect);
 
 describe("positionPaletteFlyout", () => {
   const palette = { left: 100, top: 100, right: 200, bottom: 200 };
@@ -216,5 +259,118 @@ describe("MapCanvas", () => {
     fireEvent.click(screen.getByRole("radio", { name: "塊ごと" }));
     fireEvent.change(screen.getByRole("slider", { name: "消しゴムの太さ" }), { target: { value: "4" } });
     expect(renderer.setCellEraseOptions).toHaveBeenLastCalledWith({ mode: "cluster", radiusCells: 3 });
+  });
+
+  it("keeps the range flyout in the body portal and repositions it after real rects arrive", () => {
+    const renderer = createPaletteRenderer();
+    const pendingObservers: Array<{ disconnect: ReturnType<typeof vi.fn> }> = [];
+    let pendingFrame: FrameRequestCallback | null = null;
+    const originalResizeObserver = globalThis.ResizeObserver;
+
+    class ControlledResizeObserver {
+      readonly disconnect = vi.fn();
+
+      constructor(_callback: ResizeObserverCallback) {
+        pendingObservers.push(this);
+      }
+
+      observe(): void { /* The test invokes the callback explicitly. */ }
+      unobserve(): void { /* noop */ }
+    }
+
+    vi.stubGlobal("ResizeObserver", ControlledResizeObserver);
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      pendingFrame = callback;
+      return 17;
+    });
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    const { unmount } = render(<MapCanvas onZoomChange={vi.fn()} createRenderer={() => renderer} />);
+    try {
+      const map = screen.getByRole("region", { name: "世界地図" });
+      fireEvent.contextMenu(map, { clientX: 0, clientY: 0 });
+      const palette = screen.getByRole("toolbar", { name: "地図ツールパレット" });
+      const rangeButton = screen.getByRole("button", { name: "描画範囲" });
+      vi.spyOn(palette, "getBoundingClientRect").mockReturnValue(rect(0, 0, 0, 0));
+      vi.spyOn(rangeButton, "getBoundingClientRect").mockReturnValue(rect(0, 0, 0, 0));
+
+      // The opening pointer event is inside the palette, so the capture listener
+      // must not treat the same interaction as an outside dismissal.
+      fireEvent.pointerDown(rangeButton);
+      fireEvent.click(rangeButton);
+      const flyout = screen.getByRole("group", { name: "描画範囲の調整" });
+      expect(flyout.parentElement).toBe(document.body);
+      expect(rangeButton.closest(".radial-palette-slot")?.contains(flyout)).toBe(false);
+      expect(Number.isFinite(Number.parseFloat(flyout.style.left))).toBe(true);
+      expect(Number.isFinite(Number.parseFloat(flyout.style.top))).toBe(true);
+      const computed = getComputedStyle(flyout);
+      expect(computed.position).toBe("fixed");
+      expect(computed.display).toBe("grid");
+      expect(computed.visibility).toBe("visible");
+      expect(computed.opacity).toBe("1");
+      expect(computed.pointerEvents).toBe("auto");
+      expect(pendingFrame).not.toBeNull();
+      expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
+
+      const realPalette = rect(100, 100, 200, 200);
+      const realAnchor = rect(180, 110, 208, 138);
+      vi.spyOn(palette, "getBoundingClientRect").mockReturnValue(realPalette);
+      vi.spyOn(rangeButton, "getBoundingClientRect").mockReturnValue(realAnchor);
+      vi.spyOn(flyout, "getBoundingClientRect").mockReturnValue(rect(0, 0, 176, 58));
+      act(() => { pendingFrame?.(0); });
+
+      const flyoutLeft = Number.parseFloat(flyout.style.left);
+      const flyoutTop = Number.parseFloat(flyout.style.top);
+      expect(flyoutLeft).toBe(220);
+      expect(flyoutTop).toBe(95);
+      expect(flyoutLeft >= realPalette.right || flyoutLeft + 176 <= realPalette.left || flyoutTop >= realPalette.bottom || flyoutTop + 58 <= realPalette.top).toBe(true);
+      expect(flyoutLeft - realAnchor.right).toBe(12);
+
+      expect(pendingObservers.length).toBeGreaterThan(0);
+      fireEvent.pointerLeave(rangeButton);
+      fireEvent.pointerEnter(flyout);
+      const slider = screen.getByRole("slider", { name: "描画範囲" });
+      fireEvent.pointerDown(flyout);
+      fireEvent.change(slider, { target: { value: "3" } });
+      expect(slider).toHaveAttribute("aria-valuetext", "描画範囲3セル");
+      fireEvent.pointerDown(document.body);
+      expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
+    } finally {
+      unmount();
+      expect(pendingObservers.every((observer) => observer.disconnect.mock.calls.length > 0)).toBe(true);
+      vi.unstubAllGlobals();
+      vi.stubGlobal("ResizeObserver", originalResizeObserver);
+    }
+  });
+
+  it("uses a finite viewport fallback when ResizeObserver and rAF are unavailable", () => {
+    vi.useFakeTimers();
+    const renderer = createPaletteRenderer();
+    const originalResizeObserver = globalThis.ResizeObserver;
+    vi.stubGlobal("ResizeObserver", undefined);
+    vi.stubGlobal("requestAnimationFrame", undefined);
+
+    const { unmount } = render(<MapCanvas onZoomChange={vi.fn()} createRenderer={() => renderer} />);
+    try {
+      const map = screen.getByRole("region", { name: "世界地図" });
+      fireEvent.contextMenu(map, { clientX: 0, clientY: 0 });
+      fireEvent.click(screen.getByRole("button", { name: "描画範囲" }));
+      const flyout = screen.getByRole("group", { name: "描画範囲の調整" });
+      const left = Number.parseFloat(flyout.style.left);
+      const top = Number.parseFloat(flyout.style.top);
+      expect(Number.isFinite(left)).toBe(true);
+      expect(Number.isFinite(top)).toBe(true);
+      expect(left).toBeGreaterThanOrEqual(0);
+      expect(top).toBeGreaterThanOrEqual(0);
+      expect(left + 176).toBeLessThanOrEqual(window.innerWidth);
+      expect(top + 58).toBeLessThanOrEqual(window.innerHeight);
+      act(() => { vi.runOnlyPendingTimers(); });
+      expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
+    } finally {
+      unmount();
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+      vi.stubGlobal("ResizeObserver", originalResizeObserver);
+    }
   });
 });
