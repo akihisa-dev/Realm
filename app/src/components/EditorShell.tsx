@@ -1,11 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { errorMessage, type CellAttributeSnapshot, type RealmBackend, type RealmSnapshot } from "../backend";
-import { Hand } from "@phosphor-icons/react/dist/csr/Hand";
-import { PencilLine } from "@phosphor-icons/react/dist/csr/PencilLine";
 import { MapCanvas } from "./MapCanvas";
 import { mapErrorMessage } from "../locales/ja";
 
-type Tool = "pan" | "terrain" | "erase";
+type Tool = "terrain" | "erase";
 
 type EditorShellProps = {
   snapshot: RealmSnapshot;
@@ -83,7 +81,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   }, [backend, projectIdentity]);
 
   useEffect(() => {
-    if (activeTool === "pan" || locked) setSelectedCellIds([]);
+    if (locked) setSelectedCellIds([]);
   }, [activeTool, locked]);
 
   const run = async (action: () => Promise<RealmSnapshot>, fallback: string, options: RunOptions = {}) => {
@@ -129,7 +127,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const applyCellSelection = (ids: readonly string[]) => {
     const nextIds = [...new Set(ids)];
     const tool = activeToolRef.current;
-    if (locked || tool === "pan") {
+    if (locked) {
       setSelectedCellIds([]);
       return;
     }
@@ -189,15 +187,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         </nav>
       </header>
       <div className="editor-body">
-        <aside className="left-rail" aria-label="地形ツール">
-          <button className={activeTool === "pan" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "pan"} onClick={() => selectTool("pan")} disabled={locked}><Hand aria-hidden="true" size={24} /><span>移動</span></button>
-          <button className={activeTool === "terrain" ? "rail-item rail-item-active" : "rail-item"} type="button" aria-pressed={activeTool === "terrain"} onClick={() => selectTool("terrain")} disabled={locked}><PencilLine aria-hidden="true" size={24} /><span>地形を描く</span></button>
-        </aside>
-
         <section className="map-region" aria-label="地形編集領域">
           <MapCanvas
             features={[]}
-            mode={locked || activeTool === "pan" ? "pan" : activeTool === "erase" ? "cell-erase" : "cell-select"}
+            mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : "cell-select"}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}
             themeId={settings.themeId}

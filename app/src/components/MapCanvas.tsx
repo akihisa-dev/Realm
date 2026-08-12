@@ -96,7 +96,7 @@ type MapCanvasProps = {
   onSelect?: (featureId: string | null) => void;
   onSelectFeatures?: (featureIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
-  onToolChange?: (tool: "pan" | "terrain" | "erase") => void;
+  onToolChange?: (tool: "terrain" | "erase") => void;
   onModify?: (featureId: string, geometry: GeoJsonGeometry) => void;
   onModifyFeatures?: (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void;
   onErase?: (featureId: string) => void;
@@ -215,6 +215,7 @@ export function MapCanvas({
   const openPaintRangeFlyout = (event: ReactMouseEvent<HTMLButtonElement>) => {
     const nextOpen = !paintRangeFlyoutOpen;
     if (nextOpen) setPaintRangeFlyoutPosition(getFlyoutPosition("paint"));
+    onToolChange?.("terrain");
     setPaintRangeFlyoutOpen(nextOpen);
     setEraseFlyoutOpen(false);
     event.stopPropagation();
@@ -472,7 +473,7 @@ export function MapCanvas({
     <div
       ref={eraseFlyoutRef}
       id="map-eraser-flyout"
-      className={`palette-flyout radial-palette-flyout-${erasePosition.side}`}
+      className={`palette-flyout palette-flyout-erase radial-palette-flyout-${erasePosition.side}`}
       data-side={erasePosition.side}
       style={{
         position: "fixed",
@@ -488,13 +489,17 @@ export function MapCanvas({
       aria-label="消しゴムの調整"
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <span>性質</span>
-      <span className="eraser-mode-options">
-        <label><input type="radio" name="map-eraser-mode" value="grid" checked={eraseMode === "grid"} onChange={() => setEraseMode("grid")} />グリッドごと</label>
-        <label><input type="radio" name="map-eraser-mode" value="cluster" checked={eraseMode === "cluster"} onChange={() => setEraseMode("cluster")} />塊ごと</label>
-      </span>
-      <label htmlFor="map-eraser-range">太さ</label>
-      <output htmlFor="map-eraser-range">{eraseRange}セル</output>
+      <fieldset className="eraser-mode-fieldset">
+        <legend>性質</legend>
+        <span className="eraser-mode-options">
+          <label><input type="radio" name="map-eraser-mode" value="grid" checked={eraseMode === "grid"} onChange={() => setEraseMode("grid")} />グリッドごと</label>
+          <label><input type="radio" name="map-eraser-mode" value="cluster" checked={eraseMode === "cluster"} onChange={() => setEraseMode("cluster")} />塊ごと</label>
+        </span>
+      </fieldset>
+      <div className="eraser-range-label">
+        <label htmlFor="map-eraser-range">太さ</label>
+        <output htmlFor="map-eraser-range">{eraseRange}セル</output>
+      </div>
       <input id="map-eraser-range" type="range" min={CELL_PAINT_RANGE_MIN} max={CELL_PAINT_RANGE_MAX} step={1} value={eraseRange} aria-label="消しゴムの太さ" aria-valuetext={`消しゴムの太さ${eraseRange}セル`} onChange={(event) => setEraseRange(Math.max(CELL_PAINT_RANGE_MIN, Math.min(CELL_PAINT_RANGE_MAX, Math.round(Number(event.currentTarget.value)) || CELL_PAINT_RANGE_MIN)))} />
     </div>,
     portalRoot,
@@ -554,7 +559,8 @@ export function MapCanvas({
               ref={paintRangeButtonRef}
               className="radial-palette-range-button"
               type="button"
-              aria-label="描画範囲"
+              aria-label="地形を描く（太さ調整）"
+              aria-pressed={mode === "cell-select"}
               aria-haspopup="true"
               aria-expanded={paintRangeFlyoutOpen}
               aria-controls={PAINT_RANGE_FLYOUT_ID}

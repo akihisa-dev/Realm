@@ -142,11 +142,11 @@ describe("MapCanvas", () => {
     expect(document.querySelector(".radial-palette")?.textContent).not.toContain("描画範囲");
     expect(document.querySelector(".radial-palette-range-tool .radial-palette-range-button")?.textContent).toBe("");
     expect(screen.getByRole("button", { name: "消しゴム" }).querySelector("svg")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "描画範囲" }).querySelector("svg")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "地形を描く（太さ調整）" }).querySelector("svg")).toBeInTheDocument();
     expect(screen.getByRole("toolbar", { name: "地図ツールパレット" })).toBeInTheDocument();
     const onMapPointerDown = vi.fn();
     map.addEventListener("pointerdown", onMapPointerDown);
-    const rangeButton = screen.getByRole("button", { name: "描画範囲" });
+    const rangeButton = screen.getByRole("button", { name: "地形を描く（太さ調整）" });
     fireEvent.pointerEnter(rangeButton);
     expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
     fireEvent.click(rangeButton);
@@ -256,8 +256,19 @@ describe("MapCanvas", () => {
     const onToolChange = vi.fn();
     render(<MapCanvas onToolChange={onToolChange} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
     fireEvent.contextMenu(screen.getByRole("region", { name: "世界地図" }), { clientX: 100, clientY: 100 });
-    fireEvent.click(screen.getByRole("button", { name: "消しゴム" }));
+    const eraserButton = screen.getByRole("button", { name: "消しゴム" });
+    const paintButton = screen.getByRole("button", { name: "地形を描く（太さ調整）" });
+    expect(eraserButton).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(eraserButton);
     expect(onToolChange).toHaveBeenCalledWith("erase");
+    expect(eraserButton).toHaveAttribute("aria-expanded", "true");
+    const eraseFlyout = screen.getByRole("group", { name: "消しゴムの調整" });
+    expect(eraseFlyout).toHaveClass("palette-flyout-erase");
+    expect(screen.getByRole("group", { name: "消しゴムの調整" }).querySelector("legend")).toHaveTextContent("性質");
+    expect(screen.getByRole("radio", { name: "グリッドごと" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "塊ごと" })).not.toBeChecked();
+    fireEvent.click(paintButton);
+    fireEvent.click(eraserButton);
     expect(screen.getByRole("group", { name: "消しゴムの調整" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: "塊ごと" }));
     fireEvent.change(screen.getByRole("slider", { name: "消しゴムの太さ" }), { target: { value: "4" } });
@@ -293,7 +304,7 @@ describe("MapCanvas", () => {
       const map = screen.getByRole("region", { name: "世界地図" });
       fireEvent.contextMenu(map, { clientX: 0, clientY: 0 });
       const palette = screen.getByRole("toolbar", { name: "地図ツールパレット" });
-      const rangeButton = screen.getByRole("button", { name: "描画範囲" });
+      const rangeButton = screen.getByRole("button", { name: "地形を描く（太さ調整）" });
       vi.spyOn(palette, "getBoundingClientRect").mockReturnValue(rect(0, 0, 0, 0));
       vi.spyOn(rangeButton, "getBoundingClientRect").mockReturnValue(rect(0, 0, 0, 0));
 
@@ -357,7 +368,7 @@ describe("MapCanvas", () => {
     try {
       const map = screen.getByRole("region", { name: "世界地図" });
       fireEvent.contextMenu(map, { clientX: 0, clientY: 0 });
-      fireEvent.click(screen.getByRole("button", { name: "描画範囲" }));
+      fireEvent.click(screen.getByRole("button", { name: "地形を描く（太さ調整）" }));
       const flyout = screen.getByRole("group", { name: "描画範囲の調整" });
       const left = Number.parseFloat(flyout.style.left);
       const top = Number.parseFloat(flyout.style.top);
