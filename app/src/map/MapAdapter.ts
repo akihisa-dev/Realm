@@ -728,13 +728,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
           const nextPoint = event.coordinate as [number, number];
           if (!this.paintLastPoint) this.paintLastPoint = nextPoint;
           for (const id of gridCellIdsWithinPaintPath([this.paintLastPoint, nextPoint], this.paintRadiusForEvent(event.originalEvent))) this.paintStrokeSelection.add(id);
-          let selected = [...this.paintStrokeSelection];
-          if (this.activeMode === "cell-erase" && this.cellEraseMode === "cluster") selected = this.expandConnectedEraseCells(selected);
-          this.setSelectedCells(selected);
-          for (const listener of this.cellSelectListeners) listener([...selected]);
-          this.paintLastPoint = null;
-          this.paintStrokeSelection.clear();
-          this.paintSelectionBeforeStroke = [];
+          this.finishPaintStroke();
           return false;
         },
       });
@@ -884,8 +878,27 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly handleExternalPointerUp = (event: PointerEvent): void => {
     const ownerWindow = this.target.ownerDocument.defaultView;
     if (ownerWindow && event.target instanceof ownerWindow.Node && this.target.contains(event.target)) return;
+    // Pointer capture can be lost when a stroke crosses the canvas edge. Commit
+    // the cells already visited instead of restoring the pre-stroke selection;
+    // pointercancel/blur remain the explicit cancellation paths.
+    if (this.paintLastPoint !== null) {
+      this.finishPaintStroke();
+      return;
+    }
     this.handlePointerCancel();
   };
+
+  private finishPaintStroke(): void {
+    if (this.paintLastPoint === null) return;
+    let selected = [...this.paintStrokeSelection];
+    if (this.activeMode === "cell-erase" && this.cellEraseMode === "cluster") selected = this.expandConnectedEraseCells(selected);
+    this.setSelectedCells(selected);
+    for (const listener of this.cellSelectListeners) listener([...selected]);
+    this.paint?.cancelSequence();
+    this.paintLastPoint = null;
+    this.paintStrokeSelection.clear();
+    this.paintSelectionBeforeStroke = [];
+  }
 
   private cancelPaintStroke(restoreSelection = true): void {
     const hadStroke = this.paintLastPoint !== null;
@@ -914,7 +927,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
   };
 
   private readonly handlePointerLeave = (): void => {
-    this.cancelPaintStroke();
+    // Keep an active paint stroke alive while the pointer crosses the canvas
+    // boundary. The external pointerup handler commits the visited cells.
     this.setHoveredCells([]);
   };
 

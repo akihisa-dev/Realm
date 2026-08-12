@@ -1,6 +1,6 @@
 [package]
 name = "realm-app"
-version = "0.20.4"
+version = "0.20.5"
 description = "Realm fictional world map editor"
 authors = ["Realm contributors"]
 edition = "2024"

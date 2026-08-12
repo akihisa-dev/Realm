@@ -315,6 +315,41 @@ describe("RealmMapAdapter", () => {
     host.remove();
   });
 
+  it("commits paint and erase strokes when the pointer is released outside the canvas", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const pointer = new MouseEvent("pointerdown", { button: 0, bubbles: true });
+    Object.defineProperty(pointer, "isPrimary", { value: true });
+    const painted = vi.fn();
+    adapter.onCellSelect(painted);
+
+    adapter.setMode("cell-select");
+    const paintInteraction = adapter.getMap().getInteractions().getArray().at(-1);
+    paintInteraction?.handleEvent({ type: "pointerdown", originalEvent: pointer, coordinate: cellCenter(0, 0), activePointers: [pointer] } as never);
+    host.dispatchEvent(new Event("pointerleave"));
+    expect(painted).not.toHaveBeenCalled();
+    window.dispatchEvent(new MouseEvent("pointerup", { button: 0 }));
+    expect(painted).toHaveBeenCalledOnce();
+    expect(painted.mock.calls[0]?.[0]).toContain("0:0");
+
+    adapter.setCellAttributes([{ cellId: "0:0", attribute: "terrain", value: "terrain" }]);
+    adapter.setMode("cell-erase");
+    const eraseInteraction = adapter.getMap().getInteractions().getArray().at(-1);
+    const erased = vi.fn();
+    adapter.onCellSelect(erased);
+    eraseInteraction?.handleEvent({ type: "pointerdown", originalEvent: pointer, coordinate: cellCenter(0, 0), activePointers: [pointer] } as never);
+    host.dispatchEvent(new Event("pointerleave"));
+    window.dispatchEvent(new MouseEvent("pointerup", { button: 0 }));
+    expect(erased).toHaveBeenCalledOnce();
+    expect(erased.mock.calls[0]?.[0]).toContain("0:0");
+
+    adapter.dispose();
+    host.remove();
+  });
+
   it("erases one connected terrain cluster while leaving a separated cell intact", () => {
     const host = document.createElement("div");
     host.style.width = "640px";
@@ -650,7 +685,7 @@ describe("RealmMapAdapter", () => {
     expect(paintedStyles.at(-1)?.getFill()?.getColor()).toBe("#35463f");
     window.dispatchEvent(new MouseEvent("pointerup", { button: 0 }));
     expect((cellPaint as unknown as { handlingDownUpSequence: boolean }).handlingDownUpSequence).toBe(false);
-    expect(cellLayer.getSource()?.getFeatures().some((feature) => feature.get("selected") === true)).toBe(false);
+    expect(cellLayer.getSource()?.getFeatures().some((feature) => feature.get("selected") === true)).toBe(true);
     const onCellSelect = vi.fn();
     const stopCellSelect = adapter.onCellSelect(onCellSelect);
     adapter.setSelectedCells(["0:0"]);
