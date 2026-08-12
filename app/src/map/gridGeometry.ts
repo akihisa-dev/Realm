@@ -2,8 +2,16 @@ export const CELL_GRID_COLUMNS = 64;
 export const CELL_GRID_ROWS = 37;
 export const CELL_GRID_CELL_COUNT = CELL_GRID_COLUMNS * CELL_GRID_ROWS;
 export const CELL_BRUSH_RADII = { small: 1, medium: 2, large: 4 } as const;
+export const CELL_BRUSH_THICKNESS_MIN = 1;
+export const CELL_BRUSH_THICKNESS_MAX = 5;
 export type CellBrushSize = keyof typeof CELL_BRUSH_RADII;
 export type CellPosition = [number, number];
+
+/** Converts the user-facing cell thickness to a hex-grid distance radius. */
+export const cellBrushRadiusForThickness = (thickness: number): number => {
+  if (!Number.isFinite(thickness)) return 0;
+  return Math.max(0, Math.min(CELL_BRUSH_THICKNESS_MAX - 1, Math.round(thickness) - 1));
+};
 
 const CELL_RADIUS = 180 / (1.5 * CELL_GRID_ROWS + 0.5);
 const CELL_COLUMN_STEP = Math.sqrt(3) * CELL_RADIUS;

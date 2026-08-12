@@ -21,6 +21,12 @@ const enqueueSerial = <T,>(tail: { current: Promise<void> }, action: () => Promi
   return result;
 };
 
+type RunOptions = {
+  recover?: (identity: string) => Promise<void>;
+  refreshOnSuccess?: boolean;
+  isCurrent?: () => boolean;
+};
+
 export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellProps) {
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
   const [activeTool, setActiveTool] = useState<Tool>("terrain");
@@ -34,6 +40,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const mounted = useRef(true);
   const commandTail = useRef<Promise<void>>(Promise.resolve());
   const cellRequest = useRef(0);
+  const cellMutation = useRef(0);
   const projectIdentity = `${snapshot.path}:${snapshot.world.id}`;
 
   useEffect(() => {
@@ -80,7 +87,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     if (activeTool === "pan" || locked) setSelectedCellIds([]);
   }, [activeTool, locked]);
 
-  const run = async (action: () => Promise<RealmSnapshot>, fallback: string, recover?: (identity: string) => Promise<void>) => {
+  const run = async (action: () => Promise<RealmSnapshot>, fallback: string, options: RunOptions = {}) => {
     await enqueueSerial(commandTail, async () => {
       const identity = projectIdentity;
       setOperating(true);
@@ -91,16 +98,32 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         if (!mounted.current || viewedIdentity.current !== identity) return;
         setViewedSnapshot(next);
         onSaved(next);
-        await refreshCellAttributes(identity);
-        setSelectedCellIds([]);
+        if (options.refreshOnSuccess !== false) await refreshCellAttributes(identity);
+        if (!options.isCurrent || options.isCurrent()) setSelectedCellIds([]);
       } catch (cause) {
         if (mounted.current && viewedIdentity.current === identity) {
-          if (recover) await recover(identity);
-          if (mounted.current && viewedIdentity.current === identity) setError(errorMessage(cause, fallback));
+          if (options.recover) await options.recover(identity);
+          if (mounted.current && viewedIdentity.current === identity && (!options.isCurrent || options.isCurrent())) setError(errorMessage(cause, fallback));
         }
       } finally {
         if (mounted.current) setOperating(false);
       }
+    });
+  };
+
+  const updateOptimisticCellAttributes = (cellIds: readonly string[], value: string | null): void => {
+    // Invalidate an in-flight read before publishing the optimistic state. Its
+    // old read result must not overwrite a newer brush operation.
+    ++cellRequest.current;
+    const selected = new Set(cellIds);
+    setCellAttributes((current) => {
+      const byCell = new Map(current.map((attribute) => [attribute.cellId, attribute]));
+      if (value === null) {
+        for (const cellId of selected) byCell.delete(cellId);
+      } else {
+        for (const cellId of selected) byCell.set(cellId, { cellId, attribute: "terrain", value });
+      }
+      return [...byCell.values()];
     });
   };
 
@@ -116,17 +139,19 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       return;
     }
     const value = tool === "terrain" ? "terrain" : null;
-    if (value === null) {
-      const selected = new Set(nextIds);
-      setCellAttributes((current) => current.filter((attribute) => !selected.has(attribute.cellId)));
-      setSelectedCellIds([]);
-    } else {
-      setSelectedCellIds(nextIds);
-    }
+    const mutation = ++cellMutation.current;
+    updateOptimisticCellAttributes(nextIds, value);
+    setSelectedCellIds(value === null ? [] : nextIds);
     void run(
       () => backend.applyCellAttributes({ cellIds: nextIds, attribute: "terrain", value }),
       "セルの地形属性を更新できませんでした。",
-      value === null ? refreshCellAttributes : undefined,
+      {
+        recover: async (identity) => {
+          if (cellMutation.current === mutation) await refreshCellAttributes(identity);
+        },
+        refreshOnSuccess: false,
+        isCurrent: () => cellMutation.current === mutation,
+      },
     );
   };
 
@@ -177,7 +202,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             mode={locked || activeTool === "pan" ? "pan" : activeTool === "erase" ? "cell-erase" : "cell-select"}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}
-            cellBrushRadius={1}
             themeId={settings.themeId}
             themeOverrides={settings.themeOverrides}
             showGrid={false}

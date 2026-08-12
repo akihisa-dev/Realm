@@ -37,7 +37,7 @@ import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometry
 
 export type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellBrushSize } from "./gridGeometry";
-export { CELL_BRUSH_RADII, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellCenter, cellId, cellIdsWithinBrushPath, cellIdsWithinBrushPosition, cellPolygon, parseCellId } from "./gridGeometry";
+export { CELL_BRUSH_RADII, CELL_BRUSH_THICKNESS_MAX, CELL_BRUSH_THICKNESS_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellBrushRadiusForThickness, cellCenter, cellId, cellIdsWithinBrushPath, cellIdsWithinBrushPosition, cellPolygon, parseCellId } from "./gridGeometry";
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
 
 type Segment = readonly [Position, Position];
@@ -907,7 +907,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.setHoveredCells([]);
       return;
     }
-    this.setHoveredCells(gridCellIdsWithinBrushPosition([longitude, latitude], this.cellBrushRadius));
+    this.setHoveredCells(gridCellIdsWithinBrushPosition([longitude, latitude], this.brushRadiusForMode()));
   };
 
   private readonly handlePointerLeave = (): void => {
@@ -937,16 +937,21 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
   }
 
+  private brushRadiusForMode(): number {
+    return this.activeMode === "cell-erase" ? 0 : this.cellBrushRadius;
+  }
+
   private brushRadiusForEvent(originalEvent: Event): number {
+    const radius = this.brushRadiusForMode();
     if (typeof PointerEvent !== "undefined" && originalEvent instanceof PointerEvent && originalEvent.pointerType === "pen" && originalEvent.pressure > 0) {
-      return this.cellBrushRadius * (0.45 + originalEvent.pressure * 0.9);
+      return radius * (0.45 + originalEvent.pressure * 0.9);
     }
-    return this.cellBrushRadius;
+    return radius;
   }
 
   setCellBrushRadius(radiusCells: number): void {
     if (!Number.isFinite(radiusCells)) return;
-    this.cellBrushRadius = Math.max(0.25, Math.min(32, radiusCells));
+    this.cellBrushRadius = Math.max(0, Math.min(32, radiusCells));
   }
 
   private setHoveredCells(cellIds: readonly string[]): void {
@@ -1030,6 +1035,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
         const feature = this.getCellFeature(id);
         feature?.set("selected", false, true);
         feature?.set("erasePreview", false, true);
+        feature?.set("paintPreview", false, true);
         this.selectedCellIds.delete(id);
         this.removeUnusedCell(id);
       }
@@ -1039,6 +1045,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       const feature = this.getCellFeature(id);
       if (!this.selectedCellIds.has(id)) feature?.set("selected", !erasing, true);
       feature?.set("erasePreview", erasing, true);
+      feature?.set("paintPreview", !erasing, true);
     }
     this.selectedCellIds = next;
     this.cellLayer.changed();

@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
+  CELL_BRUSH_THICKNESS_MAX,
+  CELL_BRUSH_THICKNESS_MIN,
+  cellBrushRadiusForThickness,
   createRealmMapRenderer,
   type CellGridOptions,
   type DrawingOptions,
@@ -25,6 +28,7 @@ type RadialPaletteState = RadialPalettePosition & {
 };
 
 const RADIAL_PALETTE_SLOTS = 8;
+const BRUSH_THICKNESS_POPOVER_ID = "map-brush-thickness-popover";
 // The slots have a short staggered animation. Keep the mounted element around
 // for the same total duration while it winds back to the center on dismissal.
 const RADIAL_PALETTE_ANIMATION_MS = 360;
@@ -38,7 +42,6 @@ type MapCanvasProps = {
   selectedFeatureIds?: readonly string[];
   cellAttributes?: readonly CellAttributeSnapshot[];
   selectedCellIds?: readonly string[];
-  cellBrushRadius?: number;
   drawingOptions?: DrawingOptions;
   gridOptions?: GridOptions;
   cellGridOptions?: CellGridOptions;
@@ -69,7 +72,6 @@ export function MapCanvas({
   selectedFeatureIds,
   cellAttributes = [],
   selectedCellIds = [],
-  cellBrushRadius = 1,
   drawingOptions = { gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null },
   gridOptions = { kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 },
   cellGridOptions = { color: "#d1d7dc", width: 0.65 },
@@ -94,6 +96,8 @@ export function MapCanvas({
   const radialPaletteRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<RealmMapRenderer | null>(null);
   const [radialPalette, setRadialPalette] = useState<RadialPaletteState | null>(null);
+  const [brushThickness, setBrushThickness] = useState(CELL_BRUSH_THICKNESS_MIN);
+  const [brushPopoverOpen, setBrushPopoverOpen] = useState(false);
   const onZoomChangeRef = useRef(onZoomChange);
   const onDrawRef = useRef(onDraw);
   const onSelectRef = useRef(onSelect);
@@ -106,6 +110,8 @@ export function MapCanvas({
   const onLayerShiftRef = useRef(onLayerShift);
   const onErrorRef = useRef(onError);
   const onExporterReadyRef = useRef(onExporterReady);
+  const brushRadius = cellBrushRadiusForThickness(brushThickness);
+  const effectiveBrushRadius = mode === "cell-select" ? brushRadius : 0;
   const mapHelp = mode === "pan"
     ? "ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
     : mode === "cell-erase"
@@ -147,7 +153,7 @@ export function MapCanvas({
   useEffect(() => { adapterRef.current?.setCellAttributes(cellAttributes); }, [cellAttributes]);
   useEffect(() => { adapterRef.current?.setMode(mode); }, [mode]);
   useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [selectedCellIds]);
-  useEffect(() => { adapterRef.current?.setCellBrushRadius(cellBrushRadius); }, [cellBrushRadius]);
+  useEffect(() => { adapterRef.current?.setCellBrushRadius(effectiveBrushRadius); }, [effectiveBrushRadius]);
   useEffect(() => {
     adapterRef.current?.setSelectedFeatures(selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []));
   }, [selectedFeatureId, selectedFeatureIds]);
@@ -187,7 +193,7 @@ export function MapCanvas({
     adapter.setDrawingOptions(drawingOptions);
     adapter.setCellAttributes(cellAttributes);
     adapter.setSelectedCells(selectedCellIds);
-    adapter.setCellBrushRadius(cellBrushRadius);
+    adapter.setCellBrushRadius(effectiveBrushRadius);
     adapter.setSelectedFeatures(selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []));
     onZoomChangeRef.current(adapter.getZoom());
 
@@ -222,17 +228,24 @@ export function MapCanvas({
       });
     }, reducedMotion ? 0 : RADIAL_PALETTE_ANIMATION_MS);
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
+      if (event.key === "Escape") {
+        setBrushPopoverOpen(false);
+        setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
+      }
     };
     const handlePointerDown = (event: PointerEvent) => {
       if (event.target instanceof window.Node && radialPaletteRef.current?.contains(event.target)) return;
+      setBrushPopoverOpen(false);
       setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
       if (event.target instanceof window.Node && hostRef.current?.contains(event.target)) {
         event.preventDefault();
         event.stopPropagation();
       }
     };
-    const handleBlur = () => setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
+    const handleBlur = () => {
+      setBrushPopoverOpen(false);
+      setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
+    };
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("pointerdown", handlePointerDown, true);
     window.addEventListener("blur", handleBlur);
@@ -247,13 +260,17 @@ export function MapCanvas({
   const handleContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     const bounds = event.currentTarget.getBoundingClientRect();
+    setBrushPopoverOpen(false);
     setRadialPalette({ x: event.clientX - bounds.left, y: event.clientY - bounds.top, phase: "opening" });
   };
 
   return (
     <div
       className="map-canvas-shell"
-      onPointerDown={() => setRadialPalette((current) => current ? { ...current, phase: "closing" } : null)}
+      onPointerDown={() => {
+        setBrushPopoverOpen(false);
+        setRadialPalette((current) => current ? { ...current, phase: "closing" } : null);
+      }}
     >
       <p id="map-help" className="sr-only">{mapHelp}</p>
       <div
@@ -270,13 +287,67 @@ export function MapCanvas({
         <div
           ref={radialPaletteRef}
           className={`radial-palette radial-palette-${radialPalette.phase}`}
-          aria-hidden="true"
+          role="toolbar"
+          aria-label="地図ツールパレット"
           style={{ left: radialPalette.x, top: radialPalette.y }}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <span className="radial-palette-core" />
-          {Array.from({ length: RADIAL_PALETTE_SLOTS }, (_, index) => (
-            <span className="radial-palette-slot" style={{ "--slot": index } as React.CSSProperties} key={index} />
+          <div
+            className="radial-palette-slot radial-palette-brush-tool"
+            style={{ "--slot": 0 } as React.CSSProperties}
+            onPointerEnter={() => setBrushPopoverOpen(true)}
+            onPointerLeave={(event) => {
+              if (!(event.relatedTarget instanceof window.Node) || !event.currentTarget.contains(event.relatedTarget)) setBrushPopoverOpen(false);
+            }}
+            onFocus={() => setBrushPopoverOpen(true)}
+            onBlur={(event) => {
+              if (!(event.relatedTarget instanceof window.Node) || !event.currentTarget.contains(event.relatedTarget)) setBrushPopoverOpen(false);
+            }}
+          >
+            <button
+              className="radial-palette-brush-button"
+              type="button"
+              aria-label="筆の太さ"
+              aria-haspopup="true"
+              aria-expanded={brushPopoverOpen}
+              aria-controls={BRUSH_THICKNESS_POPOVER_ID}
+              onClick={(event) => {
+                event.stopPropagation();
+                setBrushPopoverOpen(true);
+              }}
+            >
+              筆
+            </button>
+            {brushPopoverOpen ? (
+              <div
+                id={BRUSH_THICKNESS_POPOVER_ID}
+                className="radial-palette-brush-popover"
+                role="group"
+                aria-label="筆の太さ調整"
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <label htmlFor="map-brush-thickness">筆の太さ</label>
+                <output htmlFor="map-brush-thickness">{brushThickness}セル</output>
+                <input
+                  id="map-brush-thickness"
+                  type="range"
+                  min={CELL_BRUSH_THICKNESS_MIN}
+                  max={CELL_BRUSH_THICKNESS_MAX}
+                  step={1}
+                  value={brushThickness}
+                  aria-label="筆の太さ"
+                  aria-valuetext={`${brushThickness}セル`}
+                  onChange={(event) => setBrushThickness(Math.max(
+                    CELL_BRUSH_THICKNESS_MIN,
+                    Math.min(CELL_BRUSH_THICKNESS_MAX, Math.round(Number(event.currentTarget.value)) || CELL_BRUSH_THICKNESS_MIN),
+                  ))}
+                />
+              </div>
+            ) : null}
+          </div>
+          {Array.from({ length: RADIAL_PALETTE_SLOTS - 1 }, (_, index) => (
+            <span className="radial-palette-slot" aria-hidden="true" style={{ "--slot": index + 1 } as React.CSSProperties} key={index + 1} />
           ))}
         </div>
       ) : null}

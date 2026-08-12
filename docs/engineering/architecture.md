@@ -20,7 +20,7 @@ Rust command boundary ── validation ── current-state service
 ## State ownership
 
 - Rust owns the app-data library path, opened database, SQLite transactions, schema state, stable identifiers, current persisted map data, bounded canvas and project presentation settings, and session undo/redo stacks.
-- React owns transient hex-cell selection, viewport, tool mode, and serialized mutation state.
+- React owns transient hex-cell selection, viewport, tool mode, draw-brush thickness, and serialized mutation state.
 - OpenLayers owns only rendering and interaction objects derived from terrain cell rows; map objects are not an additional source of truth. Completed brush gestures cross the renderer boundary as bounded stable cell identifiers, not GeoJSON.
 
 The active editor reads the current project snapshot and terrain cell attributes; paints or clears a validated cell batch; and performs undo or redo. On launch, React restores the open world, opens the first app-library world, or creates `無題の世界` when the library is empty, then enters the editor directly. Import, file export, project-name editing, presentation settings, feature editing, asset commands, and non-terrain cell layers remain compatibility infrastructure without an active editor entry. Terrain cell commands accept complete bounded `x:y` identifier sets.

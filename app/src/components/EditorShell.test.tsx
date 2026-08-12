@@ -73,11 +73,48 @@ it("applies terrain to selected hex cells", async () => {
   expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-cell-grid-visible", "true");
   expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-zoom", "1");
   fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
+  expect(screen.getByRole("status", { name: "表示中の地形セル" })).toHaveTextContent("1:1,1:2");
 
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([
     { cellId: "1:1", attribute: "terrain", value: "terrain" },
     { cellId: "1:2", attribute: "terrain", value: "terrain" },
   ]));
+});
+
+it("shows painted terrain while the save IPC is still pending", async () => {
+  const backend = new MemoryRealmBackend();
+  const snapshot = await backend.createProject({ path: "browser://draw-pending.realmmap", name: "Draw pending" });
+  const apply = backend.applyCellAttributes.bind(backend);
+  let releaseSave: (() => void) | undefined;
+  const saveGate = new Promise<void>((resolve) => { releaseSave = resolve; });
+  vi.spyOn(backend, "applyCellAttributes").mockImplementation(async (input) => {
+    await saveGate;
+    return apply(input);
+  });
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
+  expect(screen.getByRole("status", { name: "表示中の地形セル" })).toHaveTextContent("1:1,1:2");
+  releaseSave?.();
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toHaveLength(2));
+});
+
+it("ignores an older cell read after a newer optimistic paint", async () => {
+  const backend = new MemoryRealmBackend();
+  const snapshot = await backend.createProject({ path: "browser://draw-stale-read.realmmap", name: "Draw stale read" });
+  const view = backend.viewCellAttributes.bind(backend);
+  let releaseInitialRead: ((attributes: []) => void) | undefined;
+  const initialRead = new Promise<[]>(resolve => { releaseInitialRead = resolve; });
+  vi.spyOn(backend, "viewCellAttributes")
+    .mockImplementationOnce(() => initialRead)
+    .mockImplementation((input) => view(input));
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
+  const visibleCells = screen.getByRole("status", { name: "表示中の地形セル" });
+  expect(visibleCells).toHaveTextContent("1:1,1:2");
+  releaseInitialRead?.([]);
+  await waitFor(() => expect(visibleCells).toHaveTextContent("1:1,1:2"));
 });
 
 it("shows a localized drawing error from the message catalog", async () => {
@@ -144,6 +181,24 @@ it("removes an erased cell from the map before save completes and restores it on
   rejectSave(new Error("save failed"));
   await waitFor(() => expect(visibleCells).toHaveTextContent("1:1"));
   expect(screen.getByRole("alert")).toHaveTextContent("セルの地形属性を更新できませんでした。");
+});
+
+it("restores persisted terrain after a painted save fails", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://draw-failure.realmmap", name: "Draw failure" });
+  await backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "terrain", value: "terrain" });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  const visibleCells = screen.getByRole("status", { name: "表示中の地形セル" });
+  await waitFor(() => expect(visibleCells).toHaveTextContent("1:1"));
+  vi.spyOn(backend, "applyCellAttributes").mockRejectedValue(new Error("save failed"));
+  fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
+  expect(visibleCells).toHaveTextContent("1:1,1:2");
+  await waitFor(() => expect(visibleCells).toHaveTextContent("1:1"));
+  expect(screen.getByRole("alert")).toHaveTextContent("セルの地形属性を更新できませんでした。");
+  expect(await backend.viewCellAttributes({})).toEqual([{ cellId: "1:1", attribute: "terrain", value: "terrain" }]);
 });
 
 it("clears the controlled cell selection when an empty brush selection arrives", async () => {

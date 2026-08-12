@@ -1,4 +1,4 @@
-import { CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellCenter, cellIdsWithinBrushPath, cellIdsWithinBrushPosition, cellPolygon, isGeometryWithinWorld, resolutionForCoveringExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
+import { CELL_BRUSH_THICKNESS_MAX, CELL_GRID_CELL_COUNT, RealmMapAdapter, assertGeometryWithinWorld, cellBrushRadiusForThickness, cellCenter, cellIdsWithinBrushPath, cellIdsWithinBrushPosition, cellPolygon, isGeometryWithinWorld, resolutionForCoveringExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -263,6 +263,21 @@ describe("RealmMapAdapter", () => {
     expect(cellIdsWithinBrushPath([[-Infinity, -90], [Infinity, 90]], 1)).toEqual([]);
   });
 
+  it("maps discrete thickness to hex-distance footprints without duplicates or out-of-bounds cells", () => {
+    expect(cellBrushRadiusForThickness(1)).toBe(0);
+    expect(cellBrushRadiusForThickness(CELL_BRUSH_THICKNESS_MAX)).toBe(4);
+    const center = cellCenter(18, 32);
+    expect(cellIdsWithinBrushPosition(center, cellBrushRadiusForThickness(1))).toEqual(["32:18"]);
+    const footprint = cellIdsWithinBrushPosition(center, cellBrushRadiusForThickness(3));
+    expect(footprint).toHaveLength(19);
+    expect(new Set(footprint).size).toBe(footprint.length);
+    const edgeFootprint = cellIdsWithinBrushPosition(cellCenter(0, 0), cellBrushRadiusForThickness(CELL_BRUSH_THICKNESS_MAX));
+    expect(new Set(edgeFootprint).size).toBe(edgeFootprint.length);
+    expect(edgeFootprint.every((id) => /^\d+:\d+$/.test(id))).toBe(true);
+    expect(edgeFootprint).not.toContain("-1:0");
+    expect(edgeFootprint).not.toContain("0:-1");
+  });
+
   it("keeps erase hover and drag previews unpainted", () => {
     const host = document.createElement("div");
     host.style.width = "640px";
@@ -270,6 +285,7 @@ describe("RealmMapAdapter", () => {
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
     adapter.setCellAttributes([{ cellId: "10:10", attribute: "terrain", value: "terrain" }]);
+    adapter.setCellBrushRadius(4);
     adapter.setMode("cell-erase");
     const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
     const style = cellLayer.getStyleFunction();
@@ -277,6 +293,7 @@ describe("RealmMapAdapter", () => {
     adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: cellCenter(10, 10) } as never);
     const hovered = cellLayer.getSource()?.getFeatureById("10:10");
     expect(hovered?.get("erasePreview")).toBe(true);
+    expect(cellLayer.getSource()?.getFeatures().filter((feature) => feature.get("erasePreview")).map((feature) => feature.getId())).toEqual(["10:10"]);
     expect(style?.(hovered!, 1)).toBeUndefined();
 
     const cellBrush = adapter.getMap().getInteractions().getArray().at(-1);
@@ -288,9 +305,10 @@ describe("RealmMapAdapter", () => {
     expect(selected?.get("erasePreview")).toBe(true);
     expect(style?.(selected!, 1)).toBeUndefined();
 
-    cellBrush?.handleEvent({ type: "pointerdrag", originalEvent: pointerDown, coordinate: cellCenter(11, 10), activePointers: [pointerDown] } as never);
+    cellBrush?.handleEvent({ type: "pointerdrag", originalEvent: pointerDown, coordinate: cellCenter(10, 11), activePointers: [pointerDown] } as never);
     const dragged = cellLayer.getSource()?.getFeatureById("11:10");
     expect(dragged?.get("erasePreview")).toBe(true);
+    expect(cellLayer.getSource()?.getFeatures().filter((feature) => feature.get("erasePreview")).map((feature) => feature.getId())).toEqual(["10:10", "11:10"]);
     expect(style?.(dragged!, 1)).toBeUndefined();
 
     adapter.dispose();
@@ -599,7 +617,11 @@ describe("RealmMapAdapter", () => {
     Object.defineProperty(pointerDown, "isPrimary", { value: true });
     cellBrush?.handleEvent({ type: "pointerdown", originalEvent: pointerDown, coordinate: cellCenter(10, 10), activePointers: [pointerDown] } as never);
     expect((cellBrush as unknown as { handlingDownUpSequence: boolean }).handlingDownUpSequence).toBe(true);
-    expect(cellLayer.getSource()?.getFeatures().some((feature) => feature.get("selected") === true)).toBe(true);
+    const paintedPreview = cellLayer.getSource()?.getFeatures().find((feature) => feature.get("selected") === true);
+    expect(paintedPreview).toBeDefined();
+    expect(paintedPreview?.get("paintPreview")).toBe(true);
+    const paintedStyles = cellLayer.getStyleFunction()?.(paintedPreview!, 1) as Style[];
+    expect(paintedStyles.at(-1)?.getFill()?.getColor()).toBe("#35463f");
     window.dispatchEvent(new MouseEvent("pointerup", { button: 0 }));
     expect((cellBrush as unknown as { handlingDownUpSequence: boolean }).handlingDownUpSequence).toBe(false);
     expect(cellLayer.getSource()?.getFeatures().some((feature) => feature.get("selected") === true)).toBe(false);
