@@ -2,20 +2,20 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { forgeDmgFileName, macBuildTarget } from "./mac-build-target.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(await readFile(path.join(appRoot, "package.json"), "utf8"));
-const bundleRoot = path.join(appRoot, "src-tauri", "target", "aarch64-apple-darwin", "release", "bundle");
-const macosRoot = path.join(bundleRoot, "macos");
-const appBundle = path.join(macosRoot, "Realm.app");
-const dmgRoot = path.join(bundleRoot, "dmg");
-const dmgPath = path.join(dmgRoot, `Realm_${packageJson.version}_aarch64.dmg`);
+const packageRoot = path.join(appRoot, macBuildTarget.outputDirectory, macBuildTarget.packageDirectoryName);
+const appBundle = path.join(packageRoot, "Realm.app");
+const dmgRoot = path.join(appRoot, macBuildTarget.outputDirectory, macBuildTarget.dmgDirectory);
+const dmgPath = path.join(dmgRoot, forgeDmgFileName(packageJson.version));
 
 if (process.platform !== "darwin" || process.arch !== "arm64") {
   throw new Error("The macOS package can only be built on Apple Silicon macOS.");
 }
 if (!(await stat(appBundle).catch(() => null))?.isDirectory()) {
-  throw new Error("Realm.app is missing; build the Tauri application bundle first.");
+  throw new Error("Realm.app is missing; run pnpm package:mac first.");
 }
 
 await mkdir(dmgRoot, { recursive: true });
@@ -24,7 +24,7 @@ execFileSync("hdiutil", [
   "create",
   "-quiet",
   "-volname", "Realm",
-  "-srcfolder", macosRoot,
+  "-srcfolder", packageRoot,
   "-format", "UDZO",
   "-ov",
   dmgPath,

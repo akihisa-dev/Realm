@@ -61,13 +61,11 @@ export function validateVersionChange({ previous, current, message }) {
   return { expected, type: parsed.type, major: hasMajorApproval };
 }
 
-export function validateVersionArtifacts({ packageVersion, cargoVersion, tauriVersion, sbomVersion }) {
-  for (const version of [packageVersion, cargoVersion, tauriVersion, sbomVersion]) parseVersion(version);
-  const versions = new Set([packageVersion, cargoVersion, tauriVersion, sbomVersion]);
+export function validateVersionArtifacts({ packageVersion, sbomVersion }) {
+  for (const version of [packageVersion, sbomVersion]) parseVersion(version);
+  const versions = new Set([packageVersion, sbomVersion]);
   if (versions.size !== 1) {
-    throw new Error(
-      `Version mismatch: package=${packageVersion}, cargo=${cargoVersion}, tauri=${tauriVersion}, sbom=${sbomVersion}.`,
-    );
+    throw new Error(`Version mismatch: package=${packageVersion}, sbom=${sbomVersion}.`);
   }
   return packageVersion;
 }
@@ -90,11 +88,8 @@ function packageVersionAt(revision) {
 
 function versionArtifactsAt(revision) {
   const packageVersion = packageVersionAt(revision);
-  const cargoContent = fileAt(revision, "app/src-tauri/Cargo.toml");
-  const cargoVersion = /^version\s*=\s*"([^"]+)"/mu.exec(cargoContent)?.[1] ?? "missing";
-  const tauriVersion = JSON.parse(fileAt(revision, "app/src-tauri/tauri.conf.json")).version;
   const sbomVersion = JSON.parse(fileAt(revision, "sbom/realm-dependencies.cdx.json")).metadata?.component?.version ?? "missing";
-  return { packageVersion, cargoVersion, tauriVersion, sbomVersion };
+  return { packageVersion, sbomVersion };
 }
 
 function checkVersionArtifactsAt(revision) {

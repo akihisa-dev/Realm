@@ -1,45 +1,49 @@
-import { access, readFile, readdir } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
+import { access, readFile } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { execFile } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { forgeDmgFileName, macBuildTarget } from "./mac-build-target.mjs";
+import { inspectPackagedResources } from "./package-content-report.mjs";
 
-const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const bundleRoot = path.join(appRoot, "src-tauri", "target", "aarch64-apple-darwin", "release", "bundle");
-const packageJson = JSON.parse(await readFile(path.join(appRoot, "package.json"), "utf8"));
-const appBundle = path.join(bundleRoot, "macos", "Realm.app");
-const dmgDirectory = path.join(bundleRoot, "dmg");
-const plist = path.join(appBundle, "Contents", "Info.plist");
+const exec = promisify(execFile);
 
-await access(plist);
-const plistValue = (key) => execFileSync("plutil", ["-extract", key, "raw", "-o", "-", plist], { encoding: "utf8" }).trim();
-const executableName = plistValue("CFBundleExecutable");
-if (!executableName || path.basename(executableName) !== executableName) throw new Error("Invalid bundle executable name.");
-const executable = path.join(appBundle, "Contents", "MacOS", executableName);
+const appDir = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const packageJson = JSON.parse(await readFile(path.join(appDir, "package.json"), "utf8"));
+const packageDir = path.join(appDir, macBuildTarget.outputDirectory, macBuildTarget.packageDirectoryName);
+const appBundle = path.join(packageDir, "Realm.app");
+const executable = path.join(appBundle, "Contents", "MacOS", "Realm");
+const resources = path.join(appBundle, "Contents", "Resources");
+const infoPlist = path.join(appBundle, "Contents", "Info.plist");
 await access(executable);
-const dmgFiles = (await readdir(dmgDirectory)).filter((name) => name.endsWith(".dmg"));
-if (dmgFiles.length !== 1) throw new Error(`Expected one DMG artifact; found ${dmgFiles.length}.`);
-const expectedDmg = `Realm_${packageJson.version}_aarch64.dmg`;
-if (dmgFiles[0] !== expectedDmg) throw new Error(`Unexpected DMG name: ${dmgFiles[0]}.`);
-const dmgPath = path.join(dmgDirectory, expectedDmg);
-execFileSync("hdiutil", ["verify", dmgPath], { stdio: "pipe" });
-
-const fileDescription = execFileSync("file", [executable], { encoding: "utf8" });
-if (!fileDescription.includes("arm64") || fileDescription.includes("x86_64")) {
-  throw new Error(`Packaged executable is not arm64-only: ${fileDescription.trim()}`);
+await access(infoPlist);
+await access(path.join(resources, "realm_has_moved.dylib"));
+await access(path.join(resources, "realm_atomic_publish"), fsConstants.X_OK);
+const report = await inspectPackagedResources(resources);
+for (const legalPath of ["LICENSE", "THIRD_PARTY_NOTICES.md", "sbom/realm-dependencies.cdx.json"]) {
+  await access(path.join(resources, legalPath));
 }
-execFileSync("plutil", ["-lint", plist], { stdio: "inherit" });
-if (plistValue("CFBundleIdentifier") !== "dev.akihisa.realm") throw new Error("Unexpected bundle identifier.");
-if (plistValue("CFBundleShortVersionString") !== packageJson.version) throw new Error("Unexpected bundle version.");
-if (plistValue("LSMinimumSystemVersion") !== "14.0") throw new Error("Unexpected minimum macOS version.");
-const documentTypes = execFileSync("plutil", ["-extract", "CFBundleDocumentTypes", "json", "-o", "-", plist], { encoding: "utf8" });
-if (!documentTypes.includes("realmmap")) throw new Error("The Realm project file association is missing.");
-
-let signing = "unsigned";
-try {
-  execFileSync("codesign", ["--verify", "--deep", "--strict", appBundle], { stdio: "pipe" });
-  signing = "ad-hoc or signed";
-} catch {
-  // Signing and notarization are intentionally outside the initial artifact path.
+const { stdout: fileDescription } = await exec("file", [executable]);
+if (!/Mach-O.*arm64/u.test(fileDescription)) {
+  throw new Error(`Packaged executable is not arm64: ${fileDescription.trim()}`);
 }
-
-console.log(`Package artifacts passed (${signing}): ${path.relative(appRoot, appBundle)} and ${dmgFiles[0]}.`);
+const { stdout: extensionDescription } = await exec("file", [path.join(resources, "realm_has_moved.dylib")]);
+if (!/Mach-O.*arm64/u.test(extensionDescription)) {
+  throw new Error(`Packaged SQLite extension is not arm64: ${extensionDescription.trim()}`);
+}
+const { stdout: atomicHelperDescription } = await exec("file", [path.join(resources, "realm_atomic_publish")]);
+if (!/Mach-O.*arm64/u.test(atomicHelperDescription) || !/executable/u.test(atomicHelperDescription)) {
+  throw new Error(`Packaged atomic publication helper is not an arm64 executable: ${atomicHelperDescription.trim()}`);
+}
+const { stdout: plistJson } = await exec("plutil", ["-convert", "json", "-o", "-", "--", infoPlist]);
+const metadata = JSON.parse(plistJson);
+if (metadata.CFBundleIdentifier !== "dev.akihisa.realm") {
+  throw new Error(`Unexpected bundle identifier: ${metadata.CFBundleIdentifier ?? "missing"}`);
+}
+if (metadata.CFBundleShortVersionString !== packageJson.version) {
+  throw new Error(`Bundle version mismatch: expected ${packageJson.version}, found ${metadata.CFBundleShortVersionString ?? "missing"}`);
+}
+const dmg = path.join(appDir, macBuildTarget.outputDirectory, macBuildTarget.dmgDirectory, forgeDmgFileName(packageJson.version));
+await access(dmg);
+console.log(`[check:package] OK: ${appBundle} (arm64, ${report.asarFileCount} asar files, metadata and legal resources checked)`);

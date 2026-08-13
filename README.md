@@ -12,26 +12,26 @@ Realm uses one SQLite database per world inside its app-managed library. Each da
 - project-local canvas, palette, grid, and export settings;
 - compatibility rows from older Realm versions, which are preserved but are not shown or edited by the hex terrain editor.
 
-The database remains local. Terrain edits are automatically saved without asking the user to manage a project file. The open editor is intentionally limited to move, draw, erase, undo, and redo; transfer import remains available from the startup screen. Realm does not generate geography, create settlements or political objects, synchronize to a cloud service, or require a hosted account.
+The database remains local. Terrain edits are automatically saved without asking the user to manage a project file. The editor is intentionally limited to move, draw, erase, undo, and redo; the current interface has no startup or transfer-import screen. Realm does not generate geography, create settlements or political objects, synchronize to a cloud service, or require a hosted account.
 
 ## Platform and stack
 
 - macOS on Apple Silicon (arm64) only;
-- Tauri 2 with Rust for the desktop boundary;
+- Electron with a typed main/preload IPC boundary;
 - React with strict TypeScript for the interface;
 - OpenLayers for map rendering;
-- SQLite through `rusqlite`, with one app-managed database per world.
+- SQLite through Node's built-in `node:sqlite` API, with one app-managed database per world.
 
 The 0.1 series scope is intentionally local-first. Network access, cloud storage, generated content, and multi-platform packaging are out of scope until a separate decision is recorded in the engineering documents.
 
 ## Repository map
 
-- `app/`: Tauri/Rust/React application code and its reproducible verification scripts.
+- `app/`: Electron main/preload/React application code, Node SQLite storage, and reproducible verification scripts.
 - `docs/`: product, architecture, data, testing, and release source of truth. Start at [docs/INDEX.md](docs/INDEX.md).
 - `.githooks/`: local secret and publication guards.
 - `.agents/skills/`: repository-owned Codex workflows localized for Realm.
 - `.github/`: issue templates, ownership rules, pull-request guidance, and the manual Release checklist. Realm does not use GitHub Actions.
-- `sbom/`: deterministic CycloneDX inventory generated from both lockfiles.
+- `sbom/`: deterministic CycloneDX inventory generated from the pnpm lockfile and bundled native storage helpers.
 - `AGENTS.md`: rules for AI agents and other automated contributors.
 
 ## Development
@@ -41,7 +41,7 @@ Development is performed on an Apple Silicon Mac. Before choosing a command, rea
 The normal loop is:
 
 1. make a small local change;
-2. run the documented formatter, type checks, Rust checks, and tests;
+2. run the documented TypeScript, Node, renderer, storage, and test checks;
 3. run the local publication gate before any push;
 4. inspect the diff and keep user data, secrets, and unrelated work out of the commit.
 

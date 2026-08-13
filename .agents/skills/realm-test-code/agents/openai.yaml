@@ -1,4 +1,4 @@
 interface:
   display_name: "Realm Code Test"
-  short_description: "Diagnose and add Realm automated tests"
-  default_prompt: "Use $realm-test-code to diagnose or add Realm automated tests."
+  short_description: "Diagnose and add Realm Node/Electron tests"
+  default_prompt: "Use $realm-test-code to diagnose or add Realm Node, Electron, or UI tests."

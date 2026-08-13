@@ -1,6 +1,6 @@
 ---
 name: realm-test-development-app
-description: ユーザーが現在の依頼で画面起動そのものを明示した場合だけ、Realmをテスト起動した開発版で見た目、操作、地図pan・zoom、focus、dialog、Tauri lifecycleを実画面確認する。GUI確認、screenshot、開発版操作、E2Eに使い、未指示の起動、build・package・install済みapp、実ユーザー.realmmapの利用を防ぐ。
+description: ユーザーが現在の依頼で画面起動そのものを明示した場合だけ、Realmをテスト起動したElectron開発版で見た目、操作、地図pan・zoom、focus、dialog、main/preload lifecycleを実画面確認する。GUI確認、screenshot、開発版操作、E2Eに使い、未指示の起動、build・package・install済みapp、実ユーザー.realmmapの利用を防ぐ。
 ---
 
 # Realm Development App Test

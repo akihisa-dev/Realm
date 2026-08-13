@@ -1,4 +1,4 @@
 interface:
   display_name: "Realm Codebase Refactor"
-  short_description: "Refactor Realm while preserving behavior"
+  short_description: "Refactor Realm Electron while preserving behavior"
   default_prompt: "Use $realm-refactor-codebase to refactor Realm while preserving behavior and data."

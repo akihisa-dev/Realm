@@ -106,7 +106,7 @@ const nudgeGeometry = (geometry: GeoJsonGeometry, offset: Position): GeoJsonGeom
   return { type: "Polygon", coordinates: geometry.coordinates.map((ring) => ring.map(move)) };
 };
 
-/** Owns OpenLayers objects and leaves project state in React/Rust. */
+/** Owns OpenLayers objects and leaves project state in React/main-process storage. */
 export class RealmMapAdapter implements RealmMapRenderer {
   private readonly map: Map;
   private readonly worldExtent = WORLD_EXTENT;

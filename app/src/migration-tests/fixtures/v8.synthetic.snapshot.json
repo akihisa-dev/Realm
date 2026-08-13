@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 8,
+  "world": {
+    "id": "synthetic-world",
+    "name": "Characterization"
+  },
+  "features": [
+    { "id": "feature-2", "featureType": "city" },
+    { "id": "feature-1", "featureType": "terrain" }
+  ],
+  "cells": [
+    { "cellId": "1:0", "layer": "terrain", "value": "grass" }
+  ],
+  "assets": [],
+  "sourceHash": "synthetic-source-hash",
+  "sidecars": ["world.realmmap-shm", "world.realmmap-wal"]
+}

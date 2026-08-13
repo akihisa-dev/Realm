@@ -1,6 +1,7 @@
 import { MemoryRealmBackend } from "./memoryRealmBackend";
-import { chooseTauriArtifactPath, chooseTauriTransferPath, tauriRealmBackend } from "./tauriRealmBackend";
+import { electronRealmBackend } from "./electronRealmBackend";
 import { localizedErrorMessage } from "../locales/ja";
+import type { ArtifactFormat, ElectronRealmApi, TransferPathMode } from "../shared/realmContract";
 
 export type {
   ApplyCellAttributesInput,
@@ -31,19 +32,21 @@ export type {
 } from "./types";
 export { MemoryRealmBackend } from "./memoryRealmBackend";
 
-type TauriWindow = Window & { __TAURI_INTERNALS__?: unknown };
-
-const isTauriRuntime = (): boolean =>
-  typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as TauriWindow);
+type RealmWindow = Window & { realmApi?: ElectronRealmApi };
+const isElectronRuntime = (): boolean => typeof window !== "undefined" && "realmApi" in (window as RealmWindow);
 
 const memoryBackend = new MemoryRealmBackend();
 
-export const defaultBackend = isTauriRuntime() ? tauriRealmBackend : memoryBackend;
+export const defaultBackend = isElectronRuntime() ? electronRealmBackend : memoryBackend;
 
-export const chooseTransferPath = async (mode: "import" | "export", suggestedName?: string): Promise<string | null> =>
-  isTauriRuntime() ? chooseTauriTransferPath(mode, suggestedName) : null;
+export const chooseTransferPath = async (mode: "import" | "export", suggestedName?: string): Promise<string | null> => {
+  if (!isElectronRuntime()) return null;
+  return (window as RealmWindow).realmApi?.chooseTransferPath({ mode: mode as TransferPathMode, ...(suggestedName ? { suggestedName } : {}) }) ?? null;
+};
 
-export const chooseArtifactPath = async (format: "png" | "jpg" | "pdf", suggestedName: string): Promise<string | null> =>
-  isTauriRuntime() ? chooseTauriArtifactPath(format, suggestedName) : null;
+export const chooseArtifactPath = async (format: "png" | "jpg" | "pdf", suggestedName: string): Promise<string | null> => {
+  if (!isElectronRuntime()) return null;
+  return (window as RealmWindow).realmApi?.chooseArtifactPath({ format: format as ArtifactFormat, suggestedName }) ?? null;
+};
 
 export const errorMessage = localizedErrorMessage;

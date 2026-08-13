@@ -39,33 +39,35 @@ check_path_name() {
   return 0
 }
 
-check_content() {
-  content=$1
+check_content_file() {
+  content_file=$1
   path=$2
   commit=$3
 
-  if printf '%s\n' "$content" | grep -Eiq 'Authorization:[[:space:]]*Bearer[[:space:]]+[A-Za-z0-9_./+=:@-]{16,}'; then
+  # Read directly from a file instead of shell variables. Command substitution
+  # strips NUL bytes and could hide a credential after a binary-looking prefix.
+  if grep -Eaiq 'Authorization:[[:space:]]*Bearer[[:space:]]+[A-Za-z0-9_./+=:@-]{16,}' "$content_file"; then
     echo "Blocked HTTP Bearer credential: $path ($commit)" >&2; return 1
   fi
-  if printf '%s\n' "$content" | grep -Eiq 'Authorization:[[:space:]]*Basic[[:space:]]+[A-Za-z0-9+/=]{16,}'; then
+  if grep -Eaiq 'Authorization:[[:space:]]*Basic[[:space:]]+[A-Za-z0-9+/=]{16,}' "$content_file"; then
     echo "Blocked HTTP Basic credential: $path ($commit)" >&2; return 1
   fi
-  if printf '%s\n' "$content" | grep -Eiq '(^|[^A-Za-z0-9_])(ghp_|gho_|ghu_|ghs_|ghr_|github_pat_[A-Za-z0-9_])'; then
+  if grep -Eaiq '(^|[^A-Za-z0-9_])(ghp_|gho_|ghu_|ghs_|ghr_|github_pat_[A-Za-z0-9_])' "$content_file"; then
     echo "Blocked GitHub token pattern: $path ($commit)" >&2; return 1
   fi
-  if printf '%s\n' "$content" | grep -Eiq 'BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY|BEGIN PRIVATE KEY|BEGIN OPENSSH PRIVATE KEY'; then
+  if grep -Eaiq 'BEGIN (RSA |DSA |EC |OPENSSH |PGP )?PRIVATE KEY|BEGIN PRIVATE KEY|BEGIN OPENSSH PRIVATE KEY' "$content_file"; then
     echo "Blocked private key material: $path ($commit)" >&2; return 1
   fi
-  if printf '%s\n' "$content" | grep -Eiq '(^|[^A-Za-z0-9_])(access_token|client_secret|refresh_token|id_token|private_key|_authToken|NPM_TOKEN)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_./+=:@-]{16,}'; then
+  if grep -Eaiq '(^|[^A-Za-z0-9_])(access_token|client_secret|refresh_token|id_token|private_key|_authToken|NPM_TOKEN)[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9_./+=:@-]{16,}' "$content_file"; then
     echo "Blocked credential assignment: $path ($commit)" >&2; return 1
   fi
-  if printf '%s\n' "$content" | grep -Eiq '(npm_[A-Za-z0-9]{36,}|xox[baprs]-[A-Za-z0-9-]{20,}|https://hooks\.slack\.com/services/[A-Za-z0-9/_-]{20,}|sk_live_[A-Za-z0-9]{16,}|rk_live_[A-Za-z0-9]{16,})'; then
+  if grep -Eaiq '(npm_[A-Za-z0-9]{36,}|xox[baprs]-[A-Za-z0-9-]{20,}|https://hooks\.slack\.com/services/[A-Za-z0-9/_-]{20,}|sk_live_[A-Za-z0-9]{16,}|rk_live_[A-Za-z0-9]{16,})' "$content_file"; then
     echo "Blocked provider token pattern: $path ($commit)" >&2; return 1
   fi
-  if printf '%s\n' "$content" | grep -Eiq '(mongodb(\+srv)?|mysql|postgres(ql)?):\/\/[^[:space:]@:/]+:[^[:space:]@/]+@'; then
+  if grep -Eaiq '(mongodb(\+srv)?|mysql|postgres(ql)?):\/\/[^[:space:]@:/]+:[^[:space:]@/]+@' "$content_file"; then
     echo "Blocked credentialed database URL: $path ($commit)" >&2; return 1
   fi
-  if printf '%s\n' "$content" | grep -Eq 'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}'; then
+  if grep -Eaq 'AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}' "$content_file"; then
     echo "Blocked AWS access key identifier: $path ($commit)" >&2; return 1
   fi
   return 0
@@ -75,10 +77,19 @@ check_blob_content() {
   commit=$1; path=$2
   is_guard_path "$path" && return 0
   is_text_path "$path" || return 0
-  content=$(git show "$commit:$path" 2>/dev/null || true)
-  if [ -n "$content" ]; then
-    check_content "$content" "$path" "$commit"
+  content_file=$(mktemp "${TMPDIR:-/tmp}/realm-secret-content.XXXXXX")
+  if ! git cat-file blob "$commit:$path" > "$content_file" 2>/dev/null; then
+    rm -f "$content_file"
+    echo "Unable to read staged blob safely: $path ($commit)" >&2
+    return 1
   fi
+  if check_content_file "$content_file" "$path" "$commit"; then
+    result=0
+  else
+    result=$?
+  fi
+  rm -f "$content_file"
+  return "$result"
 }
 
 check_commit_path() {
@@ -115,8 +126,14 @@ check_staged_path() {
   path=$1; failed=0
   check_path_name "$path" || failed=1
   if ! is_guard_path "$path" && is_text_path "$path"; then
-    content=$(git show ":$path" 2>/dev/null || true)
-    [ -z "$content" ] || check_content "$content" "$path" staged || failed=1
+    content_file=$(mktemp "${TMPDIR:-/tmp}/realm-secret-content.XXXXXX")
+    if git cat-file blob ":$path" > "$content_file" 2>/dev/null; then
+      check_content_file "$content_file" "$path" staged || failed=1
+    else
+      echo "Unable to read staged blob safely: $path" >&2
+      failed=1
+    fi
+    rm -f "$content_file"
   fi
   [ "$failed" -eq 0 ]
 }
@@ -161,6 +178,11 @@ run_self_test() {
     printf 'SQLite format 3\000synthetic uppercase guard fixture\n' > UPPER.REALMMAP
     git add -f UPPER.REALMMAP
     blocked=0; check_staged; [ "$blocked" -ne 0 ]
+    git reset -q UPPER.REALMMAP
+    printf 'synthetic prefix\000ghp_dummy_token_after_nul_1234567890\n' > nul.txt
+    git add nul.txt
+    blocked=0; check_staged; [ "$blocked" -ne 0 ]
+    git reset -q nul.txt
   )
   echo "Realm secret guard self-test passed."
 }

@@ -222,10 +222,10 @@ export class MemoryRealmBackend implements RealmBackend {
     const project = { snapshot: makeSnapshot(path, input.name), cells: [], assetBytes: {} };
     this.projects.set(path, project); this.openPath = path; return this.result(project);
   }
-  async openProject(input: { libraryId?: string; path?: string }): Promise<RealmSnapshot> {
-    const path = input.libraryId ?? input.path ?? ""; const project = this.projects.get(path);
+  async openProject(input: { libraryId: string }): Promise<RealmSnapshot> {
+    const project = this.projects.get(input.libraryId);
     if (!project) throw new Error("指定した世界が見つかりません。");
-    this.openPath = path; this.undo.set(path, []); this.redo.set(path, []); return this.result(project);
+    this.openPath = input.libraryId; this.undo.set(input.libraryId, []); this.redo.set(input.libraryId, []); return this.result(project);
   }
   async importProject(input: { path: string }): Promise<RealmSnapshot> {
     const source = this.projects.get(input.path); if (!source) throw new Error("移行データを読み込めません。");

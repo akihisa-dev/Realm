@@ -1,0 +1,28 @@
+{
+  "reportVersion": 1,
+  "schemaVersion": 8,
+  "fixture": {
+    "features": 96,
+    "cells": 192
+  },
+  "samples": {
+    "warmup": 1,
+    "repetitions": 5
+  },
+  "limitsMs": {
+    "create": 5000,
+    "open": 3000,
+    "read": 2000,
+    "terrainBatch": 5000,
+    "save": 3000,
+    "backup": 10000
+  },
+  "rowOperations": {
+    "create": 288,
+    "open": 288,
+    "read": 288,
+    "terrainBatch": 192,
+    "save": 1,
+    "backup": 288
+  }
+}

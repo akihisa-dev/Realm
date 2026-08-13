@@ -11,7 +11,7 @@
 
 ## Realmの不変条件
 
-- 対象はApple Silicon搭載macOSのローカルアプリであり、現行系列ではTauri 2/Rust/React strict TypeScript/OpenLayers/rusqlite SQLiteを使う。
+- 対象はApple Silicon搭載macOSのローカルアプリであり、現行系列ではElectron main/preload、Node.js 24の組み込み`node:sqlite`、React strict TypeScript、OpenLayersを使う。
 - `.realmmap`は一つのSQLiteデータベースを表す。保存形式を無断で分割、変換、クラウド送信しない。
 - 各世界は現在の地図状態だけを正本として保存する。年、時代、出来事、地物履歴、地形の種類を暗黙に再導入しない。
 - 地物は手動編集を基本とする。生成、画像からの地図データ生成、クラウド同期を機能や文書へ持ち込まない。
@@ -41,7 +41,7 @@
 ## プロジェクトSkill
 
 - Realm固有のSkillは`.agents/skills/`を正本とする。グローバルSkillへRealm固有手順を作成・複製しない。
-- ローカル変更の書き込み前に`realm-guard-task`を使い、対象領域に応じて`realm-change-map`、`realm-change-storage`、`realm-change-ui`を使う。
+- ローカル変更の書き込み前に`realm-guard-task`を使い、対象領域に応じて`realm-change-map`、Electron IPC/Node SQLiteを扱う`realm-change-storage`、`realm-change-ui`を使う。
 - ローカル検証経路は`realm-change-local-verification`、文書は`realm-maintain-docs`、自動テストは`realm-test-code`を使う。起動が必要な確認はユーザーが現在の依頼で画面起動そのものを明示した場合だけ`realm-test-development-app`を使い、必ずテスト起動した開発版で行う。
 - コード健全性の局所監査は`realm-audit-code-health`、包括的な構造整理は`realm-refactor-codebase`、機能廃止は`realm-retire-feature`を使う。
 - 依存更新は`realm-update-dependencies`、macOS配布物の診断は`realm-debug-packaging`を使う。GitHub Actions用Skillは作成しない。

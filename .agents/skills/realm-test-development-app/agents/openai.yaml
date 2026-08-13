@@ -1,4 +1,4 @@
 interface:
   display_name: "Realm App Test"
-  short_description: "Verify the Realm development application"
-  default_prompt: "Use $realm-test-development-app to verify the Realm development app when explicitly requested."
+  short_description: "Verify the Realm Electron development app"
+  default_prompt: "Use $realm-test-development-app to verify the Realm Electron development app when explicitly requested."

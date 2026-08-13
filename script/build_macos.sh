@@ -24,4 +24,4 @@ echo "Building the Realm macOS application and DMG..."
 pnpm build:mac
 pnpm package:check
 
-echo "Build completed: app/src-tauri/target/aarch64-apple-darwin/release/bundle/"
+echo "Build completed: app/out/darwin/"

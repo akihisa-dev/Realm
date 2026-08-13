@@ -5,12 +5,13 @@
 .vscode/
 .idea/
 
-# JavaScript/Rust build output
+# JavaScript and Electron build output
 node_modules/
 .pnpm-store/
 dist/
 build/
-target/
+.vite/
+out/
 coverage/
 artifacts/
 *.tsbuildinfo

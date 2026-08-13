@@ -1,0 +1,7 @@
+SQLite is in the public domain. The vendored sqlite3.h and sqlite3ext.h are
+the official SQLite public headers (SQLite 3.53.4); they are retained
+unchanged under SQLite's public-domain dedication. Source and licensing:
+https://www.sqlite.org/copyright.html
+
+Realm does not link a second SQLite library. The extension receives the
+sqlite3_api_routines table from the host SQLite instance at load time.

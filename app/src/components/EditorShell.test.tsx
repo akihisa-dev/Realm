@@ -50,9 +50,9 @@ it("removes the duplicate rail while keeping the map editor", async () => {
   expect(screen.queryByRole("button", { name: "移動" })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "地形を描く" })).not.toBeInTheDocument();
   expect(screen.getByRole("navigation", { name: "編集履歴" })).toBeInTheDocument();
-  expect(screen.getByRole("navigation", { name: "編集履歴" }).closest("header")).toHaveAttribute("data-tauri-drag-region", "deep");
+  expect(screen.getByRole("navigation", { name: "編集履歴" }).closest("header")).toHaveAttribute("data-electron-drag-region", "deep");
   expect(screen.getByRole("button", { name: "戻す" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "戻す" })).not.toHaveAttribute("data-tauri-drag-region");
+  expect(screen.getByRole("button", { name: "戻す" })).not.toHaveAttribute("data-electron-drag-region");
   expect(screen.getByRole("button", { name: "進む" })).toBeDisabled();
   expect(screen.queryByRole("complementary", { name: "地形の構成" })).not.toBeInTheDocument();
   expect(screen.queryByLabelText("地形を検索")).not.toBeInTheDocument();

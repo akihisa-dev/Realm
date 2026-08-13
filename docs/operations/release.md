@@ -4,10 +4,10 @@ Realm releases are owner-led and explicit. The repository does not use GitHub Ac
 
 ## Before a tag
 
-- Confirm the exact semver in `app/package.json`, `Cargo.toml`, `tauri.conf.json`, and the committed SBOM.
+- Confirm the exact semver in `app/package.json` and the committed SBOM.
 - Confirm schema compatibility notes and migration tests are current.
 - Run `pnpm verify:local:push` from `app/` and inspect the complete diff.
-- Run `pnpm verify:local:release` on Apple Silicon. It builds the Tauri `.app`, creates the DMG directly with the system disk-image tool without mounting a Finder volume, statically verifies the arm64 executable and bundle metadata, generates a checksum, and stages notices and the committed SBOM under `release-assets/`. It never launches the built package.
+- Run `pnpm verify:local:release` on Apple Silicon. It builds the Electron Forge `.app`, creates the DMG without launching Finder or mounting a volume, statically verifies the arm64 executable and bundle metadata, generates a checksum, and stages notices and the committed SBOM under `release-assets/`. It never launches the built package.
 - Confirm there are no user map files, credentials, or unrelated changes.
 
 `release-assets/` must not already exist when staging a release. The staging command refuses to delete or overwrite an earlier evidence set; inspect and move that directory explicitly before another run.

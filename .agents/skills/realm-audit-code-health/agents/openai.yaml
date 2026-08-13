@@ -1,4 +1,4 @@
 interface:
   display_name: "Realm Code Health Audit"
-  short_description: "Audit Realm code health and boundaries"
+  short_description: "Audit Realm Electron code health and boundaries"
   default_prompt: "Use $realm-audit-code-health to audit a Realm code-health concern."

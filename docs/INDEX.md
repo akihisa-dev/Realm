@@ -8,7 +8,7 @@ This index routes work to the source-of-truth document. A document may summarize
 
 ## Engineering
 
-- [Architecture](engineering/architecture.md): Tauri boundaries, state ownership, and offline guarantees.
+- [Architecture](engineering/architecture.md): Electron main/preload boundaries, state ownership, and offline guarantees.
 - [Data model](engineering/data-model.md): `.realmmap` SQLite contract, map features, and cell attributes.
 - [Stack](engineering/stack.md): selected technologies and platform constraints.
 - [Test strategy](engineering/test-strategy.md): test layers and evidence expected before publication.

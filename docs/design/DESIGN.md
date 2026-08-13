@@ -40,4 +40,4 @@ Only `terrain` cell attributes are passed from the editor to the semantic cell r
 
 ## App icon assets
 
-`app/src-tauri/icons/icon.png` is the transparent master for the bundled app icon. The white rounded tile and contour mark remain opaque, while every outer corner must be transparent. The other PNG sizes and `icon.icns` are generated from that master with the Tauri icon command. `pnpm icon:check` verifies transparent corners and opaque subject pixels in both the PNG files and the PNG representations embedded in the ICNS container.
+The transparent PNG master is the source for the bundled app icon used by Electron Forge. The white rounded tile and contour mark remain opaque, while every outer corner must be transparent. The other PNG sizes and `icon.icns` are generated from that master; package inspection verifies the bundled icon and metadata without launching the app.

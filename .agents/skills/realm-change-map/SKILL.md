@@ -9,7 +9,7 @@ description: Realmの平面世界地図について、terrain・forest・river�
 2. EPSG:4326の平面世界、extent、zoom境界を保ち、外部tileやnetworkを追加しない。
 3. 描画状態と永続地物を分け、OpenLayers objectをReactやSQLiteの正本にしない。
 4. 9種の地物を生成せず手動操作だけで作る。未実装操作を動作するUIとして見せない。
-5. geometryはRust command境界でclassとGeoJSON構造を検証する。
+5. geometryはElectron main command境界でclassとGeoJSON構造を検証する。
 6. 地物変更を現在状態へtransactionalに反映し、session undo・redo用の前後状態を保つ。
 7. pointer中断、選択解除、pan・zoom、空状態、境界値をtestする。
-8. TypeScript、Vitest、Rust境界test、architecture、docsを確認する。
+8. TypeScript、Vitest、Electron IPC境界test、architecture、docsを確認する。

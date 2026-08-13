@@ -18,7 +18,7 @@ Read [docs/INDEX.md](docs/INDEX.md), [AGENTS.md](AGENTS.md), the relevant docume
 
 ## Verification
 
-Run the formatter, Rust checks, strict TypeScript checks, and tests declared by the current `app/package.json`. Then run the repository checks described in [docs/development.md](docs/development.md). Before a push, the local publication gate must pass on the Apple Silicon development machine. The exact app script names are defined by the application package, not duplicated here.
+Run the strict TypeScript checks and tests declared by the current `app/package.json`. Then run the repository checks described in [docs/development.md](docs/development.md). Before a push, the local publication gate must pass on the Apple Silicon development machine. The exact app script names are defined by the application package, not duplicated here.
 
 ## Commits and publication
 

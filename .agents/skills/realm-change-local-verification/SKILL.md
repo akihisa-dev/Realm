@@ -8,7 +8,7 @@ description: Realmのpackage scripts、Git hooks、secret guard、runtime policy
 1. development docs、package scripts、hooks、対象scriptを読む。
 2. GitHub Actionsやworkflowを追加せず、local Apple Silicon環境を正本にする。
 3. 通常、push前、release前のgateを分け、後者ほど前者を包含させる。
-4. Node、pnpm、Rust、cargo-denyの現行固定値を照合する。
+4. Node、pnpm、Electron Forge、Viteの現行固定値を照合する。
 5. secret、version、license、SBOM、architecture、package checkを弱めない。
 6. scriptは失敗を終了codeで伝え、未導入・stale成果物をfail-closedにする。
 7. 起動が必要なtestは通常gateやrelease gateへ混ぜず、明示時だけ`Realmをテスト起動.command`経由の開発版で行う。build・package・install済みappは起動しない。

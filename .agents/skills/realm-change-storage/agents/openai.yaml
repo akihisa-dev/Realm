@@ -1,4 +1,4 @@
 interface:
   display_name: "Realm Storage Change"
-  short_description: "Change Realm SQLite and Tauri storage"
-  default_prompt: "Use $realm-change-storage to change Realm storage or Tauri commands safely."
+  short_description: "Change Realm SQLite and Electron storage"
+  default_prompt: "Use $realm-change-storage to change Realm storage or Electron IPC safely."

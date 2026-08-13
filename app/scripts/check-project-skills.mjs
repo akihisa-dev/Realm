@@ -77,7 +77,6 @@ for (const skillName of directories) {
   const combined = `${skillSource}\n${interfaceSource}`;
   for (const forbidden of [
     /\brelic-/i,
-    /\belectron\b/i,
     /\.github\/workflows/i,
     /\bci:workflows\b/i,
     /\bpackage-smoke\b/i,

@@ -40,7 +40,7 @@ it("creates, edits, deletes, and undoes current features", async () => {
   it("covers library errors, import, reopen, redo, and cell validation", async () => {
     const backend = new MemoryRealmBackend();
     await expect(backend.saveProject({ name: "Nope" })).rejects.toThrow("開かれていません");
-    await expect(backend.openProject({ path: "browser://missing" })).rejects.toThrow("見つかりません");
+    await expect(backend.openProject({ libraryId: "browser://missing" })).rejects.toThrow("見つかりません");
     const created = await backend.createProject({ path: "browser://copy.realmmap", name: "Copy" });
     await expect(backend.createProject({ path: created.path, name: "Duplicate" })).rejects.toThrow("すでに");
     await expect(backend.createFeature({ featureType: "city", name: "", geometry: { type: "Point", coordinates: [0, 0] } })).rejects.toThrow("名前");
@@ -48,7 +48,7 @@ it("creates, edits, deletes, and undoes current features", async () => {
     await expect(backend.createFeature({ featureType: "city", name: "City", geometry: { type: "Point", coordinates: [0, 0] } })).resolves.toBeTruthy();
     await backend.undoProject(); await backend.redoProject();
     await backend.closeProject(); await expect(backend.getOpenProject()).resolves.toBeNull();
-    await backend.openProject({ path: created.path }); await backend.importProject({ path: created.path });
+    await backend.openProject({ libraryId: created.path }); await backend.importProject({ path: created.path });
     await expect(backend.applyCellAttributes({ cellIds: [], attribute: "forest", value: "on" })).rejects.toThrow("セルを選択");
     await expect(backend.applyCellAttributes({ cellIds: ["63:36"], attribute: "forest", value: "on" })).resolves.toBeTruthy();
     await expect(backend.applyCellAttributes({ cellIds: ["64:36"], attribute: "forest", value: "on" })).rejects.toThrow("不正");

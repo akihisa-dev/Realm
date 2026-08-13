@@ -98,7 +98,7 @@ export type SetFeaturesLockedInput = { ids: string[]; locked: boolean };
 export interface RealmBackend {
   listProjects(): Promise<ProjectSummary[]>;
   createProject(input: { name: string; path?: string }): Promise<RealmSnapshot>;
-  openProject(input: { libraryId?: string; path?: string }): Promise<RealmSnapshot>;
+  openProject(input: { libraryId: string }): Promise<RealmSnapshot>;
   importProject(input: { path: string }): Promise<RealmSnapshot>;
   exportProject(input: { path: string }): Promise<void>;
   writeArtifact(input: { path: string; bytes: number[] }): Promise<void>;

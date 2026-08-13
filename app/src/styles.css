@@ -21,9 +21,10 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .app-error { position: fixed; z-index: 20; right: 24px; bottom: 24px; max-width: min(520px, calc(100vw - 48px)); margin: 0; padding: 12px 16px; border: 1px solid #c23c42; border-radius: 6px; background: #fff6f6; color: #991b1f; box-shadow: 0 6px 24px rgba(80, 20, 20, .12); }
 
 .editor-shell { display: grid; grid-template-rows: 48px minmax(0, 1fr); height: 100vh; min-height: 480px; overflow: hidden; background: #fff; }
-.editor-history { display: flex; align-items: center; justify-content: flex-end; min-width: 0; padding: 0 20px; border-bottom: 1px solid #d6dadd; background: #fff; }
+.editor-history { display: flex; align-items: center; justify-content: flex-end; min-width: 0; padding: 0 20px; border-bottom: 1px solid #d6dadd; background: #fff; -webkit-app-region: drag; }
 .editor-history nav { display: flex; gap: 4px; }
 .editor-history button { min-width: 58px; padding: 7px 10px; border: 0; border-radius: 5px; background: transparent; font-size: 13px; }
+.editor-history button, .editor-history nav { -webkit-app-region: no-drag; }
 .editor-history button:hover:not(:disabled) { background: #f1f4f5; }
 .editor-body { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-height: 0; }
 .map-region { position: relative; grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; background: #fff; }

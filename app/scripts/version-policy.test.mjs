@@ -41,10 +41,10 @@ describe("version policy", () => {
 
   it("requires all Realm version artifacts to match", () => {
     expect(validateVersionArtifacts({
-      packageVersion: "0.1.1", cargoVersion: "0.1.1", tauriVersion: "0.1.1", sbomVersion: "0.1.1",
+      packageVersion: "0.1.1", sbomVersion: "0.1.1",
     })).toBe("0.1.1");
     expect(() => validateVersionArtifacts({
-      packageVersion: "0.1.1", cargoVersion: "0.1.0", tauriVersion: "0.1.1", sbomVersion: "0.1.1",
+      packageVersion: "0.1.1", sbomVersion: "0.1.0",
     })).toThrow("Version mismatch");
   });
 });
