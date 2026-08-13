@@ -102,7 +102,7 @@ check_commit_path() {
 check_commit() {
   commit=$1
   paths_file=$(mktemp "${TMPDIR:-/tmp}/realm-guard-paths.XXXXXX")
-  git diff-tree --root --no-commit-id --name-only -r "$commit" > "$paths_file"
+  git diff-tree --root --no-commit-id --name-only --diff-filter=ACMR -r "$commit" > "$paths_file"
   if [ -s "$paths_file" ]; then
     while IFS= read -r path; do
       check_commit_path "$commit" "$path" || blocked=1
@@ -167,6 +167,11 @@ run_self_test() {
     git commit -q -m safe; safe_commit=$(git rev-parse HEAD)
     git update-ref refs/remotes/origin/main "$safe_commit"
     blocked=0; check_commit "$safe_commit"; [ "$blocked" -eq 0 ]
+    rm safe.txt
+    git add safe.txt
+    git commit -q -m 'delete safe fixture'
+    deleted_commit=$(git rev-parse HEAD)
+    blocked=0; check_commit "$deleted_commit"; [ "$blocked" -eq 0 ]
     dummy_token=$(printf '%s%s' gh p_dummy_token_for_guard_only)
     printf '%s\n' "$dummy_token" > leak.txt; git add leak.txt
     blocked=0; check_staged; [ "$blocked" -ne 0 ]
