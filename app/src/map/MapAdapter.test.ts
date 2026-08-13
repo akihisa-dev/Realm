@@ -1,4 +1,4 @@
-import { CELL_PAINT_RANGE_MAX, CELL_GRID_CELL_COUNT, WORLD_EXTENT, RealmMapAdapter, assertGeometryWithinWorld, availableViewportSize, cellPaintRadiusForRange, cellCenter, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, isGeometryWithinWorld, resolutionForFittingExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
+import { CELL_PAINT_RANGE_MAX, CELL_GRID_CELL_COUNT, WORLD_EXTENT, RealmMapAdapter, assertGeometryWithinWorld, availableViewportSize, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, isGeometryWithinWorld, resolutionForFittingExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -28,6 +28,54 @@ describe("RealmMapAdapter", () => {
     expect(resolutionForFittingExtent([-180, -90, 180, 90], [900, 400])).toBeCloseTo(180 / 400);
     expect(resolutionForFittingExtent([-180, -90, 180, 90], [400, 900])).toBeCloseTo(360 / 400);
     expect(resolutionForFittingExtent([-180, -90, 180, 90], [0, 900])).toBeNaN();
+  });
+
+  it("expands and retracts terrain outlines along changed hex cells", () => {
+    const callbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      if (callback.name === "animate") callbacks.push(callback);
+      return callbacks.length + 1;
+    });
+    const cancelAnimationFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+    const now = vi.spyOn(window.performance, "now").mockReturnValue(1_000);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const outlineLayer = adapter.getMap().getLayers().item(6) as VectorLayer;
+    const first = cellId(10, 10);
+    const adjacent = cellId(10, 11);
+
+    adapter.setCellAttributes([{ cellId: first, attribute: "terrain", value: "terrain" }]);
+    expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(6);
+    expect(callbacks).toHaveLength(0);
+
+    adapter.setCellAttributes([
+      { cellId: first, attribute: "terrain", value: "terrain" },
+      { cellId: adjacent, attribute: "terrain", value: "terrain" },
+    ]);
+    expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(11);
+    callbacks.shift()?.(1_240);
+    expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(10);
+
+    adapter.setCellAttributes([{ cellId: first, attribute: "terrain", value: "terrain" }]);
+    expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(11);
+    callbacks.shift()?.(1_240);
+    expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(6);
+
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true }) as MediaQueryList));
+    adapter.setCellAttributes([
+      { cellId: first, attribute: "terrain", value: "terrain" },
+      { cellId: adjacent, attribute: "terrain", value: "terrain" },
+    ]);
+    expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(10);
+    expect(callbacks).toHaveLength(0);
+
+    adapter.dispose();
+    host.remove();
+    vi.unstubAllGlobals();
+    now.mockRestore();
+    cancelAnimationFrame.mockRestore();
+    requestAnimationFrame.mockRestore();
   });
 
   it("selects points, crossing lines, and contained polygons with a lasso", () => {
