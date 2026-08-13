@@ -601,7 +601,7 @@ describe("RealmMapAdapter", () => {
     adapter.setGridVisible(false);
     expect(graticule.getVisible()).toBe(false);
     adapter.setGridVisible(true);
-    expect(adapter.getMap().getLayers().getLength()).toBe(5);
+    expect(adapter.getMap().getLayers().getLength()).toBe(6);
     adapter.setFeatures([
       { id: "city-1", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [12, 34] } },
       { id: "river-1", featureType: "river", name: "River", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
@@ -718,6 +718,12 @@ describe("RealmMapAdapter", () => {
       { cellId: "3:0", attribute: "country", value: "A" },
       { cellId: "4:0", attribute: "region", value: "B" },
     ]);
+    const terrainOutlineLayer = adapter.getMap().getLayers().item(5) as VectorLayer;
+    const terrainOutline = terrainOutlineLayer.getSource()?.getFeatures()[0];
+    expect(terrainOutline?.getGeometry()).toBeInstanceOf(MultiLineString);
+    const outlineStyle = terrainOutlineLayer.getStyleFunction()?.(terrainOutline!, 1) as Style;
+    expect(outlineStyle.getFill()).toBeNull();
+    expect(outlineStyle.getStroke()?.getColor()).toBe("#443a2b");
     expect(cellLayer.getSource()?.getFeatures().length).toBeLessThan(CELL_GRID_CELL_COUNT);
     const cellStyleFunction = cellLayer.getStyleFunction();
     const forestCell = cellLayer.getSource()?.getFeatureById("1:0");

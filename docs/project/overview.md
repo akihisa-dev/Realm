@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Realm is a local editor for drawing fictional terrain. The user manually paints terrain on a fixed hexagonal grid without configuring a chronology, terrain variants, political objects, settlements, or symbols.
+Realm is a local editor for drawing fictional terrain. The user manually marks which parts of a fixed hexagonal grid belong to terrain without configuring a chronology, terrain variants, political objects, settlements, or symbols.
 
 ## Current 0.x scope
 
@@ -34,6 +34,7 @@ Realm is a terrain authoring tool, not a general map-object editor or GIS data e
 - The top row exposes exactly `戻す` and `進む`; the editor has no file toolbar, export controls, world-name field, floating map controls, or bottom zoom bar.
 - The complete fixed 64 by 37 regular-hexagon editing grid spans the bounded world and is visible before any terrain is drawn without deforming its boundary cells. Relative zoom 1 fits the complete bounded world inside the available canvas with 40 CSS pixels of fit padding on every side; a narrow or wide viewport may leave additional letterbox space on its secondary axis, but cannot zoom out beyond that full-world view. Resizing recomputes the fit while preserving the relative zoom. The editor does not render separate origin or focus axes.
 - Drawing or erasing applies the complete set of valid hexagonal cells touched by one pointer stroke in one transaction and one undo step. Drawing and grid erasing use hex distance 0–4 for range 1–5; cluster erasing expands the seeds through six-neighbor connected terrain cells. Before pressing, the active footprint is shown as a temporary dashed preview at the pointer, and the preview is never persisted. The active terrain tool remains selected for consecutive strokes; Escape cancels the current selection.
+- Persisted terrain cells are presented as unfilled masses. Shared edges between adjacent terrain cells are omitted, leaving only the outline of each connected mass; the fixed editing grid remains available as the selection guide. Transient drawing previews may use a light fill so the pending footprint remains visible.
 - Valid edits are automatically saved, and reopening a world preserves the current world metadata, terrain, project presentation settings, and untouched legacy compatibility rows.
 - The renderer uses the bounded project settings already stored in the world, but the terrain editor does not expose a settings sidebar. Viewport, zoom, selection, and active tool remain transient.
 - Terrain cell painting and clearing validate the complete operation and commit atomically.

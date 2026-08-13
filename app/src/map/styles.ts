@@ -578,7 +578,8 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     const cached = cellStyles.get(feature as object);
     if (cached?.key === key) return cached.styles;
     const styles: Style[] = [];
-    if (hasTerrain) styles.push(new Style({ fill: new Fill({ color: theme.land }), stroke: new Stroke({ color: theme.landInk, width: 0.7 }), zIndex: 6 }));
+    // Persisted terrain is rendered by MapAdapter as one derived, unfilled
+    // outline. Cell features remain here for transient paint/erase feedback.
     if (hasPhysical) styles.push(new Style({ fill: new Fill({ color: theme.forest }), stroke: new Stroke({ color: theme.labelHalo, width: 0.55 + variant * 0.03 }), zIndex: 8 }));
     if (hasCountry) styles.push(new Style({ fill: new Fill({ color: `${theme.country}14` }), stroke: new Stroke({ color: theme.country, width: 1.1 }), zIndex: 9 }));
     if (hasRegion) styles.push(new Style({ fill: new Fill({ color: `${theme.region}0d` }), stroke: new Stroke({ color: theme.region, width: 1.1, lineDash: [3, 2] }), zIndex: 10 }));

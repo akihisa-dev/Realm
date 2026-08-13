@@ -31,6 +31,7 @@ import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId
 import { paintMapTexture } from "./mapTexture";
 import { assertGeometryWithinWorld } from "./geometryGuard";
 import { expandConnectedEraseCells } from "./cellErase";
+import { terrainOutlineSegments } from "./terrainOutline";
 import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
 import type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
@@ -121,6 +122,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly featureStyle = createFeatureStyle(() => this.activeThemeId, (featureType) => featureType === undefined || !this.hiddenFeatureTypes.has(featureType), (assetId) => this.assetUrls[assetId], () => this.themeOverrides);
   private readonly cellSource = new VectorSource({ wrapX: false });
   private readonly cellLayer: VectorLayer;
+  private readonly terrainOutlineSource = new VectorSource({ wrapX: false });
+  private readonly terrainOutlineLayer: VectorLayer;
   private readonly cellGridSource = new VectorSource({ wrapX: false });
   private readonly cellGridStroke = new Stroke({ color: DEFAULT_CELL_GRID_OPTIONS.color, width: DEFAULT_CELL_GRID_OPTIONS.width });
   private readonly cellGridLayer: VectorLayer;
@@ -241,6 +244,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
     this.featureLayer = new VectorLayer({ source: this.featureSource, style: this.featureStyle });
     this.cellLayer = new VectorLayer({ source: this.cellSource, style: this.cellStyle, visible: true });
+    this.terrainOutlineLayer = new VectorLayer({
+      source: this.terrainOutlineSource,
+      style: () => new Style({ stroke: new Stroke({ color: mapTheme(this.activeThemeId, this.themeOverrides).landInk, width: 1.6 }) }),
+      zIndex: 7,
+    });
     this.cellGridSource.addFeature(new Feature({ geometry: new MultiLineString(fixedCellGridLines()) }));
     this.cellGridLayer = new VectorLayer({
       source: this.cellGridSource,
@@ -299,7 +307,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
     this.map = new Map({
       target,
-      layers: [this.graticule, this.featureLayer, this.cellLayer, this.gridLayer, this.cellGridLayer],
+      layers: [this.graticule, this.featureLayer, this.cellLayer, this.gridLayer, this.cellGridLayer, this.terrainOutlineLayer],
       view: new View({
         projection: "EPSG:4326",
         center: [0, 0],
@@ -389,6 +397,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.target.dataset.mapTheme = themeId;
     this.featureLayer.changed();
     this.cellLayer.changed();
+    this.terrainOutlineLayer.changed();
   }
 
   setThemeOverrides(overrides: ThemeOverrides): void {
@@ -396,6 +405,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.target.style.background = mapTheme(this.activeThemeId, this.themeOverrides).canvas;
     this.featureLayer.changed();
     this.cellLayer.changed();
+    this.terrainOutlineLayer.changed();
     // GridOptions.color is an independent explicit setting and is intentionally
     // not replaced by a theme override.
     this.graticule.changed();
@@ -945,6 +955,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
     this.cellAttributesById = byCell;
     for (const id of changedIds) this.removeUnusedCell(id);
+    const terrainCellIds = [...byCell.entries()]
+      .filter(([, values]) => values.some(({ attribute }) => attribute === "terrain"))
+      .map(([id]) => id);
+    const outline = terrainOutlineSegments(terrainCellIds);
+    this.terrainOutlineSource.clear();
+    if (outline.length > 0) this.terrainOutlineSource.addFeature(new Feature({ geometry: new MultiLineString(outline) }));
     this.cellLayer.changed();
   }
 
@@ -1138,6 +1154,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.selection.getFeatures().clear();
     this.featureSource.clear();
     this.cellSource.clear();
+    this.terrainOutlineSource.clear();
+    this.map.removeLayer(this.terrainOutlineLayer);
     this.gridSource.clear();
     this.map.removeLayer(this.gridLayer);
     this.cellGridSource.clear();

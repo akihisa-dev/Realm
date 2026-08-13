@@ -13,7 +13,7 @@ Visible controls remain code-native. The radial map palette exposes the terrain 
 
 ## Visual system
 
-- Interface chrome uses true white and cool neutral gray. The default unpainted map canvas is true white; persistent terrain cells provide the map color. Optional cartographic themes may color the canvas, but must not turn toolbars and panels into decorative scenery.
+- Interface chrome uses true white and cool neutral gray. The default map canvas is true white; persistent terrain is shown by an unfilled outline rather than a colored interior. Optional cartographic themes may color the canvas, but must not turn toolbars and panels into decorative scenery.
 - Text is charcoal with a restrained deep blue-green or cool blue selection accent.
 - Use the macOS system font stack. Controls use explicit compact typography rather than browser defaults.
 - Prefer rails, separators, lists, and the full map canvas over nested cards or floating panels.
@@ -36,7 +36,7 @@ The editor uses only `戻す` and `進む` in the top row; `地形を描く（�
 
 React owns transient interface state, including the terrain tool, viewport, draw-paint range, and current paint selection. OpenLayers objects, derived hex polygons, and theme definitions live behind the map adapter and never become storage. The selected theme identifier, grid visibility, export scale, and export extent are bounded project settings that survive reopening.
 
-Only `terrain` cell attributes are passed from the editor to the semantic cell renderer. A separate bounded renderer draws the complete fixed editing grid without creating persistent or selectable cell objects. The semantic renderer derives a tessellating polygon only for terrain and transient paint cells and fills it with the terrain theme; clearing terrain removes that semantic polygon so no outline trail remains. World-edge cell polygons are clipped to the bounded world extent, and the map view fits that extent inside the available canvas with 40 CSS pixels of padding on every side. Feature rows and older non-terrain cell rows remain storage compatibility data and are not rendered by the editor.
+Only `terrain` cell attributes are passed from the editor to the semantic cell renderer. A separate bounded renderer draws the complete fixed editing grid without creating persistent or selectable cell objects. The semantic renderer derives cell polygons for terrain and transient drawing cells. Persisted terrain has no fill: shared edges between adjacent terrain cells are removed and the remaining exposed edges form the outline of each terrain mass. Transient drawing previews may use a light fill and dashed edge for clear feedback. Clearing terrain recomputes the derived outline so no trail remains. World-edge cell polygons are clipped to the bounded world extent, and the map view fits that extent inside the available canvas with 40 CSS pixels of padding on every side. Feature rows and older non-terrain cell rows remain storage compatibility data and are not rendered by the editor.
 
 ## App icon assets
 
