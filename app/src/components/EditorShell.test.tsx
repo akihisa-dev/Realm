@@ -97,6 +97,7 @@ it("shows painted terrain while the save IPC is still pending", async () => {
 
   fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
   expect(screen.getByRole("status", { name: "表示中の地形セル" })).toHaveTextContent("1:1,1:2");
+  expect(screen.getByRole("status", { name: "選択中の地形セル" })).toHaveTextContent("");
   releaseSave?.();
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toHaveLength(2));
 });
@@ -203,14 +204,14 @@ it("restores persisted terrain after a painted save fails", async () => {
   expect(await backend.viewCellAttributes({})).toEqual([{ cellId: "1:1", attribute: "terrain", value: "terrain" }]);
 });
 
-it("clears the controlled cell selection when an empty paint selection arrives", async () => {
+it("keeps completed paint out of controlled selection", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://empty-selection.realmmap", name: "Empty selection" });
   renderEditor(backend, snapshot);
   vi.spyOn(backend, "applyCellAttributes").mockRejectedValue(new Error("save failed"));
 
   fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
-  await waitFor(() => expect(screen.getByRole("status", { name: "選択中の地形セル" })).toHaveTextContent("1:1,1:2"));
+  expect(screen.getByRole("status", { name: "選択中の地形セル" })).toHaveTextContent("");
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("セルの地形属性を更新できませんでした。"));
 
   fireEvent.click(screen.getByRole("button", { name: "テスト選択解除" }));

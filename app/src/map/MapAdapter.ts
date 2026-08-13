@@ -752,7 +752,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private finishPaintStroke(): void {
     if (this.paintLastPoint === null) return;
     const selected = [...this.paintStrokeSelection];
-    this.setSelectedCells(selected);
+    // Clear the in-stroke fill before publishing the completed outline.
+    this.setSelectedCells([]);
     for (const listener of this.cellSelectListeners) listener([...selected]);
     this.paint?.cancelSequence();
     this.paintLastPoint = null;
@@ -760,7 +761,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.paintSelectionBeforeStroke = [];
     this.refreshHoveredCells();
   }
-
   private cancelPaintStroke(restoreSelection = true): void {
     const hadStroke = this.paintLastPoint !== null;
     this.paint?.cancelSequence();

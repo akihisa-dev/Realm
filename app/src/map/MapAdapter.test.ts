@@ -788,6 +788,7 @@ describe("RealmMapAdapter", () => {
     expect(cellPaint).toBeInstanceOf(PointerInteraction);
     expect(interactions.find((interaction) => interaction instanceof DragPan)?.getActive()).toBe(false);
     expect(interactions.find((interaction) => interaction instanceof KeyboardPan)?.getActive()).toBe(false);
+    adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: cellCenter(10, 10) } as never);
     const pointerDown = new MouseEvent("pointerdown", { button: 0, bubbles: true });
     Object.defineProperty(pointerDown, "isPrimary", { value: true });
     cellPaint?.handleEvent({ type: "pointerdown", originalEvent: pointerDown, coordinate: cellCenter(10, 10), activePointers: [pointerDown] } as never);
@@ -796,10 +797,11 @@ describe("RealmMapAdapter", () => {
     expect(paintedPreview).toBeDefined();
     expect(paintedPreview?.get("paintPreview")).toBe(true);
     const paintedStyles = cellLayer.getStyleFunction()?.(paintedPreview!, 1) as Style[];
-    expect(paintedStyles.at(-1)?.getFill()?.getColor()).toBe("#35463f");
+    expect(paintedStyles.some((style) => style.getFill()?.getColor() === "#35463f")).toBe(true);
     window.dispatchEvent(new MouseEvent("pointerup", { button: 0 }));
     expect((cellPaint as unknown as { handlingDownUpSequence: boolean }).handlingDownUpSequence).toBe(false);
-    expect(cellLayer.getSource()?.getFeatures().some((feature) => feature.get("selected") === true)).toBe(true);
+    expect(cellLayer.getSource()?.getFeatures().some((feature) => feature.get("selected") === true || feature.get("paintPreview") === true)).toBe(false);
+    expect(hoverCellIds.every((id) => cellLayer.getSource()?.getFeatureById(id)?.get("preview") === true)).toBe(true);
     const onCellSelect = vi.fn();
     const stopCellSelect = adapter.onCellSelect(onCellSelect);
     adapter.setSelectedCells(["0:0"]);

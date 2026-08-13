@@ -142,7 +142,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     const value = tool === "terrain" ? "terrain" : null;
     const mutation = ++cellMutation.current;
     updateOptimisticCellAttributes(nextIds, value);
-    setSelectedCellIds(value === null ? [] : nextIds);
+    // Completed strokes are represented immediately by the optimistic terrain
+    // outline. Keep controlled selection empty so only pointer hover can show
+    // a transient fill after commit.
+    setSelectedCellIds([]);
     void run(
       () => backend.applyCellAttributes({ cellIds: nextIds, attribute: "terrain", value }),
       "セルの地形属性を更新できませんでした。",
