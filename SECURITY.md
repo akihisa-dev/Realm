@@ -19,7 +19,7 @@ For ordinary defects without sensitive details, use a public issue only when you
 
 ## Repository defense
 
-- `.githooks/secret-guard.sh` checks staged files and outgoing commit ranges for credential-like names and high-confidence token patterns.
+- `.githooks/secret-guard.sh` checks staged files and outgoing commit ranges for credential-like names and high-confidence token patterns, including file-type changes and merge resolutions. Deleted blobs are not read from the resulting tree; their introducing commits remain subject to range inspection.
 - The pre-commit and pre-push hooks are advisory safeguards; run the guard explicitly when hooks are disabled or when reviewing an outgoing range.
 - CI uses least-privilege read permissions and disables checkout credential persistence.
 - A push or release is never authorized merely because CI is green. Run the local publication gate on Apple Silicon, inspect the diff, and obtain explicit owner approval.

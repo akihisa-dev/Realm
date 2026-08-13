@@ -102,7 +102,7 @@ check_commit_path() {
 check_commit() {
   commit=$1
   paths_file=$(mktemp "${TMPDIR:-/tmp}/realm-guard-paths.XXXXXX")
-  git diff-tree --root --no-commit-id --name-only --diff-filter=ACMR -r "$commit" > "$paths_file"
+  git diff-tree --root --no-commit-id --name-only --diff-filter=ACMRT -m -r "$commit" > "$paths_file"
   if [ -s "$paths_file" ]; then
     while IFS= read -r path; do
       check_commit_path "$commit" "$path" || blocked=1
@@ -113,7 +113,7 @@ check_commit() {
 
 check_staged() {
   paths_file=$(mktemp "${TMPDIR:-/tmp}/realm-guard-paths.XXXXXX")
-  git diff --cached --name-only --diff-filter=ACMR > "$paths_file"
+  git diff --cached --name-only --diff-filter=ACMRT > "$paths_file"
   if [ -s "$paths_file" ]; then
     while IFS= read -r path; do
       check_staged_path "$path" || blocked=1
@@ -161,32 +161,101 @@ run_self_test() {
     git init -q
     git config user.email realm-guard@example.invalid
     git config user.name "Realm Secret Guard"
+    expect_clean() {
+      label=$1; shift
+      blocked=0
+      "$@" || :
+      [ "$blocked" -eq 0 ] || { echo "self-test expected success: $label" >&2; exit 1; }
+    }
+    expect_blocked() {
+      label=$1; shift
+      blocked=0
+      "$@" || :
+      [ "$blocked" -ne 0 ] || { echo "self-test expected rejection: $label" >&2; exit 1; }
+    }
+
     printf '%s\n' safe > safe.txt; git add safe.txt
     : > empty.txt; git add empty.txt
-    blocked=0; check_staged; [ "$blocked" -eq 0 ]
+    expect_clean 'safe staged/add/empty' check_staged
     git commit -q -m safe; safe_commit=$(git rev-parse HEAD)
     git update-ref refs/remotes/origin/main "$safe_commit"
-    blocked=0; check_commit "$safe_commit"; [ "$blocked" -eq 0 ]
+    expect_clean 'safe commit' check_commit "$safe_commit"
     rm safe.txt
     git add safe.txt
     git commit -q -m 'delete safe fixture'
     deleted_commit=$(git rev-parse HEAD)
-    blocked=0; check_commit "$deleted_commit"; [ "$blocked" -eq 0 ]
+    expect_clean 'safe deletion commit' check_commit "$deleted_commit"
+    expect_clean 'existing remote range with deletion' check_pre_push <<EOF
+refs/heads/main $deleted_commit refs/heads/main $safe_commit
+EOF
+
     dummy_token=$(printf '%s%s' gh p_dummy_token_for_guard_only)
     printf '%s\n' "$dummy_token" > leak.txt; git add leak.txt
-    blocked=0; check_staged; [ "$blocked" -ne 0 ]
+    expect_blocked 'synthetic GitHub token staged' check_staged
     git reset -q leak.txt
+
+    printf '%s\n' safe > typechange.txt
+    git add typechange.txt
+    git commit -q -m 'type change baseline'
+    typechange_base=$(git rev-parse HEAD)
+    rm typechange.txt
+    ln -s "$dummy_token" typechange.txt
+    git add -A typechange.txt
+    if ! git diff --cached --name-status -- typechange.txt | grep -Eq '^T'; then
+      echo 'self-test expected regular-to-symlink type change' >&2
+      exit 1
+    fi
+    expect_blocked 'synthetic GitHub token type-change staged' check_staged
+    git commit -q -m 'type change secret fixture'
+    typechange_commit=$(git rev-parse HEAD)
+    expect_blocked 'synthetic GitHub token type-change commit' check_commit "$typechange_commit"
+    expect_blocked 'existing remote range with secret type-change' check_pre_push <<EOF
+refs/heads/main $typechange_commit refs/heads/main $safe_commit
+EOF
+    expect_blocked 'new remote ref with secret type-change' check_pre_push <<EOF
+refs/heads/new $typechange_commit refs/heads/new $zero
+EOF
+
+    main_branch=$(git symbolic-ref --short HEAD)
+    printf '%s\n' merge-base > merge-target.txt
+    git add merge-target.txt
+    git commit -q -m 'merge fixture base'
+    git checkout -q -b merge-secret
+    printf '%s\n' branch-secret > merge-target.txt
+    git add merge-target.txt
+    git commit -q -m 'merge fixture branch'
+    git checkout -q "$main_branch"
+    printf '%s\n' main-secret > merge-target.txt
+    git add merge-target.txt
+    git commit -q -m 'merge fixture main'
+    if git merge -q --no-commit merge-secret; then
+      echo 'self-test expected merge conflict' >&2
+      exit 1
+    fi
+    printf '%s\n' "$dummy_token" > merge-target.txt
+    git add merge-target.txt
+    git commit -q -m 'merge resolution secret fixture'
+    merge_commit=$(git rev-parse HEAD)
+    expect_blocked 'secret introduced by merge resolution' check_commit "$merge_commit"
+
+    printf '%s\n' blocked > .env; git add -f .env
+    expect_blocked 'blocked .env filename' check_staged
+    git reset -q .env; rm .env
+    printf '%s\n' blocked > synthetic-credentials.txt; git add synthetic-credentials.txt
+    expect_blocked 'blocked synthetic credential filename' check_staged
+    git reset -q synthetic-credentials.txt; rm synthetic-credentials.txt
+
     printf 'SQLite format 3\000synthetic guard fixture\n' > world.realmmap
     git add -f world.realmmap
-    blocked=0; check_staged; [ "$blocked" -ne 0 ]
+    expect_blocked 'realmmap filename' check_staged
     git reset -q world.realmmap
     printf 'SQLite format 3\000synthetic uppercase guard fixture\n' > UPPER.REALMMAP
     git add -f UPPER.REALMMAP
-    blocked=0; check_staged; [ "$blocked" -ne 0 ]
+    expect_blocked 'uppercase realmmap filename' check_staged
     git reset -q UPPER.REALMMAP
     printf 'synthetic prefix\000ghp_dummy_token_after_nul_1234567890\n' > nul.txt
     git add nul.txt
-    blocked=0; check_staged; [ "$blocked" -ne 0 ]
+    expect_blocked 'NUL followed by GitHub token' check_staged
     git reset -q nul.txt
   )
   echo "Realm secret guard self-test passed."

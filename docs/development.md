@@ -48,6 +48,11 @@ package-content, and Node runtime checks. `verify:ci` is a reusable strict local
 command that additionally runs production dependency advisories; it is not
 connected to GitHub Actions.
 
+The standard `verify` command also runs the secret-guard regression matrix, so
+staged, commit-range, new-ref, file-type-change, merge-resolution, and safe
+deletion behavior is checked during development rather than only immediately
+before a push.
+
 The public verification scripts (`verify`, `verify:full`, `verify:ci`, and both
 `verify:local:*` gates) enter through `script/with_node_runtime.sh`. If the
 interactive shell currently exposes another Node version, the resolver checks
@@ -124,6 +129,13 @@ Repository checks also include:
 git diff --check
 .githooks/secret-guard.sh --self-test
 ```
+
+The secret-guard self-test exercises staged content and both existing-branch
+and new-branch push ranges. It must cover additions, modifications, renames or
+copies as destination additions, file-type changes, and merge resolutions.
+Deletions are intentionally excluded from blob reads because the deleted path
+does not exist in the resulting tree; the commit that originally introduced
+the content remains part of the outgoing range and is checked separately.
 
 Enable the repository hooks once per clone:
 
