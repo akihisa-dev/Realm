@@ -8,6 +8,11 @@ export type CellPaintSize = keyof typeof CELL_PAINT_RADII;
 export type CellPosition = [number, number];
 export const WORLD_EXTENT = [-180, -90, 180, 90] as const;
 
+export const availableViewportSize = (width: number, height: number): [number, number] => {
+  const padding = Math.min(160, Math.max(40, Math.min(width, height) * 0.1));
+  return [Math.max(1, width - padding * 2), Math.max(1, height - padding * 2)];
+};
+
 /** Converts the user-facing cell range to a hex-grid distance radius. */
 export const cellPaintRadiusForRange = (range: number): number => {
   if (!Number.isFinite(range)) return 0;

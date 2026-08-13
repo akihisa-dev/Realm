@@ -22,7 +22,7 @@ import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, Position, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
-import { CELL_PAINT_RADII, WORLD_EXTENT, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
+import { CELL_PAINT_RADII, WORLD_EXTENT, availableViewportSize, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
 import { MAX_SMOOTHING_PASSES, refineDrawnGeometry, snapPositionToAngle } from "./drawingGeometry";
 import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
@@ -38,7 +38,7 @@ import type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, 
 
 export type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellPaintSize } from "./gridGeometry";
-export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
+export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, availableViewportSize, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
 export { selectFeatureIdsWithinLasso } from "./lassoSelection";
 
@@ -119,7 +119,6 @@ const nudgeGeometry = (geometry: GeoJsonGeometry, offset: Position): GeoJsonGeom
 export class RealmMapAdapter implements RealmMapRenderer {
   private readonly map: Map;
   private readonly worldExtent = WORLD_EXTENT;
-  private readonly fitPadding = 40;
   private activeThemeId: MapThemeId = DEFAULT_MAP_THEME_ID;
   private themeOverrides: ThemeOverrides = {};
   private readonly hiddenFeatureTypes = new Set<RealmFeature["featureType"]>();
@@ -1112,10 +1111,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (width <= 0 || height <= 0) return;
 
     const currentRelativeZoom = this.getZoom();
-    const availableSize: [number, number] = [
-      Math.max(1, width - this.fitPadding * 2),
-      Math.max(1, height - this.fitPadding * 2),
-    ];
+    const availableSize = availableViewportSize(width, height);
     const fitResolution = resolutionForFittingExtent(this.worldExtent, availableSize);
     if (!Number.isFinite(fitResolution)) return;
     const fitZoom = view.getZoomForResolution(fitResolution);
