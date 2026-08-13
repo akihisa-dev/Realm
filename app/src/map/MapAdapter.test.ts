@@ -712,6 +712,9 @@ describe("RealmMapAdapter", () => {
     const insideGridStyle = insideGridStyles[0]!;
     expect(outsideGridStyle.getStroke()?.getColor()).toBe("rgba(209, 215, 220, 0.58)");
     expect(insideGridStyle.getStroke()?.getColor()).toBe("rgba(209, 215, 220, 0.28)");
+    expect(insideGridStyle.getStroke()?.getLineDash()).toEqual([1, 3]);
+    expect(insideGridStyle.getStroke()?.getLineCap()).toBe("round");
+    expect(outsideGridStyle.getStroke()?.getLineDash()).toBeNull();
     expect(insideGridLayer.getVisible()).toBe(true);
     const terrainOutlineLayer = adapter.getMap().getLayers().item(6) as VectorLayer;
     const terrainOutline = terrainOutlineLayer.getSource()?.getFeatures()[0];
