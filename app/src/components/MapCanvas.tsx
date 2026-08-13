@@ -17,7 +17,7 @@ import { useMapAdapterLifecycle } from "./editor/useMapAdapterLifecycle";
 import { usePaletteFlyouts } from "./editor/usePaletteFlyouts";
 import { useRendererSync } from "./editor/useRendererSync";
 
-export type TerrainMapMode = "pan" | "cell-select" | "cell-erase";
+export type TerrainMapMode = "pan" | "cell-select" | "cell-erase" | "region";
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;
@@ -41,7 +41,8 @@ type MapCanvasProps = {
   onSelect?: (featureId: string | null) => void;
   onSelectFeatures?: (featureIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
-  onToolChange?: (tool: "terrain" | "erase") => void;
+  onToolChange?: (tool: "terrain" | "region" | "erase") => void;
+  onRegionColorChange?: (color: string) => void;
   onModify?: (featureId: string, geometry: GeoJsonGeometry) => void;
   onModifyFeatures?: (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void;
   onErase?: (featureId: string) => void;
@@ -74,6 +75,7 @@ export function MapCanvas({
   onSelectFeatures,
   onCellSelect,
   onToolChange,
+  onRegionColorChange,
   onModify,
   onModifyFeatures,
   onErase,
@@ -95,13 +97,16 @@ export function MapCanvas({
     handleShellPointerDown,
     paintRangeFlyout,
     eraseFlyout,
-  } = usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange });
+    regionFlyout,
+  } = usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onRegionColorChange });
   const paintRadius = cellPaintRadiusForRange(paintRange);
   const effectivePaintRadius = mode === "cell-select" ? paintRadius : 0;
   const mapHelp = mode === "pan"
     ? "ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
     : mode === "cell-erase"
       ? "六角セルを押したままなぞって地形を消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。"
+      : mode === "region"
+        ? "領域の輪郭をドラッグして描きます。色を選んで保存できます。Escapeで取り消せます。"
       : "六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。";
   const controlledFeatureIds = selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []);
 
@@ -160,7 +165,7 @@ export function MapCanvas({
     ? "map-canvas-mode-pan"
     : mode === "cell-erase"
       ? "map-canvas-mode-cell-erase"
-      : "map-canvas-mode-cell-select";
+      : mode === "region" ? "map-canvas-mode-region" : "map-canvas-mode-cell-select";
   return (
     <div
       ref={shellRef}
@@ -181,6 +186,7 @@ export function MapCanvas({
       {radialPalette}
       {paintRangeFlyout}
       {eraseFlyout}
+      {regionFlyout}
     </div>
   );
 }

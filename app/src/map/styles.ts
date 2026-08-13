@@ -115,7 +115,11 @@ const numericProperty = (feature: FeatureLike, name: string, fallback: number, m
   return typeof value === "number" && Number.isFinite(value) ? Math.max(minimum, Math.min(maximum, value)) : fallback;
 };
 
-const featureOpacity = (feature: FeatureLike): number => numericProperty(feature, "opacity", 1, 0, 1);
+const featureOpacity = (feature: FeatureLike): number => {
+  const animation = feature.get("regionAnimationOpacity");
+  if (typeof animation === "number" && Number.isFinite(animation)) return Math.max(0, Math.min(1, animation));
+  return numericProperty(feature, "opacity", 1, 0, 1);
+};
 
 type OverlayBlendMode = "source-over" | "multiply" | "screen" | "overlay" | "soft-light";
 const overlayBlendMode = (feature: FeatureLike): OverlayBlendMode => {

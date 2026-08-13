@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRealmBackend, type RealmSnapshot } from "../backend";
+import { MemoryRealmBackend, type GeoJsonGeometry, type RealmSnapshot } from "../backend";
 import { EditorShell } from "./EditorShell";
 
 vi.mock("./MapCanvas", () => ({
@@ -14,7 +14,9 @@ vi.mock("./MapCanvas", () => ({
     showCellGrid?: boolean;
     zoom?: number;
     onCellSelect?: (ids: readonly string[]) => void;
-    onToolChange?: (tool: "terrain" | "erase") => void;
+    onToolChange?: (tool: "terrain" | "region" | "erase") => void;
+    onRegionColorChange?: (color: string) => void;
+    onDraw?: (geometry: GeoJsonGeometry) => void;
     onError?: (code: "drawing_self_intersection") => void;
   }) => {
     const initialCellSelect = useRef(props.onCellSelect);
@@ -28,6 +30,9 @@ vi.mock("./MapCanvas", () => ({
       <button type="button" onClick={() => props.onError?.("drawing_self_intersection")}>テスト描画エラー</button>
       <button type="button" onClick={() => props.onToolChange?.("erase")}>テスト消しゴム</button>
       <button type="button" onClick={() => props.onToolChange?.("terrain")}>テスト地形描画</button>
+      <button type="button" onClick={() => props.onToolChange?.("region")}>テスト領域</button>
+      <button type="button" onClick={() => props.onRegionColorChange?.("#2468AC")}>テスト領域色</button>
+      <button type="button" onClick={() => props.onDraw?.({ type: "Polygon", coordinates: [[[0, 0], [4, 0], [4, 4], [0, 0]]] })}>テスト領域描画</button>
     </div>;
   },
 }));
@@ -83,6 +88,34 @@ it("applies terrain to selected hex cells", async () => {
   ]));
 });
 
+it("saves a colored region without changing terrain cells and supports undo", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://region.realmmap", name: "Region" });
+  await backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "terrain", value: "terrain" });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テスト領域" }));
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "region");
+  fireEvent.click(screen.getByRole("button", { name: "テスト領域色" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト領域描画" }));
+
+  await waitFor(async () => expect((await backend.getOpenProject())?.features).toEqual([
+    expect.objectContaining({
+      featureType: "region",
+      name: "領域",
+      properties: { fillColor: "#2468AC", strokeColor: "#2468AC", fillOpacity: 0.25 },
+    }),
+  ]));
+  expect(await backend.viewCellAttributes({})).toEqual([{ cellId: "1:1", attribute: "terrain", value: "terrain" }]);
+  await waitFor(() => expect(screen.getByRole("status", { name: "描画対象" })).toHaveTextContent("region"));
+
+  fireEvent.click(screen.getByRole("button", { name: "戻す" }));
+  await waitFor(async () => expect((await backend.getOpenProject())?.features).toEqual([]));
+  expect(await backend.viewCellAttributes({})).toEqual([{ cellId: "1:1", attribute: "terrain", value: "terrain" }]);
+});
+
 it("shows painted terrain while the save IPC is still pending", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://draw-pending.realmmap", name: "Draw pending" });
@@ -128,6 +161,15 @@ it("shows a localized drawing error from the message catalog", async () => {
   fireEvent.click(screen.getByRole("button", { name: "テスト描画エラー" }));
   expect(screen.getByRole("alert")).toHaveTextContent("地形の輪郭が交差しています。線が交差しないように描き直してください。");
   expect(screen.getByRole("alert")).not.toHaveTextContent("self-intersect");
+});
+
+it("uses region-specific copy for a genuinely invalid region boundary", async () => {
+  const backend = new MemoryRealmBackend();
+  const snapshot = await backend.createProject({ path: "browser://region-error.realmmap", name: "Region error" });
+  renderEditor(backend, snapshot);
+  fireEvent.click(screen.getByRole("button", { name: "テスト領域" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト描画エラー" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("領域の輪郭が交差しています。線が交差しないように描き直してください。");
 });
 
 it("edits terrain directly on the canvas while hiding legacy objects", async () => {

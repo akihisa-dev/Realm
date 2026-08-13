@@ -17,6 +17,71 @@ import Point from "ol/geom/Point";
 import Style from "ol/style/Style";
 
 describe("RealmMapAdapter", () => {
+  it("fades newly added regions after initial load and cancels pending frames on disposal", () => {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    let nextFrame = 1;
+    const requestAnimationFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      const id = nextFrame++;
+      if (callback.name === "tick") callbacks.set(id, callback);
+      return id;
+    });
+    const cancelAnimationFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => { callbacks.delete(id); });
+    const now = vi.spyOn(window.performance, "now").mockReturnValue(1_000);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const featureLayer = adapter.getMap().getLayers().item(1) as VectorLayer;
+    const region = (id: string, offset: number) => ({
+      id,
+      featureType: "region" as const,
+      name: "領域",
+      geometry: { type: "Polygon" as const, coordinates: [[[offset, 0], [offset + 2, 0], [offset + 2, 2], [offset, 0]]] as [number, number][][] },
+      properties: { fillColor: "#2468AC", strokeColor: "#2468AC", fillOpacity: 0.25 },
+    });
+
+    adapter.setFeatures([region("initial", 0)]);
+    expect(featureLayer.getSource()?.getFeatureById("initial")?.get("regionAnimationOpacity")).toBeUndefined();
+    expect(callbacks.size).toBe(0);
+
+    adapter.setFeatures([region("initial", 0), region("animated", 4)]);
+    const animated = featureLayer.getSource()?.getFeatureById("animated") as Feature;
+    expect(animated.get("regionAnimationOpacity")).toBe(0);
+    const first = [...callbacks.entries()][0];
+    expect(first).toBeDefined();
+    first?.[1](1_120);
+    expect(animated.get("regionAnimationOpacity")).toBeCloseTo(0.5);
+    expect(callbacks.size).toBeGreaterThan(0);
+
+    adapter.dispose();
+    expect(cancelAnimationFrame).toHaveBeenCalled();
+    host.remove();
+    now.mockRestore();
+    cancelAnimationFrame.mockRestore();
+    requestAnimationFrame.mockRestore();
+  });
+
+  it("renders newly added regions immediately when reduced motion is requested", () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true }) as MediaQueryList));
+    let regionFrames = 0;
+    const requestAnimationFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      if (callback.name === "tick") regionFrames += 1;
+      return 1;
+    });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const polygon = { type: "Polygon" as const, coordinates: [[[0, 0], [2, 0], [2, 2], [0, 0]]] as [number, number][][] };
+    adapter.setFeatures([]);
+    adapter.setFeatures([{ id: "region", featureType: "region", name: "領域", geometry: polygon, properties: { fillColor: "#2468AC" } }]);
+    const featureLayer = adapter.getMap().getLayers().item(1) as VectorLayer;
+    expect(featureLayer.getSource()?.getFeatureById("region")?.get("regionAnimationOpacity")).toBeUndefined();
+    expect(regionFrames).toBe(0);
+    adapter.dispose();
+    host.remove();
+    requestAnimationFrame.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
   it("scales full-grid padding with the viewport while keeping practical bounds", () => {
     expect(availableViewportSize(320, 240)).toEqual([240, 160]);
     expect(availableViewportSize(640, 480)).toEqual([544, 384]);

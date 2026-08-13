@@ -32,6 +32,7 @@ import { paintMapTexture } from "./mapTexture";
 import { assertGeometryWithinWorld } from "./geometryGuard";
 import { splitTerrainGridSegments } from "./terrainOutline";
 import { TerrainOutlineAnimator } from "./terrainOutlineAnimator";
+import { RegionFeatureAnimator } from "./RegionFeatureAnimator";
 import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
 import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
@@ -41,7 +42,6 @@ export type { CellPaintSize } from "./gridGeometry";
 export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, availableViewportSize, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
 export { selectFeatureIdsWithinLasso } from "./lassoSelection";
-
 const MAX_LASSO_POINTS = 4096;
 const DEFAULT_CELL_GRID_OPTIONS: CellGridOptions = { color: "#d1d7dc", width: 0.65 };
 const OUTSIDE_GRID_OPACITY = 0.58;
@@ -54,7 +54,6 @@ const colorWithOpacity = (color: string, opacity: number): string => {
   return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
 };
 const samePosition = (first: Position, second: Position): boolean => first[0] === second[0] && first[1] === second[1];
-
 /**
  * Returns the resolution that fits an extent inside both viewport dimensions.
  * The larger axis ratio is required so the complete bounded world remains
@@ -132,7 +131,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly cellLayer: VectorLayer;
   private readonly terrainOutlineSource = new VectorSource({ wrapX: false });
   private readonly terrainOutlineLayer: VectorLayer;
-  private readonly terrainOutlineAnimator: TerrainOutlineAnimator;
+  private readonly terrainOutlineAnimator: TerrainOutlineAnimator; private readonly regionFeatureAnimator: RegionFeatureAnimator;
   private readonly cellGridSource = new VectorSource({ wrapX: false });
   private readonly fixedCellGridLines = fixedCellGridLines();
   private readonly cellGridStroke = new Stroke({ color: colorWithOpacity(DEFAULT_CELL_GRID_OPTIONS.color, OUTSIDE_GRID_OPACITY), width: DEFAULT_CELL_GRID_OPTIONS.width });
@@ -254,6 +253,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.terrainOutlineSource.clear();
       if (segments.length > 0) this.terrainOutlineSource.addFeature(new Feature({ geometry: new MultiLineString(segments) }));
     });
+    this.regionFeatureAnimator = new RegionFeatureAnimator(target.ownerDocument.defaultView);
     this.target.style.background = mapTheme(this.activeThemeId).canvas;
     this.graticule = createGraticule(this.gridOptions);
 
@@ -408,7 +408,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       created.setId(snapshot.id);
       additions.push(created);
     }
-    if (additions.length > 0) this.featureSource.addFeatures(additions);
+    if (additions.length > 0) this.featureSource.addFeatures(additions); this.regionFeatureAnimator.animateAdditions(additions);
     this.setSelectedFeatures(selectedIds);
   }
 
@@ -1132,7 +1132,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   dispose(): void {
     if (this.disposed) return;
-    this.disposed = true;
+    this.disposed = true; this.regionFeatureAnimator.dispose();
     if (this.draw) {
       this.map.removeInteraction(this.draw);
       this.draw.dispose();

@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { errorMessage, type CellAttributeSnapshot, type RealmBackend, type RealmFeature, type RealmSnapshot } from "../backend";
+import { errorMessage, type CellAttributeSnapshot, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { mapErrorMessage } from "../locales/ja";
 
-type Tool = "terrain" | "erase";
+type Tool = "terrain" | "region" | "erase";
 
 type EditorShellProps = {
   snapshot: RealmSnapshot;
@@ -24,11 +24,10 @@ type RunOptions = {
   isCurrent?: () => boolean;
 };
 
-const EMPTY_FEATURES: RealmFeature[] = [];
-
 export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellProps) {
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
   const [activeTool, setActiveTool] = useState<Tool>("terrain");
+  const [regionColor, setRegionColor] = useState("#7A6FA8");
   const [cellAttributes, setCellAttributes] = useState<CellAttributeSnapshot[]>([]);
   const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
   const [zoom, setZoom] = useState(1);
@@ -196,8 +195,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       <div className="editor-body">
         <section className="map-region" aria-label="地形編集領域">
           <MapCanvas
-            features={EMPTY_FEATURES}
-            mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : "cell-select"}
+            features={viewedSnapshot.features.filter((feature) => feature.featureType === "region")}
+            mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "region" : "cell-select"}
             disabled={busy}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}
@@ -209,7 +208,12 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             gridOptions={gridOptions}
             onCellSelect={applyCellSelection}
             onToolChange={selectTool}
-            onError={(code) => setError(mapErrorMessage(code))}
+            onRegionColorChange={setRegionColor}
+            onDraw={(geometry) => {
+              if (geometry.type !== "Polygon" || locked) return;
+              void run(() => backend.createFeature({ featureType: "region", name: "領域", geometry, properties: { fillColor: regionColor, strokeColor: regionColor, fillOpacity: 0.25 } }), "領域を保存できませんでした。");
+            }}
+            onError={(code) => setError(mapErrorMessage(code, activeToolRef.current === "region" ? "region" : "terrain"))}
             onZoomChange={setZoom}
             zoom={zoom}
           />

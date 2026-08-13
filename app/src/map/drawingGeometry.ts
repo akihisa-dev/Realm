@@ -17,6 +17,14 @@ const WORLD_MAX_Y = 90;
 
 const samePosition = (a: Position, b: Position): boolean => a[0] === b[0] && a[1] === b[1];
 
+const removeConsecutiveDuplicates = (positions: readonly Position[]): Position[] => {
+  const result: Position[] = [];
+  for (const position of positions) {
+    if (!result.at(-1) || !samePosition(result.at(-1)!, position)) result.push([...position] as Position);
+  }
+  return result;
+};
+
 const distanceSquared = (a: Position, b: Position): number => {
   const dx = a[0] - b[0];
   const dy = a[1] - b[1];
@@ -191,12 +199,15 @@ const refineLine = (positions: readonly Position[], resolution: number, smoothin
 
 const refineRing = (ring: readonly Position[], resolution: number, smoothingPasses: number): Position[] => {
   if (ring.length < 3) throw new DrawingGeometryError("drawing_ring_too_short");
-  const closed = ring.length > 1 && samePosition(ring[0]!, ring[ring.length - 1]!)
-    ? ring.map(([x, y]) => [x, y] as Position)
-    : [...ring, [...ring[0]!] as Position];
-  assertRing(closed);
+  const normalized = removeConsecutiveDuplicates(ring);
+  const closed = normalized.length > 1 && samePosition(normalized[0]!, normalized[normalized.length - 1]!)
+    ? normalized
+    : [...normalized, [...normalized[0]!] as Position];
+  // Validate the geometry the user will actually save. Raw freehand samples
+  // can contain stationary duplicates or tiny jitter that simplification removes.
+  if (closed.length < 4) throw new DrawingGeometryError("drawing_ring_too_short");
   const open = simplifyRamerDouglasPeucker(closed, toleranceForResolution(resolution)).slice(0, -1);
-  if (open.length < 3) throw new DrawingGeometryError("drawing_ring_too_short");
+  if (open.length < 3) throw new DrawingGeometryError("drawing_zero_area");
   let refined = [...open, open[0]!] as Position[];
   for (let pass = 0; pass < smoothingPasses; pass += 1) refined = smoothClosedRing(refined);
   const capped = capCoordinates(refined, true);

@@ -21,11 +21,12 @@ Realm does not persist years, named eras, timeline events, feature revisions, de
 
 ## Terrain cells and compatibility features
 
-The active editor creates, displays, selects, and edits only the following cell layer:
+The active editor creates, displays, selects, and edits the following current map representations:
 
-| Derived geometry | Editable cell layer |
+| Derived geometry | Editable layer |
 | --- | --- |
 | bounded odd-row-offset hexagonal cell | `terrain` |
+| bounded Polygon | `region` feature with color-valued presentation properties |
 
 The version 8 SQLite `features` table still recognizes the following compatibility classes so existing projects can open without destructive migration:
 
@@ -37,7 +38,7 @@ The version 8 SQLite `features` table still recognizes the following compatibili
 
 Coordinates are EPSG:4326 longitude/latitude pairs within the bounded world, lines contain at least two distinct consecutive positions, and polygon rings contain at least four positions with equal first and last positions. New writes are limited to 4096 coordinates and 512 KiB of encoded geometry; zero-area or self-intersecting rings are rejected. Polygon holes must be strictly inside the outer ring and may not touch, intersect, or contain one another. The legacy read validator remains compatible with already stored version 6 geometry while every create or revise command uses the strict write validator. No class is populated by a generator.
 
-The active terrain is a single cell layer. Realm does not store flat-land, mountain, biome, or another terrain-kind value. Feature rows remain byte-for-byte current-state compatibility data when terrain cells are edited. The hex terrain editor excludes them from renderer input, selection, counts, mutation callbacks, and creation controls.
+The active terrain is a single cell layer. Realm does not store flat-land, mountain, biome, or another terrain-kind value. The active region representation is a bounded Polygon feature whose `fillColor` and `strokeColor` properties use `#RRGGBB` values and whose bounded opacity is renderer presentation. Other feature rows remain byte-for-byte current-state compatibility data when terrain cells or regions are edited. The editor excludes those inactive rows from renderer input, selection, counts, mutation callbacks, and creation controls.
 
 ## Legacy embedded assets
 
@@ -53,7 +54,7 @@ The active editor uses a fixed 64 by 37 EPSG:4326 odd-row-offset grid of regular
 
 The version 8 SQLite schema retains its original 512 by 256 coordinate envelope so projects written by earlier builds remain structurally valid. Rows outside the active 64 by 37 editor grid are compatibility data: they remain stored unchanged but are excluded from active rendering, selection, reads, and new mutations.
 
-The `terrain` layer is present when a cell belongs to the drawn map and absent when it does not. A pointer stroke applies or clears the complete selected set transactionally. Existing `forest`, `country`, and `region` cell rows are preserved unchanged but hidden from the active editor. There is no `terrain_kind` value, and the editor does not reinterpret compatibility rows as terrain.
+The `terrain` layer is present when a cell belongs to the drawn map and absent when it does not. A pointer stroke applies or clears the complete selected set transactionally. Region polygons are stored in `features`, not reinterpreted from cells. Existing `forest`, `country`, and `region` cell rows are preserved unchanged but hidden from the active editor. There is no `terrain_kind` value, and the editor does not reinterpret compatibility rows as terrain or active regions.
 
 ## Internal schema evolution
 

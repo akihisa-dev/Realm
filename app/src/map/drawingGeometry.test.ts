@@ -54,6 +54,17 @@ describe("refineDrawnGeometry", () => {
     expect(() => refineDrawnGeometry("country", { type: "Polygon", coordinates: [[[0, 0], [2, 2], [0, 2], [2, 0], [0, 0]]] }, 0.000_001)).toThrow("drawing_self_intersection");
   });
 
+  it("removes stationary freehand samples before checking a region boundary", () => {
+    const refined = refineDrawnGeometry("region", {
+      type: "Polygon",
+      coordinates: [[[0, 0], [1, 0], [1, 0], [2, 0], [2, 2], [0, 2], [0, 0]]],
+    }, 0.000_001, { smoothingPasses: 0 });
+    expect(refined).toEqual({
+      type: "Polygon",
+      coordinates: [[[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]],
+    });
+  });
+
   it("caps large paths deterministically and retains the closure", () => {
     const input: [number, number][] = Array.from({ length: MAX_DRAW_COORDINATES * 3 }, (_, index) => [
       -170 + (340 * index) / (MAX_DRAW_COORDINATES * 3 - 1),

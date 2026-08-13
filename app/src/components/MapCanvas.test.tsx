@@ -67,6 +67,25 @@ describe("positionPaletteFlyout", () => {
 });
 
 describe("MapCanvas", () => {
+  it("selects the region tool and reports its color through an accessible flyout", () => {
+    const renderer = createPaletteRenderer();
+    const onToolChange = vi.fn();
+    const onRegionColorChange = vi.fn();
+    render(<MapCanvas mode="region" onZoomChange={vi.fn()} onToolChange={onToolChange} onRegionColorChange={onRegionColorChange} createRenderer={() => renderer} />);
+
+    const map = screen.getByRole("region", { name: "世界地図" });
+    expect(map).toHaveClass("map-canvas-mode-region", "map-canvas-draw");
+    expect(screen.getByText("領域の輪郭をドラッグして描きます。色を選んで保存できます。Escapeで取り消せます。")).toBeInTheDocument();
+    fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
+    const regionButton = screen.getByRole("button", { name: "領域" });
+    expect(regionButton).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(regionButton);
+    expect(onToolChange).toHaveBeenCalledWith("region");
+    const color = screen.getByLabelText("領域の色", { selector: "input" });
+    fireEvent.change(color, { target: { value: "#2468ac" } });
+    expect(onRegionColorChange).toHaveBeenCalledWith("#2468AC");
+  });
+
   it("cleans each adapter instance exactly once across StrictMode effect replay", () => {
     const firstRenderer = createPaletteRenderer();
     const secondRenderer = createPaletteRenderer();
@@ -221,7 +240,7 @@ describe("MapCanvas", () => {
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).toHaveStyle({ left: "120px", top: "80px" });
     expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-opening");
-    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(2);
+    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(3);
     expect(document.querySelectorAll(".radial-palette-slot[aria-hidden='true']")).toHaveLength(0);
     expect(document.querySelector(".radial-palette")?.textContent).not.toContain("描画範囲");
     expect(document.querySelector(".radial-palette-range-tool .radial-palette-range-button")?.textContent).toBe("");

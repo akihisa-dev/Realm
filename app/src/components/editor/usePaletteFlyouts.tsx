@@ -8,13 +8,14 @@ import { positionPaletteFlyout, type PaletteRect } from "../paletteFlyout";
 type RadialPalettePosition = { x: number; y: number };
 type RadialPaletteState = RadialPalettePosition & { phase: "opening" | "open" | "closing" };
 type FlyoutPosition = { left: number; top: number; side: "left" | "right" | "top" | "bottom" };
-type FlyoutKind = "paint" | "erase";
+type FlyoutKind = "paint" | "region" | "erase";
 
 const PAINT_RANGE_FLYOUT_SIZE = { width: 176, height: 58 };
 const ERASE_FLYOUT_SIZE = { width: 220, height: 100 };
 const PALETTE_FLYOUT_GAP = 12;
 const FLYOUT_FALLBACK_POSITION: FlyoutPosition = { left: 12, top: 12, side: "right" };
 const PAINT_RANGE_FLYOUT_ID = "map-paint-range-flyout";
+const REGION_FLYOUT_ID = "map-region-flyout";
 const RADIAL_PALETTE_ANIMATION_MS = 360;
 
 const isFiniteRect = (rect: PaletteRect | null): rect is PaletteRect => rect !== null
@@ -52,8 +53,9 @@ const equalFlyoutPosition = (left: FlyoutPosition, right: FlyoutPosition): boole
 export type PaletteFlyoutOptions = {
   shellRef: RefObject<HTMLDivElement | null>;
   hostRef: RefObject<HTMLDivElement | null>;
-  mode: "pan" | "cell-select" | "cell-erase";
-  onToolChange: ((tool: "terrain" | "erase") => void) | undefined;
+  mode: "pan" | "cell-select" | "cell-erase" | "region";
+  onToolChange: ((tool: "terrain" | "region" | "erase") => void) | undefined;
+  onRegionColorChange: ((color: string) => void) | undefined;
 };
 
 export type PaletteFlyoutState = {
@@ -62,17 +64,20 @@ export type PaletteFlyoutState = {
   radialPalette: ReactNode;
   paintRangeFlyout: ReactNode;
   eraseFlyout: ReactNode;
+  regionFlyout: ReactNode;
   handleContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   handleShellPointerDown: () => void;
 };
 
 /** Owns map tool palette state, placement, portal rendering, and focus-safe dismissal. */
-export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: PaletteFlyoutOptions): PaletteFlyoutState {
+export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
   const radialPaletteRef = useRef<HTMLDivElement>(null);
   const paintRangeButtonRef = useRef<HTMLButtonElement>(null);
   const eraseButtonRef = useRef<HTMLButtonElement>(null);
+  const regionButtonRef = useRef<HTMLButtonElement>(null);
   const paintRangeFlyoutRef = useRef<HTMLDivElement>(null);
   const eraseFlyoutRef = useRef<HTMLDivElement>(null);
+  const regionFlyoutRef = useRef<HTMLDivElement>(null);
   const [radialPaletteState, setRadialPaletteState] = useState<RadialPaletteState | null>(null);
   const [paintRange, setPaintRange] = useState(CELL_PAINT_RANGE_MIN);
   const [paintRangeFlyoutOpen, setPaintRangeFlyoutOpen] = useState(false);
@@ -80,6 +85,9 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
   const [eraseRange, setEraseRange] = useState(CELL_PAINT_RANGE_MIN);
   const [eraseFlyoutOpen, setEraseFlyoutOpen] = useState(false);
   const [eraseFlyoutPosition, setEraseFlyoutPosition] = useState<FlyoutPosition | null>(null);
+  const [regionFlyoutOpen, setRegionFlyoutOpen] = useState(false);
+  const [regionFlyoutPosition, setRegionFlyoutPosition] = useState<FlyoutPosition | null>(null);
+  const [regionColor, setRegionColor] = useState("#7A6FA8");
 
   const getFallbackRects = (): { palette: PaletteRect; paintAnchor: PaletteRect; eraseAnchor: PaletteRect } => {
     const shellRect = readElementRect(shellRef.current);
@@ -102,15 +110,24 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
     const palette = paletteRect && (hasRectArea(paletteRect) || paletteRect.left !== 0 || paletteRect.top !== 0)
       ? paletteRect
       : fallback.palette;
-    const anchorElement = kind === "paint" ? paintRangeButtonRef.current : eraseButtonRef.current;
+    const anchorElement = kind === "paint" ? paintRangeButtonRef.current : kind === "region" ? regionButtonRef.current : eraseButtonRef.current;
     const anchorRect = readElementRect(anchorElement);
     const anchor = anchorRect && hasRectArea(anchorRect)
       ? anchorRect
       : kind === "paint" ? fallback.paintAnchor : fallback.eraseAnchor;
-    const flyoutElement = kind === "paint" ? paintRangeFlyoutRef.current : eraseFlyoutRef.current;
-    const fallbackSize = kind === "paint" ? PAINT_RANGE_FLYOUT_SIZE : ERASE_FLYOUT_SIZE;
+    const flyoutElement = kind === "paint" ? paintRangeFlyoutRef.current : kind === "region" ? regionFlyoutRef.current : eraseFlyoutRef.current;
+    const fallbackSize = kind === "paint" ? PAINT_RANGE_FLYOUT_SIZE : kind === "region" ? { width: 220, height: 90 } : ERASE_FLYOUT_SIZE;
     const size = readElementSize(flyoutElement) ?? fallbackSize;
     return positionPaletteFlyout(palette, anchor, { width: window.innerWidth, height: window.innerHeight }, size, PALETTE_FLYOUT_GAP);
+  };
+  const openRegionFlyout = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    const nextOpen = !regionFlyoutOpen;
+    if (nextOpen) setRegionFlyoutPosition(getFlyoutPosition("region"));
+    onToolChange?.("region");
+    setRegionFlyoutOpen(nextOpen);
+    setEraseFlyoutOpen(false);
+    setPaintRangeFlyoutOpen(false);
+    event.stopPropagation();
   };
 
   const openPaintRangeFlyout = (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -119,6 +136,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
     onToolChange?.("terrain");
     setPaintRangeFlyoutOpen(nextOpen);
     setEraseFlyoutOpen(false);
+    setRegionFlyoutOpen(false);
     event.stopPropagation();
   };
   const openEraseFlyout = (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -127,11 +145,12 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
     onToolChange?.("erase");
     setEraseFlyoutOpen(nextOpen);
     setPaintRangeFlyoutOpen(false);
+    setRegionFlyoutOpen(false);
     event.stopPropagation();
   };
 
   useLayoutEffect(() => {
-    if (!paintRangeFlyoutOpen && !eraseFlyoutOpen) return undefined;
+    if (!paintRangeFlyoutOpen && !eraseFlyoutOpen && !regionFlyoutOpen) return undefined;
     const updatePositions = () => {
       if (paintRangeFlyoutOpen) {
         const nextPosition = getFlyoutPosition("paint");
@@ -140,6 +159,10 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
       if (eraseFlyoutOpen) {
         const nextPosition = getFlyoutPosition("erase");
         setEraseFlyoutPosition((current) => current && equalFlyoutPosition(current, nextPosition) ? current : nextPosition);
+      }
+      if (regionFlyoutOpen) {
+        const nextPosition = getFlyoutPosition("region");
+        setRegionFlyoutPosition((current) => current && equalFlyoutPosition(current, nextPosition) ? current : nextPosition);
       }
     };
     updatePositions();
@@ -165,15 +188,17 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
     resizeObserver?.observe(radialPaletteRef.current ?? shellRef.current ?? document.body);
     resizeObserver?.observe(paintRangeButtonRef.current ?? shellRef.current ?? document.body);
     resizeObserver?.observe(eraseButtonRef.current ?? shellRef.current ?? document.body);
+    resizeObserver?.observe(regionButtonRef.current ?? shellRef.current ?? document.body);
     resizeObserver?.observe(paintRangeFlyoutRef.current ?? shellRef.current ?? document.body);
     resizeObserver?.observe(eraseFlyoutRef.current ?? shellRef.current ?? document.body);
+    resizeObserver?.observe(regionFlyoutRef.current ?? shellRef.current ?? document.body);
     window.addEventListener("resize", updatePositions);
     return () => {
       cancelFrame?.();
       resizeObserver?.disconnect();
       window.removeEventListener("resize", updatePositions);
     };
-  }, [eraseFlyoutOpen, eraseRange, paintRange, paintRangeFlyoutOpen, radialPaletteState]);
+  }, [eraseFlyoutOpen, eraseRange, paintRange, paintRangeFlyoutOpen, radialPaletteState, regionFlyoutOpen]);
 
   useEffect(() => {
     if (!radialPaletteState) return undefined;
@@ -190,6 +215,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
       if (event.key === "Escape") {
         setPaintRangeFlyoutOpen(false);
         setEraseFlyoutOpen(false);
+        setRegionFlyoutOpen(false);
         setRadialPaletteState((current) => current ? { ...current, phase: "closing" } : null);
       }
     };
@@ -198,9 +224,11 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
         radialPaletteRef.current?.contains(event.target)
         || paintRangeFlyoutRef.current?.contains(event.target)
         || eraseFlyoutRef.current?.contains(event.target)
+        || regionFlyoutRef.current?.contains(event.target)
       )) return;
       setPaintRangeFlyoutOpen(false);
       setEraseFlyoutOpen(false);
+      setRegionFlyoutOpen(false);
       setRadialPaletteState((current) => current ? { ...current, phase: "closing" } : null);
       if (event.target instanceof window.Node && hostRef.current?.contains(event.target)) {
         event.preventDefault();
@@ -221,18 +249,21 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
     const bounds = event.currentTarget.getBoundingClientRect();
     setPaintRangeFlyoutOpen(false);
     setEraseFlyoutOpen(false);
+    setRegionFlyoutOpen(false);
     setRadialPaletteState({ x: event.clientX - bounds.left, y: event.clientY - bounds.top, phase: "opening" });
   };
 
   const handleShellPointerDown = () => {
     setPaintRangeFlyoutOpen(false);
     setEraseFlyoutOpen(false);
+    setRegionFlyoutOpen(false);
     setRadialPaletteState((current) => current ? { ...current, phase: "closing" } : null);
   };
 
   const portalRoot = typeof document === "undefined" ? null : document.body;
   const paintPosition = paintRangeFlyoutPosition ?? FLYOUT_FALLBACK_POSITION;
   const erasePosition = eraseFlyoutPosition ?? FLYOUT_FALLBACK_POSITION;
+  const regionPosition = regionFlyoutPosition ?? FLYOUT_FALLBACK_POSITION;
   const radialPalette: ReactNode = radialPaletteState ? (
     <div
       ref={radialPaletteRef}
@@ -273,7 +304,18 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
           <SlidersHorizontal aria-hidden="true" size={16} weight="bold" />
         </button>
       </div>
+      <div className="radial-palette-slot radial-palette-region-tool" style={{ "--slot": 2 } as CSSProperties}>
+        <button ref={regionButtonRef} className="radial-palette-range-button" type="button" aria-label="領域" aria-pressed={mode === "region"} aria-haspopup="true" aria-expanded={regionFlyoutOpen} aria-controls={REGION_FLYOUT_ID} onClick={openRegionFlyout}>
+          <span aria-hidden="true" style={{ display: "block", width: 14, height: 14, borderRadius: 3, background: regionColor }} />
+        </button>
+      </div>
     </div>
+  ) : null;
+  const regionFlyout = regionFlyoutOpen && portalRoot ? createPortal(
+    <div ref={regionFlyoutRef} id={REGION_FLYOUT_ID} className={`palette-flyout radial-palette-flyout-${regionPosition.side}`} data-side={regionPosition.side} style={{ position: "fixed", zIndex: 10, display: "grid", visibility: "visible", opacity: 1, pointerEvents: "auto", left: regionPosition.left, top: regionPosition.top }} role="group" aria-label="領域の色" onPointerDown={(event) => event.stopPropagation()}>
+      <label htmlFor="map-region-color">領域の色</label>
+      <input id="map-region-color" type="color" value={regionColor} aria-label="領域の色" onChange={(event) => { const color = event.currentTarget.value.toUpperCase(); setRegionColor(color); onRegionColorChange?.(color); }} />
+    </div>, portalRoot,
   ) : null;
   const paintRangeFlyout = paintRangeFlyoutOpen && portalRoot ? createPortal(
     <div
@@ -328,6 +370,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
     radialPalette,
     paintRangeFlyout,
     eraseFlyout,
+    regionFlyout,
     handleContextMenu,
     handleShellPointerDown,
   };
