@@ -35,6 +35,7 @@ export type DeleteAssetsBatchInput = { ids: string[] };
 export type ProjectSummary = { libraryId: string; name: string };
 export type CellAttributeSnapshot = { cellId: string; attribute: CellAttribute; value: string };
 export type ApplyCellAttributesInput = { cellIds: string[]; attribute: CellAttribute; value: string | null };
+export type MoveRegionCellsInput = { sourceCellIds: string[]; targetCellIds: string[] };
 export type CellViewportInput = { minX?: number; maxX?: number; minY?: number; maxY?: number };
 export type RealmSnapshot = { formatVersion: number; path: string; world: World; features: RealmFeature[]; assets: AssetManifest[]; settings: ProjectSettings; featureCount: number; canUndo: boolean; canRedo: boolean };
 export type SaveProjectInput = { name: string };
@@ -69,6 +70,7 @@ export interface RealmBackend {
   undoProject(): Promise<RealmSnapshot>;
   redoProject(): Promise<RealmSnapshot>;
   applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot>;
+  moveRegionCells(input: MoveRegionCellsInput): Promise<RealmSnapshot>;
   viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]>;
   closeProject(): Promise<void>;
   getOpenProject(): Promise<RealmSnapshot | null>;

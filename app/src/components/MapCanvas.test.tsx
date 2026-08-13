@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { RealmFeature } from "../backend";
-import type { RealmMapRenderer } from "../map/MapAdapter";
+import { cellPaintRadiusForRange, type RealmMapRenderer } from "../map/MapAdapter";
 import { MapCanvas } from "./MapCanvas";
 import { positionPaletteFlyout } from "./paletteFlyout";
 import "../styles.css";
@@ -71,11 +71,11 @@ describe("MapCanvas", () => {
     const renderer = createPaletteRenderer();
     const onToolChange = vi.fn();
     const onRegionColorChange = vi.fn();
-    render(<MapCanvas mode="region" onZoomChange={vi.fn()} onToolChange={onToolChange} onRegionColorChange={onRegionColorChange} createRenderer={() => renderer} />);
+    render(<MapCanvas mode="cell-region" onZoomChange={vi.fn()} onToolChange={onToolChange} onRegionColorChange={onRegionColorChange} createRenderer={() => renderer} />);
 
     const map = screen.getByRole("region", { name: "世界地図" });
-    expect(map).toHaveClass("map-canvas-mode-region", "map-canvas-draw");
-    expect(screen.getByText("領域の輪郭をドラッグして描きます。色を選んで保存できます。Escapeで取り消せます。")).toBeInTheDocument();
+    expect(map).toHaveClass("map-canvas-mode-cell-region", "map-canvas-draw");
+    expect(screen.getByText("自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。")).toBeInTheDocument();
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     const regionButton = screen.getByRole("button", { name: "領域" });
     expect(regionButton).toHaveAttribute("aria-pressed", "true");
@@ -240,7 +240,7 @@ describe("MapCanvas", () => {
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).toHaveStyle({ left: "120px", top: "80px" });
     expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-opening");
-    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(3);
+    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(4);
     expect(document.querySelectorAll(".radial-palette-slot[aria-hidden='true']")).toHaveLength(0);
     expect(document.querySelector(".radial-palette")?.textContent).not.toContain("描画範囲");
     expect(document.querySelector(".radial-palette-range-tool .radial-palette-range-button")?.textContent).toBe("");
@@ -276,7 +276,7 @@ describe("MapCanvas", () => {
     expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
     rangeSlider = screen.getByRole("slider", { name: "描画範囲" });
     rerender(<MapCanvas mode="cell-select" zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
-    expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(2);
+    expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(cellPaintRadiusForRange(3));
     rerender(<MapCanvas mode="cell-erase" zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
     expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(0);
     const rangePopover = screen.getByRole("group", { name: "描画範囲の調整" });
@@ -375,7 +375,7 @@ describe("MapCanvas", () => {
     fireEvent.click(eraserButton);
     expect(screen.getByRole("group", { name: "消しゴムの調整" })).toBeInTheDocument();
     fireEvent.change(screen.getByRole("slider", { name: "消しゴムの太さ" }), { target: { value: "4" } });
-    expect(renderer.setCellEraseRadius).toHaveBeenLastCalledWith(3);
+    expect(renderer.setCellEraseRadius).toHaveBeenLastCalledWith(cellPaintRadiusForRange(4));
   });
 
   it("keeps the range flyout in the body portal and repositions it after real rects arrive", () => {

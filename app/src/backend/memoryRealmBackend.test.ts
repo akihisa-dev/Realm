@@ -51,8 +51,8 @@ it("creates, edits, deletes, and undoes current features", async () => {
     await backend.openProject({ libraryId: created.path }); await backend.importProject({ path: created.path });
     await expect(backend.applyCellAttributes({ cellIds: [], attribute: "forest", value: "on" })).rejects.toThrow("セルを選択");
     await expect(backend.applyCellAttributes({ cellIds: ["63:36"], attribute: "forest", value: "on" })).resolves.toBeTruthy();
-    await expect(backend.applyCellAttributes({ cellIds: ["64:36"], attribute: "forest", value: "on" })).rejects.toThrow("不正");
-    await expect(backend.applyCellAttributes({ cellIds: ["63:37"], attribute: "forest", value: "on" })).rejects.toThrow("不正");
+    await expect(backend.applyCellAttributes({ cellIds: ["128:72"], attribute: "forest", value: "on" })).rejects.toThrow("不正");
+    await expect(backend.applyCellAttributes({ cellIds: ["127:73"], attribute: "forest", value: "on" })).rejects.toThrow("不正");
     await expect(backend.applyCellAttributes({ cellIds: ["999:999"], attribute: "forest", value: "on" })).rejects.toThrow("不正");
     await expect(backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "forest", value: " " })).rejects.toThrow("属性値");
   });
@@ -182,6 +182,28 @@ it("persists project view settings without accepting unknown state", async () =>
   await expect(backend.updateProjectSettings({ settings: { ...changed.settings, canvasWidth: 511 } })).rejects.toThrow("キャンバス幅");
   await expect(backend.updateProjectSettings({ settings: { ...changed.settings, canvasHeight: 8193 } })).rejects.toThrow("キャンバス高さ");
   await expect(backend.updateProjectSettings({ settings: { viewport: true } as never })).rejects.toThrow("不正");
+});
+
+it("moves one contiguous region mass atomically and keeps terrain attributes", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://grab.realmmap", name: "Grab" });
+  await backend.applyCellAttributes({ cellIds: ["2:2", "3:2"], attribute: "region", value: "#AA0000" });
+  await backend.applyCellAttributes({ cellIds: ["2:2"], attribute: "terrain", value: "terrain" });
+  const before = await backend.getOpenProject();
+  await backend.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] });
+  expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    { cellId: "2:2", attribute: "terrain", value: "terrain" },
+    { cellId: "5:3", attribute: "region", value: "#AA0000" },
+    { cellId: "6:3", attribute: "region", value: "#AA0000" },
+  ]));
+  expect((await backend.undoProject()).canRedo).toBe(true);
+  expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    { cellId: "2:2", attribute: "region", value: "#AA0000" },
+    { cellId: "2:2", attribute: "terrain", value: "terrain" },
+    { cellId: "3:2", attribute: "region", value: "#AA0000" },
+  ]));
+  await expect(backend.moveRegionCells({ sourceCellIds: ["9:9"], targetCellIds: ["4:2"] })).rejects.toThrow();
+  expect(before?.features).toEqual([]);
 });
 
 it("matches strict native geometry write validation and keeps failed mutations atomic", async () => {

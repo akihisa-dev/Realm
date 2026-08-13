@@ -1,7 +1,7 @@
-export const CELL_GRID_COLUMNS = 64;
-export const CELL_GRID_ROWS = 37;
+export const CELL_GRID_COLUMNS = 128;
+export const CELL_GRID_ROWS = 73;
 export const CELL_GRID_CELL_COUNT = CELL_GRID_COLUMNS * CELL_GRID_ROWS;
-export const CELL_PAINT_RADII = { small: 1, medium: 2, large: 4 } as const;
+export const CELL_PAINT_RADII = { small: 2, medium: 4, large: 8 } as const;
 export const CELL_PAINT_RANGE_MIN = 1;
 export const CELL_PAINT_RANGE_MAX = 5;
 export type CellPaintSize = keyof typeof CELL_PAINT_RADII;
@@ -16,7 +16,7 @@ export const availableViewportSize = (width: number, height: number): [number, n
 /** Converts the user-facing cell range to a hex-grid distance radius. */
 export const cellPaintRadiusForRange = (range: number): number => {
   if (!Number.isFinite(range)) return 0;
-  return Math.max(0, Math.min(CELL_PAINT_RANGE_MAX - 1, Math.round(range) - 1));
+  return Math.max(0, Math.min(CELL_PAINT_RANGE_MAX - 1, Math.round(range) - 1) * 2);
 };
 
 const CELL_RADIUS = 180 / (1.5 * CELL_GRID_ROWS + 0.5);

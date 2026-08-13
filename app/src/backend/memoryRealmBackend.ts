@@ -1,7 +1,7 @@
 import type {
   CellAttribute, CellAttributeSnapshot, CellViewportInput, CreateFeatureInput,
   AssetRead, ImportAssetInput, ProjectSummary, RealmBackend, RealmFeature, RealmSnapshot,
-  ReviseFeatureInput, ReviseFeaturesBatchInput, SaveProjectInput,
+  ReviseFeatureInput, ReviseFeaturesBatchInput, SaveProjectInput, MoveRegionCellsInput,
 } from "./types";
 
 type MemoryProject = {
@@ -11,7 +11,7 @@ type MemoryProject = {
 };
 
 const makeSnapshot = (path: string, name: string): RealmSnapshot => ({
-  formatVersion: 8, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, features: [], assets: [],
+  formatVersion: 9, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, features: [], assets: [],
   settings: { themeId: "ink", showGrid: true, exportScale: 1, exportExtent: "world", canvasWidth: 2048, canvasHeight: 1024, gridKind: "graticule", gridColor: "#687784", gridWidth: 1, gridSpacing: 10, themeOverrides: {} }, featureCount: 0,
   canUndo: false, canRedo: false,
 });
@@ -179,7 +179,7 @@ const validCell = (id: string): boolean => {
   const match = /^(\d+):(\d+)$/u.exec(id);
   if (!match) return false;
   const x = Number(match[1]); const y = Number(match[2]);
-  return x >= 0 && x < 64 && y >= 0 && y < 37;
+  return x >= 0 && x < 128 && y >= 0 && y < 73;
 };
 
 export class MemoryRealmBackend implements RealmBackend {
@@ -410,9 +410,29 @@ export class MemoryRealmBackend implements RealmBackend {
     if (input.value !== null) for (const cellId of ids) project.cells.push({ cellId, attribute: input.attribute, value: input.value.trim() });
     return this.result(project);
   }
+  async moveRegionCells(input: MoveRegionCellsInput): Promise<RealmSnapshot> {
+    const project = this.current();
+    if (!Array.isArray(input.sourceCellIds) || !Array.isArray(input.targetCellIds) || input.sourceCellIds.length === 0 || input.sourceCellIds.length !== input.targetCellIds.length) throw new Error("領域の移動指定が不正です。");
+    const source = input.sourceCellIds.map((id) => id.trim()); const target = input.targetCellIds.map((id) => id.trim());
+    if (source.some((id) => !validCell(id)) || target.some((id) => !validCell(id)) || new Set(source).size !== source.length || new Set(target).size !== target.length) throw new Error("領域の移動指定が不正です。");
+    const axial = (id: string): [number, number] => { const parts = id.split(":"); const x = Number(parts[0] ?? 0); const y = Number(parts[1] ?? 0); return [x - Math.floor(y / 2), y]; };
+    const firstSource = axial(source[0]!); const firstTarget = axial(target[0]!); const delta: [number, number] = [firstTarget[0] - firstSource[0], firstTarget[1] - firstSource[1]];
+    const expected = source.map((id) => { const [q, row] = axial(id); const nextRow = row + delta[1]; return `${q + delta[0] + Math.floor(nextRow / 2)}:${nextRow}`; });
+    if (expected.some((id, index) => id !== target[index])) throw new Error("領域は固定グリッド上で移動してください。");
+    const sourceSet = new Set(source); const sourceRegions = source.map((id) => project.cells.find((cell) => cell.cellId === id && cell.attribute === "region"));
+    if (sourceRegions.some((cell) => !cell)) throw new Error("移動する領域が見つかりません。");
+    const color = sourceRegions[0]!.value;
+    if (sourceRegions.some((cell) => cell!.value !== color)) throw new Error("同じ色の領域だけを移動できます。");
+    if (project.cells.some((cell) => cell.attribute === "region" && !sourceSet.has(cell.cellId) && target.includes(cell.cellId))) throw new Error("移動先に別の領域があります。");
+    if (source.every((id, index) => id === target[index])) return this.result(project);
+    this.checkpoint(project);
+    project.cells = project.cells.filter((cell) => !(cell.attribute === "region" && sourceSet.has(cell.cellId)));
+    for (const cellId of target) project.cells.push({ cellId, attribute: "region", value: color });
+    return this.result(project);
+  }
   async viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]> {
-    const project = this.current(); const minX = Math.max(0, input.minX ?? 0); const maxX = Math.min(63, input.maxX ?? 63);
-    const minY = Math.max(0, input.minY ?? 0); const maxY = Math.min(36, input.maxY ?? 36);
+    const project = this.current(); const minX = Math.max(0, input.minX ?? 0); const maxX = Math.min(127, input.maxX ?? 127);
+    const minY = Math.max(0, input.minY ?? 0); const maxY = Math.min(72, input.maxY ?? 72);
     return project.cells.filter((cell) => { const [x = -1, y = -1] = cell.cellId.split(":").map(Number); return x >= minX && x <= maxX && y >= minY && y <= maxY; }).map(clone);
   }
   async closeProject(): Promise<void> { this.openPath = null; }

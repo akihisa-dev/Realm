@@ -6,13 +6,13 @@ Each library world is one SQLite database stored below Realm's macOS application
 
 The same single-database representation is copied to a `.realmmap` file only for explicit transfer export. Import validates the selected source through one read-only connection, file identity, and SHA-256 content digests for the main/WAL/SHM bundle, takes a SQLite online-backup snapshot (including committed WAL state) from create-new private siblings, synchronizes that staging file, publishes it with no-replace rename relative to a pinned parent directory descriptor, and then synchronizes that descriptor before opening a new UUID-named single-file copy inside the library. A source replacement, digest/content change, sidecar-set change, non-regular sidecar, or SQLite `SQLITE_FCNTL_HAS_MOVED` signal during the snapshot is rejected; the selected source database and any journal sidecars remain unchanged. PNG, JPEG, and PDF exports are derived presentation artifacts and contain no editable Realm database.
 
-Schema version 8 is the current single-state format. It records the same value in `PRAGMA user_version` and `schema_migrations`; disagreement is corruption. Exact version 3 through 7 databases are accepted by read-only preflight and upgraded transactionally. The staged migration path performs the feature-properties rebuild, asset addition, project-settings addition, canvas-size addition, and version 8 terrain-cell-layer rebuild in one transaction, so a later-stage failure cannot leave a partially upgraded source. Existing rows are preserved, version markers are recorded last, and every failure rolls back completely. Formats from the retired chronology model are rejected without opening a read/write connection or changing the source. Realm does not silently discard chronology data or choose one historical snapshot on the user's behalf. A newer version, partial SQLite file, integrity failure, or schema whose columns, declared types, nullability, keys, indexes, foreign keys, or checks do not preserve its declared version is also rejected during read-only preflight.
+Schema version 9 is the current single-state format. It records the same value in `PRAGMA user_version` and `schema_migrations`; disagreement is corruption. Exact version 3 through 8 databases are accepted by read-only preflight and upgraded transactionally. The staged migration path performs legacy shape rebuilds and the v2 fine-grid cell migration in one transaction, so a later-stage failure cannot leave a partially upgraded source. Existing rows are preserved, version markers are recorded last, and every failure rolls back completely. Formats from the retired chronology model are rejected without opening a read/write connection or changing the source. Realm does not silently discard chronology data or choose one historical snapshot on the user's behalf. A newer version, partial SQLite file, integrity failure, or schema whose columns, declared types, nullability, keys, indexes, foreign keys, or checks do not preserve its declared version is also rejected during read-only preflight.
 
 ## Identity and current state
 
 - A world has one stable identifier, one current name, and one bounded project-settings object.
-- An editable terrain cell has one stable `x:y` identifier and one current `terrain` cell-attribute value. Its bounded polygon is derived from the fixed grid and is not persisted as geometry.
-- Painting or clearing terrain validates and deduplicates the complete selected cell set before changing its current rows transactionally in one undo step.
+- An editable cell has one stable `x:y` identifier and may have independent current `terrain` and color-valued `region` cell attributes. Its bounded polygon is derived from the fixed grid and is not persisted as geometry.
+- Painting or clearing terrain and painting a region validate and deduplicate the complete selected cell set before changing its current rows transactionally in one undo step.
 - Project settings preserve only the selected renderer theme, bounded project-local color overrides, grid visibility/kind/color/width/spacing, raster export scale and extent, and integer canvas width and height from 512 through 8192 pixels. Theme overrides accept only the documented palette keys and `#RRGGBB` values; grid kind is geographic, square, or hexagonal. The command boundary accepts exactly the documented keys and values. Viewport, zoom, active tool, selection, draw-paint range, drawing gesture, and per-class visibility remain transient.
 - Undo and redo are session state, not persisted map history. They restore the complete before or after state of one edit operation while the project remains open.
 - Reopening a project clears the undo and redo stacks without changing the saved map.
@@ -26,9 +26,9 @@ The active editor creates, displays, selects, and edits the following current ma
 | Derived geometry | Editable layer |
 | --- | --- |
 | bounded odd-row-offset hexagonal cell | `terrain` |
-| bounded Polygon | `region` feature with color-valued presentation properties |
+| bounded odd-row-offset hexagonal cell | color-valued `region` |
 
-The version 8 SQLite `features` table still recognizes the following compatibility classes so existing projects can open without destructive migration:
+The version 9 SQLite `features` table still recognizes the following compatibility classes so existing projects can open without destructive migration:
 
 | Geometry | Feature classes |
 | --- | --- |
@@ -38,7 +38,7 @@ The version 8 SQLite `features` table still recognizes the following compatibili
 
 Coordinates are EPSG:4326 longitude/latitude pairs within the bounded world, lines contain at least two distinct consecutive positions, and polygon rings contain at least four positions with equal first and last positions. New writes are limited to 4096 coordinates and 512 KiB of encoded geometry; zero-area or self-intersecting rings are rejected. Polygon holes must be strictly inside the outer ring and may not touch, intersect, or contain one another. The legacy read validator remains compatible with already stored version 6 geometry while every create or revise command uses the strict write validator. No class is populated by a generator.
 
-The active terrain is a single cell layer. Realm does not store flat-land, mountain, biome, or another terrain-kind value. The active region representation is a bounded Polygon feature whose `fillColor` and `strokeColor` properties use `#RRGGBB` values and whose bounded opacity is renderer presentation. Other feature rows remain byte-for-byte current-state compatibility data when terrain cells or regions are edited. The editor excludes those inactive rows from renderer input, selection, counts, mutation callbacks, and creation controls.
+The active terrain and region representations are independent cell layers. Realm does not store flat-land, mountain, biome, or another terrain-kind value. Active region edits write the selected `#RRGGBB` color as the cell value; opacity remains renderer presentation. Feature rows remain current-state compatibility data when terrain cells or regions are edited. Grab mode may revise only the geometry of an existing, unlocked Polygon region feature as one session-undoable operation; those objects are otherwise excluded from renderer input and no new feature creation control is exposed.
 
 ## Legacy embedded assets
 
@@ -50,11 +50,11 @@ A bounded asset-pack import validates 1 through 256 images and at most 64 MiB be
 
 ## Hexagonal cell grid and attributes
 
-The active editor uses a fixed 64 by 37 EPSG:4326 odd-row-offset grid of regular point-topped hexagons. Active cell identity remains `x:y`, with `x` from 0 through 63 and `y` from 0 through 36. Every active cell derives to the same regular six-sided polygon; boundary cells are not stretched or clipped to imitate a rectangular cell. A dedicated renderer displays the complete editing grid from the empty state, while semantic cell objects are created only for persistent terrain or transient paint selection. Neither representation persists OpenLayers or GeoJSON geometry.
+The active editor uses a fixed 128 by 73 EPSG:4326 odd-row-offset grid of regular point-topped hexagons. Active cell identity remains `x:y`, with `x` from 0 through 127 and `y` from 0 through 72. Every active cell derives to the same regular six-sided polygon; boundary cells are not stretched or clipped to imitate a rectangular cell. A dedicated renderer displays the complete editing grid from the empty state, while semantic cell objects are created only for persistent terrain or transient paint selection. Neither representation persists OpenLayers or GeoJSON geometry.
 
-The version 8 SQLite schema retains its original 512 by 256 coordinate envelope so projects written by earlier builds remain structurally valid. Rows outside the active 64 by 37 editor grid are compatibility data: they remain stored unchanged but are excluded from active rendering, selection, reads, and new mutations.
+The version 9 SQLite schema retains its original 512 by 256 coordinate envelope so projects written by earlier builds remain structurally valid. Rows outside the active 128 by 73 editor grid are compatibility data: they remain stored unchanged but are excluded from active rendering, selection, reads, and new mutations.
 
-The `terrain` layer is present when a cell belongs to the drawn map and absent when it does not. A pointer stroke applies or clears the complete selected set transactionally. Region polygons are stored in `features`, not reinterpreted from cells. Existing `forest`, `country`, and `region` cell rows are preserved unchanged but hidden from the active editor. There is no `terrain_kind` value, and the editor does not reinterpret compatibility rows as terrain or active regions.
+The `terrain` layer is present when a cell belongs to the drawn map and absent when it does not. The `region` layer stores the current display color for a selected cell and may coexist with `terrain` on the same cell. A pointer stroke applies or clears the complete selected set transactionally. Active region writes use `#RRGGBB`; an older non-color region value remains readable and uses the renderer's fallback region style until recolored. Existing `forest` and `country` cell rows are preserved unchanged but hidden from the active editor. There is no `terrain_kind` value, and the editor does not reinterpret compatibility feature rows as terrain or active regions.
 
 ## Internal schema evolution
 

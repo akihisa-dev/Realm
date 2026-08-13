@@ -59,8 +59,14 @@ describe("map geometry modules", () => {
       selected: true,
     });
     expect(cellStyle(empty)).toBeUndefined();
-    expect(cellStyle(layered)).toHaveLength(3);
+    expect(cellStyle(layered)).toHaveLength(2);
     expect(cellStyle(layered)).toBe(cellStyle(layered));
+
+    const coloredRegion = new Feature({
+      attributes: [{ cellId: "1:1", attribute: "region", value: "#2468AC" }],
+      selected: false,
+    });
+    expect(cellStyle(coloredRegion)).toBeUndefined();
   });
 
   it("invalidates feature style cache when renderer properties change", () => {
@@ -119,7 +125,7 @@ describe("map geometry modules", () => {
 
     let cellOverrides: { land?: string } = { land: "#102030" };
     const cellStyle = createCellStyle(() => "ink", () => cellOverrides);
-    const cell = new Feature({ id: "cell", attributes: [{ cellId: "0:0", attribute: "terrain", value: "terrain" }], selected: false });
+    const cell = new Feature({ id: "cell", attributes: [{ cellId: "0:0", attribute: "terrain", value: "terrain" }], selected: true, paintPreview: true });
     const cellBefore = cellStyle(cell);
     cellOverrides = { land: "#405060" };
     const cellAfter = cellStyle(cell);

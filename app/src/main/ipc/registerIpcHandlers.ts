@@ -3,7 +3,7 @@ import type { ArtifactFormat, TransferPathMode } from "../../shared/realmContrac
 import { asRealmError, RealmError } from "../domain/errors";
 
 export const REALM_IPC_CHANNELS = [
-  "realm:listProjects", "realm:createProject", "realm:openProject", "realm:importProject", "realm:exportProject", "realm:writeArtifact", "realm:saveProject", "realm:updateProjectSettings", "realm:createFeature", "realm:createFeaturesBatch", "realm:reviseFeature", "realm:reviseFeaturesBatch", "realm:deleteFeature", "realm:deleteFeaturesBatch", "realm:setFeaturesLocked", "realm:importAsset", "realm:importAssetsBatch", "realm:readAsset", "realm:deleteAsset", "realm:deleteAssetsBatch", "realm:applyCellAttributes", "realm:viewCellAttributes", "realm:undoProject", "realm:redoProject", "realm:closeProject", "realm:getOpenProject", "realm:chooseTransferPath", "realm:chooseArtifactPath",
+  "realm:listProjects", "realm:createProject", "realm:openProject", "realm:importProject", "realm:exportProject", "realm:writeArtifact", "realm:saveProject", "realm:updateProjectSettings", "realm:createFeature", "realm:createFeaturesBatch", "realm:reviseFeature", "realm:reviseFeaturesBatch", "realm:deleteFeature", "realm:deleteFeaturesBatch", "realm:setFeaturesLocked", "realm:importAsset", "realm:importAssetsBatch", "realm:readAsset", "realm:deleteAsset", "realm:deleteAssetsBatch", "realm:applyCellAttributes", "realm:moveRegionCells", "realm:viewCellAttributes", "realm:undoProject", "realm:redoProject", "realm:closeProject", "realm:getOpenProject", "realm:chooseTransferPath", "realm:chooseArtifactPath",
 ] as const;
 export type RealmIpcChannel = typeof REALM_IPC_CHANNELS[number];
 type IpcMainLike = { handle(channel: string, listener: (...args: unknown[]) => unknown): void; removeHandler?(channel: string): void };
@@ -16,13 +16,13 @@ export type RealmIpcDialogs = {
 };
 
 const handlers: Partial<Record<RealmIpcChannel, keyof RealmCommands>> = {
-  "realm:listProjects": "listProjects", "realm:createProject": "createProject", "realm:openProject": "openProject", "realm:importProject": "importProject", "realm:exportProject": "exportProject", "realm:writeArtifact": "writeArtifact", "realm:saveProject": "saveProject", "realm:updateProjectSettings": "updateProjectSettings", "realm:createFeature": "createFeature", "realm:createFeaturesBatch": "createFeaturesBatch", "realm:reviseFeature": "reviseFeature", "realm:reviseFeaturesBatch": "reviseFeaturesBatch", "realm:deleteFeature": "deleteFeature", "realm:deleteFeaturesBatch": "deleteFeaturesBatch", "realm:setFeaturesLocked": "setFeaturesLocked", "realm:importAsset": "importAsset", "realm:importAssetsBatch": "importAssetsBatch", "realm:readAsset": "readAsset", "realm:deleteAsset": "deleteAsset", "realm:deleteAssetsBatch": "deleteAssetsBatch", "realm:applyCellAttributes": "applyCellAttributes", "realm:viewCellAttributes": "viewCellAttributes", "realm:undoProject": "undoProject", "realm:redoProject": "redoProject", "realm:closeProject": "closeProject", "realm:getOpenProject": "getOpenProject",
+  "realm:listProjects": "listProjects", "realm:createProject": "createProject", "realm:openProject": "openProject", "realm:importProject": "importProject", "realm:exportProject": "exportProject", "realm:writeArtifact": "writeArtifact", "realm:saveProject": "saveProject", "realm:updateProjectSettings": "updateProjectSettings", "realm:createFeature": "createFeature", "realm:createFeaturesBatch": "createFeaturesBatch", "realm:reviseFeature": "reviseFeature", "realm:reviseFeaturesBatch": "reviseFeaturesBatch", "realm:deleteFeature": "deleteFeature", "realm:deleteFeaturesBatch": "deleteFeaturesBatch", "realm:setFeaturesLocked": "setFeaturesLocked", "realm:importAsset": "importAsset", "realm:importAssetsBatch": "importAssetsBatch", "realm:readAsset": "readAsset", "realm:deleteAsset": "deleteAsset", "realm:deleteAssetsBatch": "deleteAssetsBatch", "realm:applyCellAttributes": "applyCellAttributes", "realm:moveRegionCells": "moveRegionCells", "realm:viewCellAttributes": "viewCellAttributes", "realm:undoProject": "undoProject", "realm:redoProject": "redoProject", "realm:closeProject": "closeProject", "realm:getOpenProject": "getOpenProject",
 };
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 80 * 1024 * 1024;
 const NO_INPUT_CHANNELS = new Set<RealmIpcChannel>(["realm:listProjects", "realm:undoProject", "realm:redoProject", "realm:closeProject", "realm:getOpenProject"]);
 const PATH_FIELDS = new Set(["path", "libraryId"]);
-const ID_FIELDS = new Set(["id", "ids", "cellIds"]);
+const ID_FIELDS = new Set(["id", "ids", "cellIds", "sourceCellIds", "targetCellIds"]);
 const DIALOG_NAME_FIELDS = new Set(["suggestedName"]);
 
 function validateInputBoundary(channel: RealmIpcChannel, input: unknown): void {
@@ -45,7 +45,8 @@ function validateInputBoundary(channel: RealmIpcChannel, input: unknown): void {
     }
     if (ID_FIELDS.has(key)) {
       const values = Array.isArray(value) ? value : [value];
-      if (values.length === 0 || values.length > 4096 || values.some((item) => typeof item !== "string" || item.length === 0 || item.length > 256)) throw new RealmError("invalid_input", "The requested identifier is invalid.");
+      const maxIdentifiers = key === "sourceCellIds" || key === "targetCellIds" ? 20_000 : 4096;
+      if (values.length === 0 || values.length > maxIdentifiers || values.some((item) => typeof item !== "string" || item.length === 0 || item.length > 256)) throw new RealmError("invalid_input", "The requested identifier is invalid.");
     }
     if (DIALOG_NAME_FIELDS.has(key) && (typeof value !== "string" || value.length === 0 || value.length > 255 || value.includes("/") || value.includes("\\") || value === "." || value === "..")) throw new RealmError("invalid_input", "The suggested filename is invalid.");
   }

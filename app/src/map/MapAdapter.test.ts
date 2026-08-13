@@ -17,6 +17,51 @@ import Point from "ol/geom/Point";
 import Style from "ol/style/Style";
 
 describe("RealmMapAdapter", () => {
+  it("converts a freehand cell-region polygon into cell ids without creating a feature", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const selected = vi.fn();
+    const drawn = vi.fn();
+    adapter.onCellSelect(selected);
+    adapter.onDraw(drawn);
+    adapter.setMode("cell-region");
+    const draw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw);
+    expect(draw).toBeInstanceOf(Draw);
+    expect((draw as Draw).getFreehand()).toBe(true);
+    const center = cellCenter(10, 10);
+    const feature = new Feature({ geometry: new Polygon([[[center[0] - 4, center[1] - 4], [center[0] + 4, center[1] - 4], [center[0] + 4, center[1] + 4], [center[0] - 4, center[1] + 4], [center[0] - 4, center[1] - 4]]]) });
+    (draw as Draw).dispatchEvent({ type: "drawend", feature } as never);
+    expect(selected).toHaveBeenCalledWith(expect.arrayContaining(["10:10"]));
+    expect(drawn).not.toHaveBeenCalled();
+    expect(adapter.getMap().getLayers().item(1)).toBeDefined();
+    adapter.dispose();
+    host.remove();
+  });
+
+  it("treats a crossing enclosure as cell selection instead of a polygon validation error", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const selected = vi.fn();
+    const errored = vi.fn();
+    adapter.onCellSelect(selected);
+    adapter.onError(errored);
+    adapter.setMode("cell-region");
+    const draw = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof Draw) as Draw;
+    const center = cellCenter(10, 10);
+    const crossing = new Feature({ geometry: new Polygon([[
+      [center[0] - 8, center[1] - 8], [center[0] + 8, center[1] + 8],
+      [center[0] - 8, center[1] + 8], [center[0] + 8, center[1] - 8],
+      [center[0] - 8, center[1] - 8],
+    ]]) });
+    draw.dispatchEvent({ type: "drawend", feature: crossing } as never);
+    expect(selected).toHaveBeenCalledOnce();
+    expect(errored).not.toHaveBeenCalled();
+    adapter.dispose();
+    host.remove();
+  });
+
   it("fades newly added regions after initial load and cancels pending frames on disposal", () => {
     const callbacks = new Map<number, FrameRequestCallback>();
     let nextFrame = 1;
@@ -30,21 +75,16 @@ describe("RealmMapAdapter", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
-    const featureLayer = adapter.getMap().getLayers().item(1) as VectorLayer;
-    const region = (id: string, offset: number) => ({
-      id,
-      featureType: "region" as const,
-      name: "領域",
-      geometry: { type: "Polygon" as const, coordinates: [[[offset, 0], [offset + 2, 0], [offset + 2, 2], [offset, 0]]] as [number, number][][] },
-      properties: { fillColor: "#2468AC", strokeColor: "#2468AC", fillOpacity: 0.25 },
-    });
-
-    adapter.setFeatures([region("initial", 0)]);
-    expect(featureLayer.getSource()?.getFeatureById("initial")?.get("regionAnimationOpacity")).toBeUndefined();
+    const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
+    adapter.setCellAttributes([{ cellId: "10:10", attribute: "region", value: "#2468AC" }]);
+    expect(cellLayer.getSource()?.getFeatureById("10:10")?.get("regionAnimationOpacity")).toBeUndefined();
     expect(callbacks.size).toBe(0);
 
-    adapter.setFeatures([region("initial", 0), region("animated", 4)]);
-    const animated = featureLayer.getSource()?.getFeatureById("animated") as Feature;
+    adapter.setCellAttributes([
+      { cellId: "10:10", attribute: "region", value: "#2468AC" },
+      { cellId: "10:11", attribute: "region", value: "#2468AC" },
+    ]);
+    const animated = cellLayer.getSource()?.getFeatureById("10:11") as Feature;
     expect(animated.get("regionAnimationOpacity")).toBe(0);
     const first = [...callbacks.entries()][0];
     expect(first).toBeDefined();
@@ -70,11 +110,10 @@ describe("RealmMapAdapter", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
-    const polygon = { type: "Polygon" as const, coordinates: [[[0, 0], [2, 0], [2, 2], [0, 0]]] as [number, number][][] };
-    adapter.setFeatures([]);
-    adapter.setFeatures([{ id: "region", featureType: "region", name: "領域", geometry: polygon, properties: { fillColor: "#2468AC" } }]);
-    const featureLayer = adapter.getMap().getLayers().item(1) as VectorLayer;
-    expect(featureLayer.getSource()?.getFeatureById("region")?.get("regionAnimationOpacity")).toBeUndefined();
+    adapter.setCellAttributes([]);
+    adapter.setCellAttributes([{ cellId: "10:10", attribute: "region", value: "#2468AC" }]);
+    const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
+    expect(cellLayer.getSource()?.getFeatureById("10:10")?.get("regionAnimationOpacity")).toBeUndefined();
     expect(regionFrames).toBe(0);
     adapter.dispose();
     host.remove();
@@ -431,11 +470,11 @@ describe("RealmMapAdapter", () => {
 
   it("maps discrete range to hex-distance footprints without duplicates or out-of-bounds cells", () => {
     expect(cellPaintRadiusForRange(1)).toBe(0);
-    expect(cellPaintRadiusForRange(CELL_PAINT_RANGE_MAX)).toBe(4);
+    expect(cellPaintRadiusForRange(CELL_PAINT_RANGE_MAX)).toBe(8);
     const center = cellCenter(18, 32);
     expect(cellIdsWithinPaintPosition(center, cellPaintRadiusForRange(1))).toEqual(["32:18"]);
     const footprint = cellIdsWithinPaintPosition(center, cellPaintRadiusForRange(3));
-    expect(footprint).toHaveLength(19);
+    expect(footprint).toHaveLength(61);
     expect(new Set(footprint).size).toBe(footprint.length);
     const edgeFootprint = cellIdsWithinPaintPosition(cellCenter(0, 0), cellPaintRadiusForRange(CELL_PAINT_RANGE_MAX));
     expect(new Set(edgeFootprint).size).toBe(edgeFootprint.length);
@@ -532,8 +571,8 @@ describe("RealmMapAdapter", () => {
     const edgeSideLengths = edge?.slice(1).map(([x, y], index) => Math.hypot(x - edge[index]![0], y - edge[index]![1])) ?? [];
     expect(Math.max(...edgeSideLengths) - Math.min(...edgeSideLengths)).toBeLessThan(1e-8);
     expect(cellPolygon(-1, 0)).toBeNull();
-    expect(cellPolygon(0, 64)).toBeNull();
-    for (const [row, column] of [[0, 0], [0, 63], [36, 0], [36, 63]] as const) {
+    expect(cellPolygon(0, 128)).toBeNull();
+    for (const [row, column] of [[0, 0], [0, 127], [72, 0], [72, 127]] as const) {
       const boundaryCell = cellPolygon(row, column);
       expect(boundaryCell).not.toBeNull();
       expect(boundaryCell?.every(([longitude, latitude]) => longitude >= WORLD_EXTENT[0]
@@ -701,7 +740,7 @@ describe("RealmMapAdapter", () => {
     adapter.setGridVisible(false);
     expect(graticule.getVisible()).toBe(false);
     adapter.setGridVisible(true);
-    expect(adapter.getMap().getLayers().getLength()).toBe(7);
+    expect(adapter.getMap().getLayers().getLength()).toBe(9);
     adapter.setFeatures([
       { id: "city-1", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [12, 34] } },
       { id: "river-1", featureType: "river", name: "River", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },

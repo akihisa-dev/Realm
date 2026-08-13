@@ -1,5 +1,5 @@
 import { cellId, cellPolygon } from "./gridGeometry";
-import { splitTerrainGridSegments, terrainOutlineSegments } from "./terrainOutline";
+import { exactCellBoundaryRings, smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments, terrainOutlineSegments } from "./terrainOutline";
 
 describe("terrainOutlineSegments", () => {
   it("keeps every edge of one interior terrain cell", () => {
@@ -31,5 +31,18 @@ describe("terrainOutlineSegments", () => {
     const split = splitTerrainGridSegments(fixed, [cellId(10, 10)]);
     expect(split.inside).toHaveLength(2);
     expect(split.outside).toHaveLength(1);
+  });
+
+  it("builds deterministic bounded curves while retaining holes and islands", () => {
+    const ids: string[] = [];
+    for (let row = 10; row <= 14; row += 1) for (let column = 10; column <= 14; column += 1) if (row !== 12 || column !== 12) ids.push(cellId(row, column));
+    ids.push(cellId(25, 25));
+    const first = smoothCellBoundaryRings(ids);
+    expect(first).toEqual(smoothCellBoundaryRings([...ids].reverse()));
+    expect(first.every((ring) => ring[0]![0] === ring.at(-1)![0] && ring[0]![1] === ring.at(-1)![1])).toBe(true);
+    expect(first.flat(2).every(Number.isFinite)).toBe(true);
+    expect(smoothCellBoundaryPolygons(ids).some((polygon) => polygon.length > 1)).toBe(true);
+    expect(first.length).toBeGreaterThan(1);
+    expect(smoothCellBoundaryRings([cellId(10, 10)])[0]!.length).toBeGreaterThan(exactCellBoundaryRings([cellId(10, 10)])[0]!.length);
   });
 });

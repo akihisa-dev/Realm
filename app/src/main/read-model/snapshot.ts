@@ -3,7 +3,7 @@ import type { AssetManifest, CellAttributeSnapshot, CellViewportInput, FeaturePr
 import { validateGeometry, validateProperties } from "../domain/geometry";
 import { MAX_ASSET_BYTES, sha256Hex, validateAsset } from "../domain/assets";
 import { parseStoredSettings } from "../domain/settings";
-import { cellId, EDITOR_GRID_COLUMNS, EDITOR_GRID_ROWS } from "../domain/cell";
+import { cellId, EDITOR_GRID_COLUMNS, EDITOR_GRID_ROWS, GRID_VERSION } from "../domain/cell";
 import type { OpenProjectSession } from "../state/session";
 import { corrupt, invalid } from "../domain/errors";
 
@@ -24,7 +24,7 @@ export function projectSnapshot(session: OpenProjectSession): RealmSnapshot {
     const metadata = json(row.metadataJson, "asset metadata");
     try { const checked = validateAsset({ sha256, mime: String(row.mime), bytes, width: Number(row.width), height: Number(row.height), metadata: metadata as FeatureProperties }); return { id: String(row.id), sha256, mime: checked.mime, byteLength: bytes.length, width: checked.width, height: checked.height, metadata: checked.metadata }; } catch { throw corrupt("An asset contains invalid contents."); }
   });
-  return { formatVersion: 8, path: session.path, world: { id: String(world.id), name: String(world.name) }, settings, features, assets, featureCount: features.length, canUndo: session.canUndo, canRedo: session.canRedo };
+  return { formatVersion: 9, path: session.path, world: { id: String(world.id), name: String(world.name) }, settings, features, assets, featureCount: features.length, canUndo: session.canUndo, canRedo: session.canRedo };
 }
 
 export function cellAttributesSnapshot(session: OpenProjectSession, input: CellViewportInput = {}): CellAttributeSnapshot[] {
@@ -36,7 +36,7 @@ export function cellAttributesSnapshot(session: OpenProjectSession, input: CellV
   const minX = Math.max(0, Math.min(EDITOR_GRID_COLUMNS - 1, bound(input.minX, 0))); const maxX = Math.max(0, Math.min(EDITOR_GRID_COLUMNS - 1, bound(input.maxX, EDITOR_GRID_COLUMNS - 1)));
   const minY = Math.max(0, Math.min(EDITOR_GRID_ROWS - 1, bound(input.minY, 0))); const maxY = Math.max(0, Math.min(EDITOR_GRID_ROWS - 1, bound(input.maxY, EDITOR_GRID_ROWS - 1)));
   if (minX > maxX || minY > maxY) throw invalid("The cell viewport is invalid.");
-  return (session.database.prepare("SELECT cell_x AS cellX,cell_y AS cellY,layer,value FROM cell_attributes WHERE grid_version=1 AND cell_x BETWEEN ? AND ? AND cell_y BETWEEN ? AND ? ORDER BY cell_y,cell_x,layer").all(minX, maxX, minY, maxY) as Record<string, unknown>[]).map((row) => ({ cellId: cellId(Number(row.cellX), Number(row.cellY)), attribute: String(row.layer) as CellAttributeSnapshot["attribute"], value: String(row.value) }));
+  return (session.database.prepare("SELECT cell_x AS cellX,cell_y AS cellY,layer,value FROM cell_attributes WHERE grid_version=? AND cell_x BETWEEN ? AND ? AND cell_y BETWEEN ? AND ? ORDER BY cell_y,cell_x,layer").all(GRID_VERSION, minX, maxX, minY, maxY) as Record<string, unknown>[]).map((row) => ({ cellId: cellId(Number(row.cellX), Number(row.cellY)), attribute: String(row.layer) as CellAttributeSnapshot["attribute"], value: String(row.value) }));
 }
 
 export function rawDatabase(session: OpenProjectSession): DatabaseSync { return session.database; }

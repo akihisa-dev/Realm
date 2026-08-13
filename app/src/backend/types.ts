@@ -70,6 +70,7 @@ export type ApplyCellAttributesInput = {
   attribute: CellAttribute;
   value: string | null;
 };
+export type MoveRegionCellsInput = { sourceCellIds: string[]; targetCellIds: string[] };
 
 export type CellViewportInput = {
   minX?: number;
@@ -119,6 +120,7 @@ export interface RealmBackend {
   undoProject(): Promise<RealmSnapshot>;
   redoProject(): Promise<RealmSnapshot>;
   applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot>;
+  moveRegionCells(input: MoveRegionCellsInput): Promise<RealmSnapshot>;
   viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]>;
   closeProject(): Promise<void>;
   getOpenProject(): Promise<RealmSnapshot | null>;

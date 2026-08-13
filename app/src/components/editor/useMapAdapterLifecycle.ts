@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import type { CellAttributeSnapshot, GeoJsonGeometry, RealmFeature } from "../../backend";
+import type { CellAttributeSnapshot, GeoJsonGeometry, MoveRegionCellsInput, RealmFeature } from "../../backend";
 import type { MapRaster } from "../../exportArtifacts";
 import type { ExportCanvasSize } from "../../map/contracts";
 import type {
@@ -34,11 +34,13 @@ export type MapAdapterLifecycleOptions = {
   effectivePaintRadius: number;
   eraseRadius: number;
   selectedFeatureIds: readonly string[];
+  regionColor: string;
   onZoomChange: (zoom: number) => void;
   onDraw: ((geometry: GeoJsonGeometry) => void) | undefined;
   onSelect: ((featureId: string | null) => void) | undefined;
   onSelectFeatures: ((featureIds: readonly string[]) => void) | undefined;
   onCellSelect: ((cellIds: readonly string[]) => void) | undefined;
+  onRegionMove: ((input: MoveRegionCellsInput) => void) | undefined;
   onModify: ((featureId: string, geometry: GeoJsonGeometry) => void) | undefined;
   onModifyFeatures: ((changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void) | undefined;
   onErase: ((featureId: string) => void) | undefined;
@@ -72,11 +74,13 @@ export function useMapAdapterLifecycle({
   effectivePaintRadius,
   eraseRadius,
   selectedFeatureIds,
+  regionColor,
   onZoomChange,
   onDraw,
   onSelect,
   onSelectFeatures,
   onCellSelect,
+  onRegionMove,
   onModify,
   onModifyFeatures,
   onErase,
@@ -90,6 +94,7 @@ export function useMapAdapterLifecycle({
   const onSelectRef = useRef(onSelect);
   const onSelectFeaturesRef = useRef(onSelectFeatures);
   const onCellSelectRef = useRef(onCellSelect);
+  const onRegionMoveRef = useRef(onRegionMove);
   const onModifyRef = useRef(onModify);
   const onModifyFeaturesRef = useRef(onModifyFeatures);
   const onEraseRef = useRef(onErase);
@@ -103,6 +108,7 @@ export function useMapAdapterLifecycle({
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
   useEffect(() => { onSelectFeaturesRef.current = onSelectFeatures; }, [onSelectFeatures]);
   useEffect(() => { onCellSelectRef.current = onCellSelect; }, [onCellSelect]);
+  useEffect(() => { onRegionMoveRef.current = onRegionMove; }, [onRegionMove]);
   useEffect(() => { onModifyRef.current = onModify; }, [onModify]);
   useEffect(() => { onModifyFeaturesRef.current = onModifyFeatures; }, [onModifyFeatures]);
   useEffect(() => { onEraseRef.current = onErase; }, [onErase]);
@@ -125,6 +131,7 @@ export function useMapAdapterLifecycle({
       onSelectRef.current?.(featureIds[0] ?? null);
     });
     const stopCellSelectListener = adapter.onCellSelect((cellIds) => onCellSelectRef.current?.(cellIds));
+    const stopRegionMoveListener = adapter.onRegionMove?.((input) => onRegionMoveRef.current?.(input)) ?? (() => undefined);
     const stopModifyListener = adapter.onModifyFeatures((changes) => {
       onModifyFeaturesRef.current?.(changes);
       if (!onModifyFeaturesRef.current) for (const { id, geometry } of changes) onModifyRef.current?.(id, geometry);
@@ -149,6 +156,7 @@ export function useMapAdapterLifecycle({
     adapter.setSelectedCells(selectedCellIds);
     adapter.setCellPaintRadius(effectivePaintRadius);
     adapter.setCellEraseRadius(eraseRadius);
+    adapter.setCellRegionColor?.(regionColor);
     adapter.setSelectedFeatures(selectedFeatureIds);
     onZoomChangeRef.current(adapter.getZoom());
 
@@ -161,6 +169,7 @@ export function useMapAdapterLifecycle({
       stopDrawListener();
       stopSelectListener();
       stopCellSelectListener();
+      stopRegionMoveListener();
       stopModifyListener();
       stopEraseListener();
       stopLayerShiftListener();

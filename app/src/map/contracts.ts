@@ -1,4 +1,4 @@
-import type { CellAttributeSnapshot, FeatureType, GeoJsonGeometry, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, FeatureType, GeoJsonGeometry, MoveRegionCellsInput, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { MapThemeId, ThemeOverrides } from "./themes";
 import type { MapErrorCode } from "./errors";
@@ -7,7 +7,7 @@ export type MapAdapterOptions = {
   target: HTMLElement;
 };
 
-export type RealmMapMode = "pan" | "cell-select" | "cell-erase" | "erase" | "polygon-hole" | "label-path" | FeatureType;
+export type RealmMapMode = "pan" | "cell-select" | "cell-region" | "grab" | "cell-erase" | "erase" | "polygon-hole" | "label-path" | FeatureType;
 export type FeatureGeometryChange = { id: string; geometry: GeoJsonGeometry };
 export type ExportCanvasSize = {
   width: number;
@@ -45,6 +45,8 @@ export interface RealmMapRenderer {
   setDrawingOptions(options: DrawingOptions): void;
   setCellPaintRadius(radiusCells: number): void;
   setCellEraseRadius(radiusCells: number): void;
+  /** Color used by the transient cell-region enclosure preview. */
+  setCellRegionColor?(color: string): void;
   setSelected(featureId: string | null): void;
   /** Replace the controlled selectable feature set; this sync does not emit. */
   setSelectedFeatures(featureIds: readonly string[]): void;
@@ -56,6 +58,7 @@ export interface RealmMapRenderer {
   /** @deprecated Use onSelectFeatures for multi-selection-aware consumers. */
   onSelect(listener: (featureId: string | null) => void): () => void;
   onCellSelect(listener: (cellIds: readonly string[]) => void): () => void;
+  onRegionMove?(listener: (input: MoveRegionCellsInput) => void): () => void;
   onModifyFeatures(listener: (changes: readonly FeatureGeometryChange[]) => void): () => void;
   onModify(listener: (featureId: string, geometry: GeoJsonGeometry) => void): () => void;
   onEraseFeatures(listener: (featureIds: readonly string[]) => void): () => void;

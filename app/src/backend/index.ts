@@ -5,6 +5,7 @@ import type { ArtifactFormat, ElectronRealmApi, TransferPathMode } from "../shar
 
 export type {
   ApplyCellAttributesInput,
+  MoveRegionCellsInput,
   AssetManifest,
   AssetRead,
   CellAttribute,

@@ -36,6 +36,8 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
   cursor: -webkit-grab;
   cursor: grab;
 }
+.map-canvas-mode-cell-region .ol-viewport { cursor: crosshair; }
+.map-canvas-mode-grab .ol-viewport { cursor: grab; }
 .map-canvas-mode-cell-select .ol-viewport { cursor: crosshair; }
 .map-canvas-mode-cell-erase .ol-viewport {
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23fff' stroke='%231d2025' stroke-width='1.5' d='M3 13.5 11.5 5a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L8 18.5H3a2 2 0 0 1 0-5Z'/%3E%3Cpath fill='%23f09a9a' d='m5.1 11.4 3.5 3.5-2.4 2.4H3.5a1 1 0 0 1-.7-1.7Z'/%3E%3Cpath fill='none' stroke='%231d2025' stroke-width='1.5' d='m8.6 14.9 4.5-4.5'/%3E%3C/svg%3E") 9 9, cell;

@@ -4,9 +4,11 @@ import { join, resolve } from "node:path";
 import { corrupt, RealmError } from "../domain/errors";
 import { DEFAULT_SETTINGS, parseStoredSettings, validateSettings } from "../domain/settings";
 
-export const CURRENT_SCHEMA_VERSION = 8;
-export const ACCEPTED_SCHEMA_VERSIONS = [3, 4, 5, 6, 7, 8] as const;
-export const GRID_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 9;
+export const ACCEPTED_SCHEMA_VERSIONS = [3, 4, 5, 6, 7, 8, 9] as const;
+export const GRID_VERSION = 2;
+const ACTIVE_GRID_COLUMNS = 128;
+const ACTIVE_GRID_ROWS = 73;
 const FEATURE_TYPES = "'terrain','forest','river','coastline','country','region','boundary','city','town','road','lake','mountain','tree','symbol','label','overlay','frame','scale'";
 const SETTINGS_CHECK = `CHECK (json_valid(settings_json) AND json_type(settings_json) = 'object' AND length(settings_json) <= 32768 AND json_type(settings_json, '$.canvasWidth') = 'integer' AND json_extract(settings_json, '$.canvasWidth') BETWEEN 512 AND 8192 AND json_type(settings_json, '$.canvasHeight') = 'integer' AND json_extract(settings_json, '$.canvasHeight') BETWEEN 512 AND 8192 AND json_type(settings_json, '$.gridKind') = 'text' AND json_extract(settings_json, '$.gridKind') IN ('graticule','square','hex') AND json_type(settings_json, '$.gridColor') = 'text' AND length(json_extract(settings_json, '$.gridColor')) = 7 AND json_extract(settings_json, '$.gridColor') GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]' AND (json_type(settings_json, '$.gridWidth') = 'integer' OR json_type(settings_json, '$.gridWidth') = 'real') AND CAST(json_extract(settings_json, '$.gridWidth') AS REAL) BETWEEN 0.25 AND 4 AND (json_type(settings_json, '$.gridSpacing') = 'integer' OR json_type(settings_json, '$.gridSpacing') = 'real') AND CAST(json_extract(settings_json, '$.gridSpacing') AS REAL) BETWEEN 2 AND 45 AND json_type(settings_json, '$.themeOverrides') = 'object')`;
 
@@ -45,12 +47,12 @@ export function schemaSql(): string {
 CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS world (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, settings_json TEXT NOT NULL ${SETTINGS_CHECK});
 CREATE TABLE IF NOT EXISTS features (id TEXT PRIMARY KEY NOT NULL, feature_type TEXT NOT NULL CHECK (feature_type IN (${FEATURE_TYPES})), name TEXT NOT NULL, geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json)), properties_json TEXT NOT NULL CHECK (json_valid(properties_json) AND json_type(properties_json) = 'object'));
-CREATE TABLE IF NOT EXISTS cell_grid (id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1), grid_version INTEGER NOT NULL CHECK (grid_version = 1), grid_columns INTEGER NOT NULL CHECK (grid_columns = 512), grid_rows INTEGER NOT NULL CHECK (grid_rows = 256));
-CREATE TABLE IF NOT EXISTS cell_attributes (id INTEGER PRIMARY KEY AUTOINCREMENT, grid_version INTEGER NOT NULL CHECK (grid_version = 1), cell_x INTEGER NOT NULL CHECK (cell_x >= 0 AND cell_x < 512), cell_y INTEGER NOT NULL CHECK (cell_y >= 0 AND cell_y < 256), layer TEXT NOT NULL CHECK (layer IN ('terrain','forest','country','region')), value TEXT NOT NULL, UNIQUE (grid_version, cell_x, cell_y, layer));
+CREATE TABLE IF NOT EXISTS cell_grid (id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1), grid_version INTEGER NOT NULL CHECK (grid_version = 2), grid_columns INTEGER NOT NULL CHECK (grid_columns = 128), grid_rows INTEGER NOT NULL CHECK (grid_rows = 73));
+CREATE TABLE IF NOT EXISTS cell_attributes (id INTEGER PRIMARY KEY AUTOINCREMENT, grid_version INTEGER NOT NULL CHECK (grid_version IN (1,2)), cell_x INTEGER NOT NULL CHECK (cell_x >= 0 AND cell_x < 512), cell_y INTEGER NOT NULL CHECK (cell_y >= 0 AND cell_y < 256), layer TEXT NOT NULL CHECK (layer IN ('terrain','forest','country','region')), value TEXT NOT NULL, UNIQUE (grid_version, cell_x, cell_y, layer));
 CREATE INDEX IF NOT EXISTS cell_attributes_lookup ON cell_attributes(grid_version, cell_x, cell_y, layer);
 CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY NOT NULL, sha256 TEXT NOT NULL UNIQUE CHECK (length(sha256) = 64), mime TEXT NOT NULL, bytes BLOB NOT NULL, width INTEGER NOT NULL CHECK (width > 0 AND width <= 32768), height INTEGER NOT NULL CHECK (height > 0 AND height <= 32768), metadata_json TEXT NOT NULL CHECK (json_valid(metadata_json) AND json_type(metadata_json) = 'object'));
 CREATE INDEX IF NOT EXISTS assets_sha256_lookup ON assets(sha256);
-INSERT OR IGNORE INTO cell_grid(id, grid_version, grid_columns, grid_rows) VALUES (1,1,512,256);`;
+INSERT OR IGNORE INTO cell_grid(id, grid_version, grid_columns, grid_rows) VALUES (1,2,128,73);`;
 }
 
 export function initializeSchema(db: DatabaseSync, worldId: string, worldName: string): void {
@@ -102,7 +104,6 @@ export function schemaVersion(db: DatabaseSync): number {
 }
 
 function verifyLegacy(db: DatabaseSync, version: number): void {
-  if (version === 8) { verifyCurrentSchema(db); return; }
   const worldColumns = version >= 6 ? WORLD_COLUMNS : WORLD_COLUMNS_V5;
   const featureColumns = version >= 4 ? FEATURE_COLUMNS : FEATURE_COLUMNS_V3;
   if (!tableExists(db, "world") || !tableExists(db, "features") || !tableExists(db, "cell_grid") || !tableExists(db, "cell_attributes") || !hasColumns(db, "schema_migrations", SCHEMA_MIGRATION_COLUMNS) || !hasColumns(db, "world", worldColumns) || !hasColumns(db, "features", featureColumns) || !hasColumns(db, "cell_grid", CELL_GRID_COLUMNS) || !hasColumns(db, "cell_attributes", CELL_ATTRIBUTE_COLUMNS)) throw corrupt();
@@ -133,8 +134,8 @@ export function verifyCurrentSchema(db: DatabaseSync): void {
   if (rowCount(db, "world") !== 1 || rowCount(db, "cell_grid") !== 1) throw corrupt("The project must contain exactly one world record and one grid record.");
   assertTableSql(db, "world", FULL_SETTINGS_FRAGMENTS);
   assertTableSql(db, "features", ["check (json_valid(geometry_json)", "check (json_valid(properties_json)", "json_type(properties_json) = 'object'", "'terrain'", "'forest'", "'river'", "'coastline'", "'country'", "'region'", "'boundary'", "'city'", "'town'", "'road'", "'lake'", "'mountain'", "'tree'", "'symbol'", "'label'", "'overlay'", "'frame'", "'scale'"]);
-  assertTableSql(db, "cell_grid", ["check (id = 1)", "check (grid_version = 1)", "check (grid_columns = 512)", "check (grid_rows = 256)"]);
-  assertTableSql(db, "cell_attributes", ["unique (grid_version, cell_x, cell_y, layer)", "check (grid_version = 1)", "check (cell_x >= 0", "check (cell_y >= 0", "check (layer in ('terrain','forest','country','region'))"]);
+  assertTableSql(db, "cell_grid", ["check (id = 1)", "check (grid_version = 2)", "check (grid_columns = 128)", "check (grid_rows = 73)"]);
+  assertTableSql(db, "cell_attributes", ["unique (grid_version, cell_x, cell_y, layer)", "check (grid_version in (1,2))", "check (cell_x >= 0", "check (cell_y >= 0", "check (layer in ('terrain','forest','country','region'))"]);
   assertIndex(db, "cell_attributes_lookup", ["grid_version", "cell_x", "cell_y", "layer"]);
   verifyAssetsSchema(db);
   for (const retired of ["eras", "timeline_events", "feature_revisions", "cell_edit_operations", "cell_attribute_revisions", "feature_revisions_lookup", "feature_revisions_year", "timeline_events_range", "cell_attribute_revisions_lookup", "cell_attribute_revisions_view", "feature_revision_sequence_monotonic", "feature_revision_no_update", "feature_revision_no_delete", "cell_attribute_revision_sequence_monotonic", "cell_attribute_revision_no_update", "cell_attribute_revision_no_delete", "cell_edit_operation_no_update", "cell_edit_operation_no_delete"]) if (tableExists(db, retired) || Boolean((db.prepare("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type IN ('index','trigger') AND name=?) AS value").get(retired) as { value: number }).value)) throw corrupt("Chronology tables are not supported.");
@@ -172,6 +173,28 @@ function rebuildCells(db: DatabaseSync): void {
   db.exec("INSERT INTO cell_attributes(id,grid_version,cell_x,cell_y,layer,value) SELECT id,grid_version,cell_x,cell_y,layer,value FROM cell_attributes_legacy;"); db.exec("DROP TABLE cell_attributes_legacy; CREATE INDEX cell_attributes_lookup ON cell_attributes(grid_version,cell_x,cell_y,layer);");
 }
 
+/** Preserves every v1 row and derives the active v2 terrain/region cells by nearest old hex centre. */
+function migrateFineGrid(db: DatabaseSync): void {
+  const active = db.prepare("SELECT cell_x AS x,cell_y AS y,layer,value FROM cell_attributes WHERE grid_version=1 AND cell_x<64 AND cell_y<37 AND layer IN ('terrain','region')").all() as Record<string, unknown>[];
+  const values = new Map(active.map((row) => [`${Number(row.x)}:${Number(row.y)}:${String(row.layer)}`, String(row.value)]));
+  db.exec("ALTER TABLE cell_attributes RENAME TO cell_attributes_v1; DROP INDEX IF EXISTS cell_attributes_lookup;");
+  db.exec("CREATE TABLE cell_attributes (id INTEGER PRIMARY KEY AUTOINCREMENT, grid_version INTEGER NOT NULL CHECK (grid_version IN (1,2)), cell_x INTEGER NOT NULL CHECK (cell_x >= 0 AND cell_x < 512), cell_y INTEGER NOT NULL CHECK (cell_y >= 0 AND cell_y < 256), layer TEXT NOT NULL CHECK (layer IN ('terrain','forest','country','region')), value TEXT NOT NULL, UNIQUE (grid_version,cell_x,cell_y,layer));");
+  db.exec("INSERT INTO cell_attributes(id,grid_version,cell_x,cell_y,layer,value) SELECT id,grid_version,cell_x,cell_y,layer,value FROM cell_attributes_v1; DROP TABLE cell_attributes_v1; CREATE INDEX cell_attributes_lookup ON cell_attributes(grid_version,cell_x,cell_y,layer);");
+  const centre = (row: number, column: number, rows: number): [number, number] => { const radius = 180 / (1.5 * rows + 0.5); const step = Math.sqrt(3) * radius; return [-180 + step / 2 + (column + (row % 2 === 0 ? 0 : 0.5)) * step, -90 + radius + row * 1.5 * radius]; };
+  const insert = db.prepare("INSERT OR IGNORE INTO cell_attributes(grid_version,cell_x,cell_y,layer,value) VALUES (2,?,?,?,?)");
+  for (let y = 0; y < ACTIVE_GRID_ROWS; y += 1) for (let x = 0; x < ACTIVE_GRID_COLUMNS; x += 1) {
+    const [longitude, latitude] = centre(y, x, ACTIVE_GRID_ROWS);
+    let nearestX = 0; let nearestY = 0; let nearestDistance = Number.POSITIVE_INFINITY;
+    const oldRadius = 180 / (1.5 * 37 + 0.5); const estimatedRow = Math.round((latitude - (-90 + oldRadius)) / (1.5 * oldRadius));
+    for (let oldY = Math.max(0, estimatedRow - 2); oldY <= Math.min(36, estimatedRow + 2); oldY += 1) {
+      const oldStep = Math.sqrt(3) * oldRadius; const estimatedColumn = Math.round((longitude - (-180 + oldStep / 2)) / oldStep - (oldY % 2 === 0 ? 0 : 0.5));
+      for (let oldX = Math.max(0, estimatedColumn - 2); oldX <= Math.min(63, estimatedColumn + 2); oldX += 1) { const [cx, cy] = centre(oldY, oldX, 37); const distance = (longitude - cx) ** 2 + (latitude - cy) ** 2; if (distance < nearestDistance) { nearestDistance = distance; nearestX = oldX; nearestY = oldY; } }
+    }
+    for (const layer of ["terrain", "region"] as const) { const value = values.get(`${nearestX}:${nearestY}:${layer}`); if (value !== undefined) insert.run(x, y, layer, value); }
+  }
+  db.exec("ALTER TABLE cell_grid RENAME TO cell_grid_v1; CREATE TABLE cell_grid (id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1), grid_version INTEGER NOT NULL CHECK (grid_version = 2), grid_columns INTEGER NOT NULL CHECK (grid_columns = 128), grid_rows INTEGER NOT NULL CHECK (grid_rows = 73)); INSERT INTO cell_grid(id,grid_version,grid_columns,grid_rows) VALUES (1,2,128,73); DROP TABLE cell_grid_v1;");
+}
+
 export function migrateToCurrent(db: DatabaseSync, version: number): void {
   if (version === CURRENT_SCHEMA_VERSION) { verifyCurrentSchema(db); return; }
   verifyLegacy(db, version);
@@ -180,7 +203,8 @@ export function migrateToCurrent(db: DatabaseSync, version: number): void {
     if (version === 4) { db.exec("CREATE TABLE assets (id TEXT PRIMARY KEY NOT NULL, sha256 TEXT NOT NULL UNIQUE CHECK (length(sha256)=64), mime TEXT NOT NULL, bytes BLOB NOT NULL, width INTEGER NOT NULL CHECK (width>0 AND width<=32768), height INTEGER NOT NULL CHECK (height>0 AND height<=32768), metadata_json TEXT NOT NULL CHECK (json_valid(metadata_json) AND json_type(metadata_json)='object')); CREATE INDEX assets_sha256_lookup ON assets(sha256);"); db.prepare("INSERT INTO schema_migrations(version) VALUES (?)").run(5); db.exec("PRAGMA user_version=5"); version = 5; }
     if (version === 5) { rebuildWorld(db, false); db.prepare("INSERT INTO schema_migrations(version) VALUES (?)").run(6); db.exec("PRAGMA user_version=6"); version = 6; }
     if (version === 6) { rebuildWorld(db, true); db.prepare("INSERT INTO schema_migrations(version) VALUES (?)").run(7); db.exec("PRAGMA user_version=7"); version = 7; }
-    if (version === 7) { rebuildCells(db); db.prepare("INSERT INTO schema_migrations(version) VALUES (?)").run(8); db.exec("PRAGMA user_version=8"); }
+    if (version === 7) { rebuildCells(db); db.prepare("INSERT INTO schema_migrations(version) VALUES (?)").run(8); db.exec("PRAGMA user_version=8"); version = 8; }
+    if (version === 8) { migrateFineGrid(db); db.prepare("INSERT INTO schema_migrations(version) VALUES (?)").run(9); db.exec("PRAGMA user_version=9"); }
     verifyCurrentSchema(db);
   });
 }

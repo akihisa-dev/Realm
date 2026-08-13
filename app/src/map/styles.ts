@@ -563,20 +563,28 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     const preview = feature.get("preview") === true;
     const paintPreview = feature.get("paintPreview") === true;
     const erasePreview = feature.get("erasePreview") === true;
+    const grabPreview = feature.get("grabPreview") === true;
+    const grabSourceHidden = feature.get("grabSourceHidden") === true;
     const hasTerrain = has("terrain");
     const hasPhysical = has("forest");
     const hasCountry = has("country");
     const hasRegion = has("region");
-    if (!hasTerrain && !hasPhysical && !hasCountry && !hasRegion && !selected && !preview && !paintPreview && !erasePreview) return undefined;
+    if (!hasTerrain && !hasPhysical && !hasCountry && !hasRegion && !selected && !preview && !paintPreview && !erasePreview && !grabPreview) return undefined;
     const themeId = getThemeId();
     const overrides = getThemeOverrides();
     const theme = mapTheme(themeId, overrides);
     const variant = stableVariant(String(feature.getId() ?? "")) % 7;
-    const flags = (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0) | (preview ? 64 : 0) | (paintPreview ? 128 : 0) | (erasePreview ? 256 : 0);
+    const regionValue = attributes?.find((item) => item.attribute === "region")?.value;
+    const persistedRegionColor = typeof regionValue === "string" && /^#[\da-f]{6}$/i.test(regionValue) ? regionValue : theme.region;
+    const regionAnimationOpacity = typeof feature.get("regionAnimationOpacity") === "number" && Number.isFinite(feature.get("regionAnimationOpacity"))
+      ? Math.max(0, Math.min(1, feature.get("regionAnimationOpacity"))) : 1;
+    const flags = (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0) | (preview ? 64 : 0) | (paintPreview ? 128 : 0) | (erasePreview ? 256 : 0) | (grabPreview ? 512 : 0) | (grabSourceHidden ? 1024 : 0);
     const key = canonicalValueSignature({
       themeId,
       overrides,
       flags,
+      regionValue: persistedRegionColor,
+      regionAnimationOpacity,
       variant: hasPhysical ? variant : 0,
     });
     const cached = cellStyles.get(feature as object);
@@ -586,10 +594,12 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     // outline. Cell features remain here for transient paint/erase feedback.
     if (hasPhysical) styles.push(new Style({ fill: new Fill({ color: theme.forest }), stroke: new Stroke({ color: theme.labelHalo, width: 0.55 + variant * 0.03 }), zIndex: 8 }));
     if (hasCountry) styles.push(new Style({ fill: new Fill({ color: `${theme.country}14` }), stroke: new Stroke({ color: theme.country, width: 1.1 }), zIndex: 9 }));
-    if (hasRegion) styles.push(new Style({ fill: new Fill({ color: `${theme.region}0d` }), stroke: new Stroke({ color: theme.region, width: 1.1, lineDash: [3, 2] }), zIndex: 10 }));
+    if (!grabSourceHidden && hasRegion && (regionAnimationOpacity < 1 || grabPreview)) styles.push(new Style({ fill: new Fill({ color: colorWithOpacity(persistedRegionColor, 0.2 * regionAnimationOpacity) }), stroke: new Stroke({ color: colorWithOpacity(persistedRegionColor, 0.78 * regionAnimationOpacity), width: 1.1 }), zIndex: 10 }));
+    if (grabPreview) styles.push(new Style({ fill: new Fill({ color: colorWithOpacity(persistedRegionColor, 0.28) }), stroke: new Stroke({ color: colorWithOpacity(persistedRegionColor, 0.95), width: 1.5, lineDash: [4, 2] }), zIndex: 88 }));
     if (selected) styles.push(new Style({ fill: new Fill({ color: paintPreview ? theme.land : "rgba(7, 140, 152, 0.16)" }), stroke: new Stroke({ color: paintPreview ? theme.landInk : "#078c98", width: 1.4 }), zIndex: 85 }));
     if (preview) styles.push(new Style({ fill: new Fill({ color: "rgba(7, 140, 152, 0.08)" }), stroke: new Stroke({ color: "#078c98", width: 1.2, lineDash: [3, 2] }), zIndex: 84 }));
     if (erasePreview) styles.push(new Style({ fill: new Fill({ color: "rgba(190, 66, 66, 0.14)" }), stroke: new Stroke({ color: "#be4242", width: 1.4, lineDash: [3, 2] }), zIndex: 86 }));
+    if (styles.length === 0) return undefined;
     cellStyles.set(feature as object, { key, styles });
     return styles;
   };

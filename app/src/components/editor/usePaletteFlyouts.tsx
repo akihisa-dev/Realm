@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject, type CSSProperties, type ReactNode } from "react";
 import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
 import { SlidersHorizontal } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
+import { HandGrabbing } from "@phosphor-icons/react/dist/csr/HandGrabbing";
 import { createPortal } from "react-dom";
 import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
 import { positionPaletteFlyout, type PaletteRect } from "../paletteFlyout";
@@ -53,14 +54,15 @@ const equalFlyoutPosition = (left: FlyoutPosition, right: FlyoutPosition): boole
 export type PaletteFlyoutOptions = {
   shellRef: RefObject<HTMLDivElement | null>;
   hostRef: RefObject<HTMLDivElement | null>;
-  mode: "pan" | "cell-select" | "cell-erase" | "region";
-  onToolChange: ((tool: "terrain" | "region" | "erase") => void) | undefined;
+  mode: "pan" | "cell-select" | "cell-region" | "grab" | "cell-erase" | "region";
+  onToolChange: ((tool: "terrain" | "region" | "erase" | "grab") => void) | undefined;
   onRegionColorChange: ((color: string) => void) | undefined;
 };
 
 export type PaletteFlyoutState = {
   paintRange: number;
   eraseRadius: number;
+  regionColor: string;
   radialPalette: ReactNode;
   paintRangeFlyout: ReactNode;
   eraseFlyout: ReactNode;
@@ -305,8 +307,13 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onReg
         </button>
       </div>
       <div className="radial-palette-slot radial-palette-region-tool" style={{ "--slot": 2 } as CSSProperties}>
-        <button ref={regionButtonRef} className="radial-palette-range-button" type="button" aria-label="領域" aria-pressed={mode === "region"} aria-haspopup="true" aria-expanded={regionFlyoutOpen} aria-controls={REGION_FLYOUT_ID} onClick={openRegionFlyout}>
+        <button ref={regionButtonRef} className="radial-palette-range-button" type="button" aria-label="領域" aria-pressed={mode === "cell-region" || mode === "region"} aria-haspopup="true" aria-expanded={regionFlyoutOpen} aria-controls={REGION_FLYOUT_ID} onClick={openRegionFlyout}>
           <span aria-hidden="true" style={{ display: "block", width: 14, height: 14, borderRadius: 3, background: regionColor }} />
+        </button>
+      </div>
+      <div className="radial-palette-slot radial-palette-grab-tool" style={{ "--slot": 3 } as CSSProperties}>
+        <button className="radial-palette-range-button" type="button" aria-label="グラブ" aria-pressed={mode === "grab"} onClick={(event) => { onToolChange?.("grab"); setRegionFlyoutOpen(false); setPaintRangeFlyoutOpen(false); setEraseFlyoutOpen(false); event.stopPropagation(); }}>
+          <HandGrabbing aria-hidden="true" size={16} weight="bold" />
         </button>
       </div>
     </div>
@@ -367,6 +374,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onReg
   return {
     paintRange,
     eraseRadius: cellPaintRadiusForRange(eraseRange),
+    regionColor,
     radialPalette,
     paintRangeFlyout,
     eraseFlyout,

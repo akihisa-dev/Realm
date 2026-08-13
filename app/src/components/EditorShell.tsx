@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { errorMessage, type CellAttributeSnapshot, type RealmBackend, type RealmSnapshot } from "../backend";
+import { errorMessage, type CellAttributeSnapshot, type MoveRegionCellsInput, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { mapErrorMessage } from "../locales/ja";
 
-type Tool = "terrain" | "region" | "erase";
+type Tool = "terrain" | "region" | "erase" | "grab";
 
 type EditorShellProps = {
   snapshot: RealmSnapshot;
@@ -72,8 +72,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     const request = ++cellRequest.current;
     try {
       const attributes = await backend.viewCellAttributes({});
-      const terrain = attributes.filter((attribute) => attribute.attribute === "terrain");
-      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request) setCellAttributes(terrain);
+      const terrainAndRegions = attributes.filter((attribute) => attribute.attribute === "terrain" || attribute.attribute === "region");
+      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request) setCellAttributes(terrainAndRegions);
     } catch (cause) {
       if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request) setError(errorMessage(cause, "セル属性を読み込めませんでした。"));
     }
@@ -111,17 +111,21 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     });
   };
 
-  const updateOptimisticCellAttributes = (cellIds: readonly string[], value: string | null): void => {
+  const updateOptimisticCellAttributes = (cellIds: readonly string[], attribute: "terrain" | "region", value: string | null): void => {
     // Invalidate an in-flight read before publishing the optimistic state. Its
     // old read result must not overwrite a newer paint operation.
     ++cellRequest.current;
     const selected = new Set(cellIds);
     setCellAttributes((current) => {
-      const byCell = new Map(current.map((attribute) => [attribute.cellId, attribute]));
+      const byCell = new Map(current.map((item) => [`${item.cellId}:${item.attribute}`, item]));
       if (value === null) {
-        for (const cellId of selected) byCell.delete(cellId);
+        for (const cellId of selected) byCell.delete(`${cellId}:${attribute}`);
       } else {
-        for (const cellId of selected) byCell.set(cellId, { cellId, attribute: "terrain", value });
+        for (const cellId of selected) byCell.set(`${cellId}:${attribute}`, {
+          cellId,
+          attribute,
+          value,
+        });
       }
       return [...byCell.values()];
     });
@@ -138,16 +142,17 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       setSelectedCellIds([]);
       return;
     }
-    const value = tool === "terrain" ? "terrain" : null;
+    const attribute = tool === "region" ? "region" : "terrain";
+    const value = tool === "terrain" ? "terrain" : tool === "region" ? regionColor : null;
     const mutation = ++cellMutation.current;
-    updateOptimisticCellAttributes(nextIds, value);
+    updateOptimisticCellAttributes(nextIds, attribute, value);
     // Completed strokes are represented immediately by the optimistic terrain
     // outline. Keep controlled selection empty so only pointer hover can show
     // a transient fill after commit.
     setSelectedCellIds([]);
     void run(
-      () => backend.applyCellAttributes({ cellIds: nextIds, attribute: "terrain", value }),
-      "セルの地形属性を更新できませんでした。",
+      () => backend.applyCellAttributes({ cellIds: nextIds, attribute, value }),
+      attribute === "region" ? "セルの領域属性を更新できませんでした。" : "セルの地形属性を更新できませんでした。",
       {
         recover: async (identity) => {
           if (cellMutation.current === mutation) await refreshCellAttributes(identity);
@@ -156,6 +161,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         isCurrent: () => cellMutation.current === mutation,
       },
     );
+  };
+  const moveRegion = (input: MoveRegionCellsInput): void => {
+    if (locked) return;
+    void run(() => backend.moveRegionCells(input), "領域を移動できませんでした。", { recover: async (identity) => refreshCellAttributes(identity) });
   };
 
   useEffect(() => {
@@ -178,6 +187,9 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       } else if (key === "e" || key === "x") {
         event.preventDefault();
         selectTool("erase");
+      } else if (key === "g") {
+        event.preventDefault();
+        selectTool("grab");
       }
     };
     window.addEventListener("keydown", handleShortcut);
@@ -195,8 +207,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       <div className="editor-body">
         <section className="map-region" aria-label="地形編集領域">
           <MapCanvas
-            features={viewedSnapshot.features.filter((feature) => feature.featureType === "region")}
-            mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "region" : "cell-select"}
+            // Compatibility region objects remain in snapshots but are not
+            // rendered or created by the cell-region editor.
+            features={[]}
+            mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "cell-region" : activeTool === "grab" ? "grab" : "cell-select"}
             disabled={busy}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}
@@ -207,12 +221,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             cellGridOptions={cellGridOptions}
             gridOptions={gridOptions}
             onCellSelect={applyCellSelection}
+            onRegionMove={moveRegion}
+            regionColor={regionColor}
             onToolChange={selectTool}
             onRegionColorChange={setRegionColor}
-            onDraw={(geometry) => {
-              if (geometry.type !== "Polygon" || locked) return;
-              void run(() => backend.createFeature({ featureType: "region", name: "領域", geometry, properties: { fillColor: regionColor, strokeColor: regionColor, fillOpacity: 0.25 } }), "領域を保存できませんでした。");
-            }}
             onError={(code) => setError(mapErrorMessage(code, activeToolRef.current === "region" ? "region" : "terrain"))}
             onZoomChange={setZoom}
             zoom={zoom}

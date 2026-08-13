@@ -57,13 +57,25 @@ describe("Electron native SQLite storage", () => {
 
   it("migrates a synthetic v3 database and rejects future schema without mutation", async () => {
     const directory = fixtureDirectory(); const path = join(directory, "v3.realmmap"); const db = new DatabaseSync(path); createLegacyFixture(db, 3); db.close();
-    const opened = openStoredProject(path); expect(Number((opened.database.prepare("PRAGMA user_version").get() as Record<string, unknown>).user_version)).toBe(8); expect(opened.database.prepare("SELECT COUNT(*) AS count FROM features").get()).toEqual({ count: 1 }); opened.close();
+    const opened = openStoredProject(path); expect(Number((opened.database.prepare("PRAGMA user_version").get() as Record<string, unknown>).user_version)).toBe(9); expect(opened.database.prepare("SELECT COUNT(*) AS count FROM features").get()).toEqual({ count: 1 }); opened.close();
     const futurePath = join(directory, "future.realmmap"); const future = new DatabaseSync(futurePath); future.exec("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP); INSERT INTO schema_migrations(version) VALUES (99); PRAGMA user_version=99;"); future.close(); const bytes = readFileSync(futurePath); await expect(Promise.resolve().then(() => openStoredProject(futurePath))).rejects.toMatchObject({ code: "future_schema" }); expect(readFileSync(futurePath)).toEqual(bytes);
   });
 
   it.each([4, 5, 6, 7])("migrates each synthetic v%d source independently", async (version) => {
     const directory = fixtureDirectory(); const path = join(directory, `v${version}.realmmap`); const db = new DatabaseSync(path); createLegacyFixture(db, version); db.close();
     const before = readFileSync(path); const snapshot = openStoredProject(path); expect(snapshot.database.prepare("SELECT COUNT(*) AS count FROM features").get()).toEqual({ count: 1 }); snapshot.close(); expect(readFileSync(path)).not.toEqual(before);
+  });
+
+  it("resamples active v8 terrain and regions into grid v2 without exposing compatibility rows", () => {
+    const directory = fixtureDirectory(); const path = join(directory, "v8.realmmap"); const db = new DatabaseSync(path); createLegacyFixture(db, 8);
+    db.prepare("INSERT INTO cell_attributes(grid_version,cell_x,cell_y,layer,value) VALUES (1,10,10,'terrain','terrain'),(1,10,10,'region','#336699'),(1,200,100,'region','#FF0000')").run(); db.close();
+    const opened = openStoredProject(path);
+    expect(opened.database.prepare("SELECT grid_version AS version,grid_columns AS columns,grid_rows AS rows FROM cell_grid").get()).toEqual({ version: 2, columns: 128, rows: 73 });
+    expect(Number((opened.database.prepare("SELECT COUNT(*) AS count FROM cell_attributes WHERE grid_version=2 AND layer='terrain'").get() as { count: number }).count)).toBeGreaterThan(0);
+    expect(Number((opened.database.prepare("SELECT COUNT(*) AS count FROM cell_attributes WHERE grid_version=2 AND layer='region' AND value='#336699'").get() as { count: number }).count)).toBeGreaterThan(0);
+    expect(opened.database.prepare("SELECT value FROM cell_attributes WHERE grid_version=1 AND cell_x=200 AND cell_y=100 AND layer='region'").get()).toEqual({ value: "#FF0000" });
+    expect(opened.database.prepare("SELECT COUNT(*) AS count FROM cell_attributes WHERE grid_version=2 AND value='#FF0000'").get()).toEqual({ count: 0 });
+    opened.close();
   });
 
   it("rolls back a failed v6 migration while preserving source bytes", async () => {

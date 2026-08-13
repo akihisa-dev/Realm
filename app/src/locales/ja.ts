@@ -10,7 +10,7 @@ const property = (cause: unknown, key: "code" | "message"): unknown =>
   typeof cause === "object" && cause !== null && key in cause ? Reflect.get(cause, key) : undefined;
 
 export const mapErrorMessage = (code: MapErrorCode, subject: "terrain" | "region" = "terrain"): string =>
-  subject === "region" ? MAP_ERROR_MESSAGES[code].replaceAll("地形", "領域") : MAP_ERROR_MESSAGES[code];
+  subject === "region" ? "セルの領域属性を更新できませんでした。" : MAP_ERROR_MESSAGES[code];
 
 export const localizedErrorMessage = (cause: unknown, fallback: string): string => {
   const code = property(cause, "code");

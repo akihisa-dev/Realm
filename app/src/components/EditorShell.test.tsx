@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRealmBackend, type GeoJsonGeometry, type RealmSnapshot } from "../backend";
+import { MemoryRealmBackend, type RealmSnapshot } from "../backend";
 import { EditorShell } from "./EditorShell";
 
 vi.mock("./MapCanvas", () => ({
@@ -14,9 +14,9 @@ vi.mock("./MapCanvas", () => ({
     showCellGrid?: boolean;
     zoom?: number;
     onCellSelect?: (ids: readonly string[]) => void;
-    onToolChange?: (tool: "terrain" | "region" | "erase") => void;
+    onToolChange?: (tool: "terrain" | "region" | "erase" | "grab") => void;
+    onRegionMove?: (input: { sourceCellIds: string[]; targetCellIds: string[] }) => void;
     onRegionColorChange?: (color: string) => void;
-    onDraw?: (geometry: GeoJsonGeometry) => void;
     onError?: (code: "drawing_self_intersection") => void;
   }) => {
     const initialCellSelect = useRef(props.onCellSelect);
@@ -31,8 +31,9 @@ vi.mock("./MapCanvas", () => ({
       <button type="button" onClick={() => props.onToolChange?.("erase")}>テスト消しゴム</button>
       <button type="button" onClick={() => props.onToolChange?.("terrain")}>テスト地形描画</button>
       <button type="button" onClick={() => props.onToolChange?.("region")}>テスト領域</button>
+      <button type="button" onClick={() => props.onToolChange?.("grab")}>テストグラブ</button>
+      <button type="button" onClick={() => props.onRegionMove?.({ sourceCellIds: ["1:1", "2:1"], targetCellIds: ["4:2", "5:2"] })}>テスト領域移動</button>
       <button type="button" onClick={() => props.onRegionColorChange?.("#2468AC")}>テスト領域色</button>
-      <button type="button" onClick={() => props.onDraw?.({ type: "Polygon", coordinates: [[[0, 0], [4, 0], [4, 4], [0, 0]]] })}>テスト領域描画</button>
     </div>;
   },
 }));
@@ -97,23 +98,65 @@ it("saves a colored region without changing terrain cells and supports undo", as
   renderEditor(backend, snapshot);
 
   fireEvent.click(screen.getByRole("button", { name: "テスト領域" }));
-  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "region");
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-region");
   fireEvent.click(screen.getByRole("button", { name: "テスト領域色" }));
-  fireEvent.click(screen.getByRole("button", { name: "テスト領域描画" }));
+  fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
 
-  await waitFor(async () => expect((await backend.getOpenProject())?.features).toEqual([
-    expect.objectContaining({
-      featureType: "region",
-      name: "領域",
-      properties: { fillColor: "#2468AC", strokeColor: "#2468AC", fillOpacity: 0.25 },
-    }),
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([
+    { cellId: "1:1", attribute: "terrain", value: "terrain" },
+    { cellId: "1:1", attribute: "region", value: "#2468AC" },
+    { cellId: "1:2", attribute: "region", value: "#2468AC" },
   ]));
-  expect(await backend.viewCellAttributes({})).toEqual([{ cellId: "1:1", attribute: "terrain", value: "terrain" }]);
-  await waitFor(() => expect(screen.getByRole("status", { name: "描画対象" })).toHaveTextContent("region"));
+  expect((await backend.getOpenProject())?.features).toEqual([]);
+  expect(screen.getByRole("status", { name: "描画対象" })).toHaveTextContent("");
 
   fireEvent.click(screen.getByRole("button", { name: "戻す" }));
-  await waitFor(async () => expect((await backend.getOpenProject())?.features).toEqual([]));
-  expect(await backend.viewCellAttributes({})).toEqual([{ cellId: "1:1", attribute: "terrain", value: "terrain" }]);
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([
+    { cellId: "1:1", attribute: "terrain", value: "terrain" },
+  ]));
+});
+
+it("moves one colored region mass through the grab callback while preserving terrain", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://grab-editor.realmmap", name: "Grab editor" });
+  await backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "terrain", value: "terrain" });
+  await backend.applyCellAttributes({ cellIds: ["1:1", "2:1"], attribute: "region", value: "#2468AC" });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テストグラブ" }));
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "grab");
+  fireEvent.click(screen.getByRole("button", { name: "テスト領域移動" }));
+
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    { cellId: "1:1", attribute: "terrain", value: "terrain" },
+    { cellId: "4:2", attribute: "region", value: "#2468AC" },
+    { cellId: "5:2", attribute: "region", value: "#2468AC" },
+  ])));
+  expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([
+    { cellId: "1:1", attribute: "region", value: "#2468AC" },
+    { cellId: "2:1", attribute: "region", value: "#2468AC" },
+  ]));
+});
+
+it("restores persisted region cells after a grab save fails", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://grab-failure.realmmap", name: "Grab failure" });
+  await backend.applyCellAttributes({ cellIds: ["1:1", "2:1"], attribute: "region", value: "#2468AC" });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  vi.spyOn(backend, "moveRegionCells").mockRejectedValue(new Error("save failed"));
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テストグラブ" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト領域移動" }));
+
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("領域を移動できませんでした。"));
+  expect(await backend.viewCellAttributes({})).toEqual([
+    { cellId: "1:1", attribute: "region", value: "#2468AC" },
+    { cellId: "2:1", attribute: "region", value: "#2468AC" },
+  ]);
 });
 
 it("shows painted terrain while the save IPC is still pending", async () => {
@@ -163,13 +206,14 @@ it("shows a localized drawing error from the message catalog", async () => {
   expect(screen.getByRole("alert")).not.toHaveTextContent("self-intersect");
 });
 
-it("uses region-specific copy for a genuinely invalid region boundary", async () => {
+it("does not describe a cell-region failure as an invalid freehand boundary", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://region-error.realmmap", name: "Region error" });
   renderEditor(backend, snapshot);
   fireEvent.click(screen.getByRole("button", { name: "テスト領域" }));
   fireEvent.click(screen.getByRole("button", { name: "テスト描画エラー" }));
-  expect(screen.getByRole("alert")).toHaveTextContent("領域の輪郭が交差しています。線が交差しないように描き直してください。");
+  expect(screen.getByRole("alert")).toHaveTextContent("セルの領域属性を更新できませんでした。");
+  expect(screen.getByRole("alert")).not.toHaveTextContent("輪郭が交差");
 });
 
 it("edits terrain directly on the canvas while hiding legacy objects", async () => {

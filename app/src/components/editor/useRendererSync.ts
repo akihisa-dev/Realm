@@ -28,6 +28,7 @@ type RendererSyncOptions = {
   effectivePaintRadius: number;
   eraseRadius: number;
   selectedFeatureIds: readonly string[];
+  regionColor: string;
 };
 
 /** Synchronizes controlled React state into an existing renderer by value. */
@@ -47,6 +48,7 @@ export function useRendererSync({
   effectivePaintRadius,
   eraseRadius,
   selectedFeatureIds,
+  regionColor,
 }: RendererSyncOptions): void {
   const featuresSignature = canonicalValueSignature(features);
   const themeOverridesSignature = canonicalValueSignature(themeOverrides);
@@ -72,5 +74,6 @@ export function useRendererSync({
   useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [adapterRef, selectedCellIdsSignature]);
   useEffect(() => { adapterRef.current?.setCellPaintRadius(effectivePaintRadius); }, [adapterRef, effectivePaintRadius]);
   useEffect(() => { adapterRef.current?.setCellEraseRadius(eraseRadius); }, [adapterRef, eraseRadius]);
+  useEffect(() => { adapterRef.current?.setCellRegionColor?.(regionColor); }, [adapterRef, regionColor]);
   useEffect(() => { adapterRef.current?.setSelectedFeatures(selectedFeatureIds); }, [adapterRef, selectedFeatureIdsSignature]);
 }
