@@ -71,11 +71,6 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .radial-palette-range-button:hover, .radial-palette-range-button:focus-visible { background: #eef8f8; color: #007c89; }
 .radial-palette-range-button[aria-pressed="true"] { background: #d9f0f1; color: #007c89; }
 .radial-palette-eraser-tool { padding: 0; }
-.eraser-mode-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-.eraser-mode-fieldset legend { margin: 0 0 5px; padding: 0; font-weight: 600; }
-.eraser-mode-options { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 5px; }
-.eraser-mode-options label { display: flex; min-width: 0; align-items: center; gap: 6px; font-weight: 400; white-space: normal; overflow-wrap: anywhere; }
-.eraser-mode-options input { flex: 0 0 auto; width: auto; margin: 0; }
 .palette-flyout { position: fixed; z-index: 10; display: grid; visibility: visible; opacity: 1; pointer-events: auto; box-sizing: border-box; grid-template-columns: minmax(0, 1fr) minmax(0, auto); gap: 4px 10px; width: min(176px, calc(100vw - 24px)); max-width: calc(100vw - 24px); padding: 10px 12px; border: 1px solid rgba(29, 32, 37, .16); border-radius: 5px; background: #fff; box-shadow: 0 3px 10px rgba(29, 32, 37, .1); color: #292f35; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; font-size: 12px; }
 .palette-flyout-erase { width: min(220px, calc(100vw - 24px)); grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .eraser-range-label { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 10px; }

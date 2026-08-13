@@ -167,7 +167,7 @@ export const migrationInventory = [
     observable: "OpenLayers produces bounded hex geometry, paint/erase footprints, styles, and finite world coordinates.",
     baselineEvidence: [
       "MapAdapter odd-row-offset centers and closed six-sided cells",
-      "cellErase expands connected erase cells",
+    "MapAdapter shows bounded cell erase footprints and transient previews",
       "drawingGeometry refines the paint footprint",
       "geoJsonGeometry guards bounded EPSG:4326 geometry",
       "styles excludes compatibility feature classes",

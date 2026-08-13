@@ -558,17 +558,17 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     const selected = feature.get("selected") === true;
     const preview = feature.get("preview") === true;
     const paintPreview = feature.get("paintPreview") === true;
-    if (feature.get("erasePreview") === true) return undefined;
+    const erasePreview = feature.get("erasePreview") === true;
     const hasTerrain = has("terrain");
     const hasPhysical = has("forest");
     const hasCountry = has("country");
     const hasRegion = has("region");
-    if (!hasTerrain && !hasPhysical && !hasCountry && !hasRegion && !selected && !preview && !paintPreview) return undefined;
+    if (!hasTerrain && !hasPhysical && !hasCountry && !hasRegion && !selected && !preview && !paintPreview && !erasePreview) return undefined;
     const themeId = getThemeId();
     const overrides = getThemeOverrides();
     const theme = mapTheme(themeId, overrides);
     const variant = stableVariant(String(feature.getId() ?? "")) % 7;
-    const flags = (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0) | (preview ? 64 : 0) | (paintPreview ? 128 : 0);
+    const flags = (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0) | (preview ? 64 : 0) | (paintPreview ? 128 : 0) | (erasePreview ? 256 : 0);
     const key = canonicalValueSignature({
       themeId,
       overrides,
@@ -585,6 +585,7 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     if (hasRegion) styles.push(new Style({ fill: new Fill({ color: `${theme.region}0d` }), stroke: new Stroke({ color: theme.region, width: 1.1, lineDash: [3, 2] }), zIndex: 10 }));
     if (selected) styles.push(new Style({ fill: new Fill({ color: paintPreview ? theme.land : "rgba(7, 140, 152, 0.16)" }), stroke: new Stroke({ color: paintPreview ? theme.landInk : "#078c98", width: 1.4 }), zIndex: 85 }));
     if (preview) styles.push(new Style({ fill: new Fill({ color: "rgba(7, 140, 152, 0.08)" }), stroke: new Stroke({ color: "#078c98", width: 1.2, lineDash: [3, 2] }), zIndex: 84 }));
+    if (erasePreview) styles.push(new Style({ fill: new Fill({ color: "rgba(190, 66, 66, 0.14)" }), stroke: new Stroke({ color: "#be4242", width: 1.4, lineDash: [3, 2] }), zIndex: 86 }));
     cellStyles.set(feature as object, { key, styles });
     return styles;
   };

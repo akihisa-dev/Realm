@@ -89,7 +89,6 @@ export function MapCanvas({
 
   const {
     paintRange,
-    eraseMode,
     eraseRadius,
     radialPalette,
     handleContextMenu,
@@ -120,7 +119,6 @@ export function MapCanvas({
     mode,
     selectedCellIds,
     effectivePaintRadius,
-    eraseMode,
     eraseRadius,
     selectedFeatureIds: controlledFeatureIds,
   });
@@ -142,7 +140,6 @@ export function MapCanvas({
     mode,
     selectedCellIds,
     effectivePaintRadius,
-    eraseMode,
     eraseRadius,
     selectedFeatureIds: controlledFeatureIds,
     onZoomChange,

@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import type { CellAttributeSnapshot, RealmFeature } from "../../backend";
 import { canonicalValueSignature } from "../../canonicalValue";
 import type {
-  CellEraseMode,
   CellGridOptions,
   DrawingOptions,
   GridOptions,
@@ -27,7 +26,6 @@ type RendererSyncOptions = {
   mode: RealmMapMode;
   selectedCellIds: readonly string[];
   effectivePaintRadius: number;
-  eraseMode: CellEraseMode;
   eraseRadius: number;
   selectedFeatureIds: readonly string[];
 };
@@ -47,7 +45,6 @@ export function useRendererSync({
   mode,
   selectedCellIds,
   effectivePaintRadius,
-  eraseMode,
   eraseRadius,
   selectedFeatureIds,
 }: RendererSyncOptions): void {
@@ -74,6 +71,6 @@ export function useRendererSync({
   useEffect(() => { adapterRef.current?.setMode(mode); }, [adapterRef, mode]);
   useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [adapterRef, selectedCellIdsSignature]);
   useEffect(() => { adapterRef.current?.setCellPaintRadius(effectivePaintRadius); }, [adapterRef, effectivePaintRadius]);
-  useEffect(() => { adapterRef.current?.setCellEraseOptions?.({ mode: eraseMode, radiusCells: eraseRadius }); }, [adapterRef, eraseMode, eraseRadius]);
+  useEffect(() => { adapterRef.current?.setCellEraseRadius(eraseRadius); }, [adapterRef, eraseRadius]);
   useEffect(() => { adapterRef.current?.setSelectedFeatures(selectedFeatureIds); }, [adapterRef, selectedFeatureIdsSignature]);
 }

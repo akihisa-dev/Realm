@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactM
 import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
 import { SlidersHorizontal } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { createPortal } from "react-dom";
-import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange, type CellEraseMode } from "../../map/MapAdapter";
+import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
 import { positionPaletteFlyout, type PaletteRect } from "../paletteFlyout";
 
 type RadialPalettePosition = { x: number; y: number };
@@ -58,7 +58,6 @@ export type PaletteFlyoutOptions = {
 
 export type PaletteFlyoutState = {
   paintRange: number;
-  eraseMode: CellEraseMode;
   eraseRadius: number;
   radialPalette: ReactNode;
   paintRangeFlyout: ReactNode;
@@ -78,7 +77,6 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
   const [paintRange, setPaintRange] = useState(CELL_PAINT_RANGE_MIN);
   const [paintRangeFlyoutOpen, setPaintRangeFlyoutOpen] = useState(false);
   const [paintRangeFlyoutPosition, setPaintRangeFlyoutPosition] = useState<FlyoutPosition | null>(null);
-  const [eraseMode, setEraseMode] = useState<CellEraseMode>("grid");
   const [eraseRange, setEraseRange] = useState(CELL_PAINT_RANGE_MIN);
   const [eraseFlyoutOpen, setEraseFlyoutOpen] = useState(false);
   const [eraseFlyoutPosition, setEraseFlyoutPosition] = useState<FlyoutPosition | null>(null);
@@ -175,7 +173,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
       resizeObserver?.disconnect();
       window.removeEventListener("resize", updatePositions);
     };
-  }, [eraseFlyoutOpen, eraseMode, eraseRange, paintRange, paintRangeFlyoutOpen, radialPaletteState]);
+  }, [eraseFlyoutOpen, eraseRange, paintRange, paintRangeFlyoutOpen, radialPaletteState]);
 
   useEffect(() => {
     if (!radialPaletteState) return undefined;
@@ -315,13 +313,6 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
       aria-label="消しゴムの調整"
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <fieldset className="eraser-mode-fieldset">
-        <legend>性質</legend>
-        <span className="eraser-mode-options">
-          <label><input type="radio" name="map-eraser-mode" value="grid" checked={eraseMode === "grid"} onChange={() => setEraseMode("grid")} />グリッドごと</label>
-          <label><input type="radio" name="map-eraser-mode" value="cluster" checked={eraseMode === "cluster"} onChange={() => setEraseMode("cluster")} />塊ごと</label>
-        </span>
-      </fieldset>
       <div className="eraser-range-label">
         <label htmlFor="map-eraser-range">太さ</label>
         <output htmlFor="map-eraser-range">{eraseRange}セル</output>
@@ -333,7 +324,6 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange }: Pal
 
   return {
     paintRange,
-    eraseMode,
     eraseRadius: cellPaintRadiusForRange(eraseRange),
     radialPalette,
     paintRangeFlyout,

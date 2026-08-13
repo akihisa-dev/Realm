@@ -30,13 +30,12 @@ import { createCellStyle, createFeatureStyle } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
 import { paintMapTexture } from "./mapTexture";
 import { assertGeometryWithinWorld } from "./geometryGuard";
-import { expandConnectedEraseCells } from "./cellErase";
 import { splitTerrainGridSegments, terrainOutlineSegments } from "./terrainOutline";
 import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
-import type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
+import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 
-export type { CellEraseMode, CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
+export type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellPaintSize } from "./gridGeometry";
 export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, availableViewportSize, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
@@ -160,7 +159,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private gridOptions: GridOptions = { ...DEFAULT_GRID_OPTIONS };
   private gridVisible = true;
   private cellPaintRadius: number = CELL_PAINT_RADII.medium;
-  private cellEraseMode: CellEraseMode = "grid";
   private cellEraseRadius = 0;
   private paint: CancelablePointerInteraction | null = null;
   private eraser: PointerInteraction | null = null;
@@ -747,8 +745,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   private finishPaintStroke(): void {
     if (this.paintLastPoint === null) return;
-    let selected = [...this.paintStrokeSelection];
-    if (this.activeMode === "cell-erase" && this.cellEraseMode === "cluster") selected = expandConnectedEraseCells(this.cellAttributesById, selected);
+    const selected = [...this.paintStrokeSelection];
     this.setSelectedCells(selected);
     for (const listener of this.cellSelectListeners) listener([...selected]);
     this.paint?.cancelSequence();
@@ -844,11 +841,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.refreshHoveredCells();
   }
 
-  setCellEraseOptions(options: { mode: CellEraseMode; radiusCells: number }): void {
-    if (options.mode !== "grid" && options.mode !== "cluster") return;
-    if (!Number.isFinite(options.radiusCells)) return;
-    this.cellEraseMode = options.mode;
-    this.cellEraseRadius = Math.max(0, Math.min(32, options.radiusCells));
+  setCellEraseRadius(radiusCells: number): void {
+    if (!Number.isFinite(radiusCells)) return;
+    this.cellEraseRadius = Math.max(0, Math.min(32, radiusCells));
     this.refreshHoveredCells();
   }
 

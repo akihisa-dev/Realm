@@ -3,7 +3,6 @@ import type { CellAttributeSnapshot, GeoJsonGeometry, RealmFeature } from "../..
 import type { MapRaster } from "../../exportArtifacts";
 import type { ExportCanvasSize } from "../../map/contracts";
 import type {
-  CellEraseMode,
   CellGridOptions,
   DrawingOptions,
   GridOptions,
@@ -33,7 +32,6 @@ export type MapAdapterLifecycleOptions = {
   mode: RealmMapMode;
   selectedCellIds: readonly string[];
   effectivePaintRadius: number;
-  eraseMode: CellEraseMode;
   eraseRadius: number;
   selectedFeatureIds: readonly string[];
   onZoomChange: (zoom: number) => void;
@@ -72,7 +70,6 @@ export function useMapAdapterLifecycle({
   mode,
   selectedCellIds,
   effectivePaintRadius,
-  eraseMode,
   eraseRadius,
   selectedFeatureIds,
   onZoomChange,
@@ -151,7 +148,7 @@ export function useMapAdapterLifecycle({
     adapter.setCellAttributes(cellAttributes);
     adapter.setSelectedCells(selectedCellIds);
     adapter.setCellPaintRadius(effectivePaintRadius);
-    adapter.setCellEraseOptions?.({ mode: eraseMode, radiusCells: eraseRadius });
+    adapter.setCellEraseRadius(eraseRadius);
     adapter.setSelectedFeatures(selectedFeatureIds);
     onZoomChangeRef.current(adapter.getZoom());
 

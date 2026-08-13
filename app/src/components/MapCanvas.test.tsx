@@ -26,7 +26,7 @@ const createPaletteRenderer = (): RealmMapRenderer => ({
   setSelectedFeatures: vi.fn(),
   setSelectedCells: vi.fn(),
   setCellAttributes: vi.fn(),
-  setCellEraseOptions: vi.fn(),
+  setCellEraseRadius: vi.fn(),
   onDraw: vi.fn(() => vi.fn()),
   onSelectFeatures: vi.fn(() => vi.fn()),
   onSelect: vi.fn(() => vi.fn()),
@@ -171,6 +171,7 @@ describe("MapCanvas", () => {
       setMode: vi.fn(),
       setDrawingOptions: vi.fn(),
       setCellPaintRadius: vi.fn(),
+      setCellEraseRadius: vi.fn(),
       setSelected: vi.fn(),
       setSelectedFeatures: vi.fn(),
       setSelectedCells: vi.fn(),
@@ -332,11 +333,11 @@ describe("MapCanvas", () => {
     vi.useRealTimers();
   });
 
-  it("moves eraser selection into the map palette and exposes mode and thickness controls", () => {
+  it("moves eraser selection into the map palette and exposes thickness control", () => {
     const renderer: RealmMapRenderer = {
       getZoom: vi.fn(() => 1), setZoom: vi.fn(), resetView: vi.fn(), setFeatures: vi.fn(), setTheme: vi.fn(), setThemeOverrides: vi.fn(),
       setGridVisible: vi.fn(), setGridOptions: vi.fn(), setCellGridVisible: vi.fn(), setCellGridOptions: vi.fn(), setAssets: vi.fn(), setLayerVisibility: vi.fn(),
-      setMode: vi.fn(), setDrawingOptions: vi.fn(), setCellPaintRadius: vi.fn(), setCellEraseOptions: vi.fn(), setSelected: vi.fn(), setSelectedFeatures: vi.fn(), setSelectedCells: vi.fn(), setCellAttributes: vi.fn(),
+      setMode: vi.fn(), setDrawingOptions: vi.fn(), setCellPaintRadius: vi.fn(), setCellEraseRadius: vi.fn(), setSelected: vi.fn(), setSelectedFeatures: vi.fn(), setSelectedCells: vi.fn(), setCellAttributes: vi.fn(),
       onDraw: vi.fn(() => vi.fn()), onSelectFeatures: vi.fn(() => vi.fn()), onSelect: vi.fn(() => vi.fn()), onCellSelect: vi.fn(() => vi.fn()), onModifyFeatures: vi.fn(() => vi.fn()), onModify: vi.fn(() => vi.fn()), onEraseFeatures: vi.fn(() => vi.fn()), onErase: vi.fn(() => vi.fn()), onLayerShift: vi.fn(() => vi.fn()), onError: vi.fn(() => vi.fn()), onZoomChange: vi.fn(() => vi.fn()), updateSize: vi.fn(), exportRaster: vi.fn(async () => ({ bytes: [], width: 1, height: 1 })), dispose: vi.fn(),
     };
     const onToolChange = vi.fn();
@@ -350,15 +351,12 @@ describe("MapCanvas", () => {
     expect(eraserButton).toHaveAttribute("aria-expanded", "true");
     const eraseFlyout = screen.getByRole("group", { name: "消しゴムの調整" });
     expect(eraseFlyout).toHaveClass("palette-flyout-erase");
-    expect(screen.getByRole("group", { name: "消しゴムの調整" }).querySelector("legend")).toHaveTextContent("性質");
-    expect(screen.getByRole("radio", { name: "グリッドごと" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "塊ごと" })).not.toBeChecked();
+    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     fireEvent.click(paintButton);
     fireEvent.click(eraserButton);
     expect(screen.getByRole("group", { name: "消しゴムの調整" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("radio", { name: "塊ごと" }));
     fireEvent.change(screen.getByRole("slider", { name: "消しゴムの太さ" }), { target: { value: "4" } });
-    expect(renderer.setCellEraseOptions).toHaveBeenLastCalledWith({ mode: "cluster", radiusCells: 3 });
+    expect(renderer.setCellEraseRadius).toHaveBeenLastCalledWith(3);
   });
 
   it("keeps the range flyout in the body portal and repositions it after real rects arrive", () => {

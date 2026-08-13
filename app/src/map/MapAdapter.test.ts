@@ -77,7 +77,7 @@ describe("RealmMapAdapter", () => {
     const widePreviewIds = cellIdsWithinPaintPosition(center, 4);
     expect(widePreviewIds.every((id) => cellLayer.getSource()?.getFeatureById(id)?.get("preview") === true)).toBe(true);
 
-    adapter.setCellEraseOptions({ mode: "grid", radiusCells: 4 });
+    adapter.setCellEraseRadius(4);
     adapter.setMode("cell-erase");
     expect(widePreviewIds.every((id) => {
       const feature = cellLayer.getSource()?.getFeatureById(id);
@@ -331,7 +331,7 @@ describe("RealmMapAdapter", () => {
     expect(edgeFootprint).not.toContain("0:-1");
   });
 
-  it("keeps erase hover and drag previews unpainted", () => {
+  it("shows erase hover and drag footprints as deletion previews", () => {
     const host = document.createElement("div");
     host.style.width = "640px";
     host.style.height = "480px";
@@ -347,7 +347,9 @@ describe("RealmMapAdapter", () => {
     const hovered = cellLayer.getSource()?.getFeatureById("10:10");
     expect(hovered?.get("erasePreview")).toBe(true);
     expect(cellLayer.getSource()?.getFeatures().filter((feature) => feature.get("erasePreview")).map((feature) => feature.getId())).toEqual(["10:10"]);
-    expect(style?.(hovered!, 1)).toBeUndefined();
+    const hoveredStyle = (style?.(hovered!, 1) as Style[]).at(-1)!;
+    expect(hoveredStyle.getFill()?.getColor()).toBe("rgba(190, 66, 66, 0.14)");
+    expect(hoveredStyle.getStroke()?.getColor()).toBe("#be4242");
 
     const cellPaint = adapter.getMap().getInteractions().getArray().at(-1);
     const pointerDown = new MouseEvent("pointerdown", { button: 0, bubbles: true });
@@ -356,13 +358,13 @@ describe("RealmMapAdapter", () => {
     const selected = cellLayer.getSource()?.getFeatureById("10:10");
     expect(selected?.get("selected")).not.toBe(true);
     expect(selected?.get("erasePreview")).toBe(true);
-    expect(style?.(selected!, 1)).toBeUndefined();
+    expect((style?.(selected!, 1) as Style[]).at(-1)?.getStroke()?.getLineDash()).toEqual([3, 2]);
 
     cellPaint?.handleEvent({ type: "pointerdrag", originalEvent: pointerDown, coordinate: cellCenter(10, 11), activePointers: [pointerDown] } as never);
     const dragged = cellLayer.getSource()?.getFeatureById("11:10");
     expect(dragged?.get("erasePreview")).toBe(true);
     expect(cellLayer.getSource()?.getFeatures().filter((feature) => feature.get("erasePreview")).map((feature) => feature.getId())).toEqual(["10:10", "11:10"]);
-    expect(style?.(dragged!, 1)).toBeUndefined();
+    expect((style?.(dragged!, 1) as Style[]).at(-1)?.getFill()?.getColor()).toBe("rgba(190, 66, 66, 0.14)");
 
     adapter.dispose();
     host.remove();
@@ -399,32 +401,6 @@ describe("RealmMapAdapter", () => {
     expect(erased).toHaveBeenCalledOnce();
     expect(erased.mock.calls[0]?.[0]).toContain("0:0");
 
-    adapter.dispose();
-    host.remove();
-  });
-
-  it("erases one connected terrain cluster while leaving a separated cell intact", () => {
-    const host = document.createElement("div");
-    host.style.width = "640px";
-    host.style.height = "480px";
-    document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
-    adapter.setCellAttributes([
-      { cellId: "10:10", attribute: "terrain", value: "terrain" },
-      { cellId: "11:10", attribute: "terrain", value: "terrain" },
-      { cellId: "13:10", attribute: "terrain", value: "terrain" },
-    ]);
-    adapter.setCellEraseOptions({ mode: "cluster", radiusCells: 0 });
-    adapter.setMode("cell-erase");
-    const erased = vi.fn();
-    adapter.onCellSelect(erased);
-    const interaction = adapter.getMap().getInteractions().getArray().at(-1);
-    const pointer = new MouseEvent("pointerdown", { button: 0, bubbles: true });
-    Object.defineProperty(pointer, "isPrimary", { value: true });
-    const center = cellCenter(10, 10);
-    interaction?.handleEvent({ type: "pointerdown", originalEvent: pointer, coordinate: center, activePointers: [pointer] } as never);
-    interaction?.handleEvent({ type: "pointerup", originalEvent: pointer, coordinate: center, activePointers: [] } as never);
-    expect(erased).toHaveBeenCalledWith(["10:10", "11:10"]);
     adapter.dispose();
     host.remove();
   });
