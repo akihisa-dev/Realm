@@ -46,13 +46,11 @@ const DEFAULT_CELL_GRID_OPTIONS: CellGridOptions = { color: "#d1d7dc", width: 0.
 const samePosition = (first: Position, second: Position): boolean => first[0] === second[0] && first[1] === second[1];
 
 /**
- * Returns the resolution that covers an extent in both viewport dimensions.
- * OpenLayers' `getResolutionForExtent` returns a contain/letterbox resolution;
- * the editor instead keeps the fixed editing grid flush with the
- * padding-adjusted viewport's top and bottom, allowing the world edges to
- * clip only when the viewport is wider than the bounded EPSG:4326 world.
+ * Returns the resolution that fits an extent inside both viewport dimensions.
+ * The larger axis ratio is required so the complete bounded world remains
+ * visible at relative zoom 1; the other axis may leave letterbox space.
  */
-export const resolutionForCoveringExtent = (
+export const resolutionForFittingExtent = (
   extent: readonly [number, number, number, number],
   size: readonly [number, number],
 ): number => {
@@ -62,7 +60,7 @@ export const resolutionForCoveringExtent = (
   const extentWidth = extent[2] - extent[0];
   const extentHeight = extent[3] - extent[1];
   if (!Number.isFinite(extentWidth) || !Number.isFinite(extentHeight) || extentWidth <= 0 || extentHeight <= 0) return Number.NaN;
-  return Math.min(extentWidth / width, extentHeight / height);
+  return Math.max(extentWidth / width, extentHeight / height);
 };
 
 class CancelablePointerInteraction extends PointerInteraction {
@@ -1075,14 +1073,15 @@ export class RealmMapAdapter implements RealmMapRenderer {
       Math.max(1, width - this.fitPadding * 2),
       Math.max(1, height - this.fitPadding * 2),
     ];
-    const fitResolution = resolutionForCoveringExtent(this.worldExtent, availableSize);
+    const fitResolution = resolutionForFittingExtent(this.worldExtent, availableSize);
     if (!Number.isFinite(fitResolution)) return;
     const fitZoom = view.getZoomForResolution(fitResolution);
     if (fitZoom === undefined) return;
 
-    // UI scale 1 covers the complete editing grid vertically. On a wide
-    // viewport the horizontal world edges are intentionally clipped instead
-    // of leaving letterbox space above and below the grid.
+    // UI scale 1 fits the complete editing grid in both dimensions. The
+    // bounded world is never zoomed out further, so a narrow or wide viewport
+    // may leave letterbox space on its secondary axis but cannot reveal extra
+    // empty world beyond the fixed extent.
     this.baseZoom = fitZoom - 1;
     view.setMinZoom(this.baseZoom + 1);
     view.setMaxZoom(this.baseZoom + 8);

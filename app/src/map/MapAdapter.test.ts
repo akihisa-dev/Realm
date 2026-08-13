@@ -1,4 +1,4 @@
-import { CELL_PAINT_RANGE_MAX, CELL_GRID_CELL_COUNT, WORLD_EXTENT, RealmMapAdapter, assertGeometryWithinWorld, cellPaintRadiusForRange, cellCenter, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, isGeometryWithinWorld, resolutionForCoveringExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
+import { CELL_PAINT_RANGE_MAX, CELL_GRID_CELL_COUNT, WORLD_EXTENT, RealmMapAdapter, assertGeometryWithinWorld, cellPaintRadiusForRange, cellCenter, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, isGeometryWithinWorld, resolutionForFittingExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
@@ -17,11 +17,11 @@ import Point from "ol/geom/Point";
 import Style from "ol/style/Style";
 
 describe("RealmMapAdapter", () => {
-  it("uses a cover resolution so the bounded world reaches both viewport edges", () => {
-    expect(resolutionForCoveringExtent([-180, -90, 180, 90], [1700, 1070])).toBeCloseTo(180 / 1070);
-    expect(resolutionForCoveringExtent([-180, -90, 180, 90], [900, 400])).toBeCloseTo(360 / 900);
-    expect(resolutionForCoveringExtent([-180, -90, 180, 90], [400, 900])).toBeCloseTo(180 / 900);
-    expect(resolutionForCoveringExtent([-180, -90, 180, 90], [0, 900])).toBeNaN();
+  it("uses a fit resolution so the complete bounded world stays inside the viewport", () => {
+    expect(resolutionForFittingExtent([-180, -90, 180, 90], [1700, 1070])).toBeCloseTo(360 / 1700);
+    expect(resolutionForFittingExtent([-180, -90, 180, 90], [900, 400])).toBeCloseTo(180 / 400);
+    expect(resolutionForFittingExtent([-180, -90, 180, 90], [400, 900])).toBeCloseTo(360 / 400);
+    expect(resolutionForFittingExtent([-180, -90, 180, 90], [0, 900])).toBeNaN();
   });
 
   it("selects points, crossing lines, and contained polygons with a lasso", () => {
@@ -780,9 +780,14 @@ describe("RealmMapAdapter", () => {
     adapter.updateSize();
     expect(adapter.getZoom()).toBe(1);
     const view = adapter.getMap().getView();
-    const fittedResolution = resolutionForCoveringExtent([-180, -90, 180, 90], [624, 464]);
+    const fittedResolution = resolutionForFittingExtent([-180, -90, 180, 90], [624, 464]);
     expect(view.getResolution()).toBeCloseTo(fittedResolution);
     expect(view.getZoom()).toBeCloseTo(view.getMinZoom());
+    const initialFitExtent = view.calculateExtent([640, 480]);
+    expect(initialFitExtent[0]).toBeLessThanOrEqual(WORLD_EXTENT[0]);
+    expect(initialFitExtent[1]).toBeLessThanOrEqual(WORLD_EXTENT[1]);
+    expect(initialFitExtent[2]).toBeGreaterThanOrEqual(WORLD_EXTENT[2]);
+    expect(initialFitExtent[3]).toBeGreaterThanOrEqual(WORLD_EXTENT[3]);
     view.setViewportSize([640, 480]);
     view.setCenter([400, 220]);
     const constrainedCenter = view.getCenter();
@@ -801,10 +806,17 @@ describe("RealmMapAdapter", () => {
     adapter.getMap().setSize([900, 400]);
     adapter.updateSize();
     expect(adapter.getZoom()).toBe(3);
-    const resizedFitResolution = resolutionForCoveringExtent([-180, -90, 180, 90], [884, 384]);
+    const resizedFitResolution = resolutionForFittingExtent([-180, -90, 180, 90], [884, 384]);
     const resizedFitZoom = view.getZoomForResolution(resizedFitResolution);
     expect(resizedFitZoom).not.toBeUndefined();
     expect(view.getResolution()).toBeCloseTo(view.getResolutionForZoom((resizedFitZoom ?? 0) + 2));
+    adapter.setZoom(1);
+    const resizedFitExtent = view.calculateExtent([900, 400]);
+    expect(resizedFitExtent[0]).toBeLessThanOrEqual(WORLD_EXTENT[0]);
+    expect(resizedFitExtent[1]).toBeLessThanOrEqual(WORLD_EXTENT[1]);
+    expect(resizedFitExtent[2]).toBeGreaterThanOrEqual(WORLD_EXTENT[2]);
+    expect(resizedFitExtent[3]).toBeGreaterThanOrEqual(WORLD_EXTENT[3]);
+    expect(view.getZoom()).toBeCloseTo(view.getMinZoom());
     adapter.dispose();
     adapter.dispose();
     expect(adapter.getMap().getTarget()).toBeNull();
