@@ -110,7 +110,7 @@ const nudgeGeometry = (geometry: GeoJsonGeometry, offset: Position): GeoJsonGeom
 export class RealmMapAdapter implements RealmMapRenderer {
   private readonly map: Map;
   private readonly worldExtent = WORLD_EXTENT;
-  private readonly fitPadding = 8;
+  private readonly fitPadding = 40;
   private activeThemeId: MapThemeId = DEFAULT_MAP_THEME_ID;
   private themeOverrides: ThemeOverrides = {};
   private readonly hiddenFeatureTypes = new Set<RealmFeature["featureType"]>();
