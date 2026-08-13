@@ -483,6 +483,11 @@ describe("RealmMapAdapter", () => {
     expect(cellGridLayer.getVisible()).toBe(true);
     adapter.setCellGridOptions({ color: "#203040", width: 0.75 });
     expect(cellGridLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(MultiLineString);
+    const insideGridLayer = adapter.getMap().getLayers().item(5) as VectorLayer;
+    const outsideStyle = (cellGridLayer.getStyleFunction()?.(new Feature(), 1) as Style[])[0]!;
+    const insideStyle = (insideGridLayer.getStyleFunction()?.(new Feature(), 1) as Style[])[0]!;
+    expect(outsideStyle.getStroke()?.getColor()).toBe("rgba(32, 48, 64, 0.58)");
+    expect(insideStyle.getStroke()?.getColor()).toBe("rgba(32, 48, 64, 0.28)");
     expect(() => adapter.setCellGridOptions({ color: "gray", width: 0.75 })).toThrow(/RRGGBB/);
     expect(() => adapter.setCellGridOptions({ color: "#203040", width: 0.1 })).toThrow(/width/);
     const firstEdges = hexLayer.getSource()?.getFeatures().map((feature) => feature.getId());
@@ -601,7 +606,7 @@ describe("RealmMapAdapter", () => {
     adapter.setGridVisible(false);
     expect(graticule.getVisible()).toBe(false);
     adapter.setGridVisible(true);
-    expect(adapter.getMap().getLayers().getLength()).toBe(6);
+    expect(adapter.getMap().getLayers().getLength()).toBe(7);
     adapter.setFeatures([
       { id: "city-1", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [12, 34] } },
       { id: "river-1", featureType: "river", name: "River", geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] } },
@@ -718,7 +723,15 @@ describe("RealmMapAdapter", () => {
       { cellId: "3:0", attribute: "country", value: "A" },
       { cellId: "4:0", attribute: "region", value: "B" },
     ]);
-    const terrainOutlineLayer = adapter.getMap().getLayers().item(5) as VectorLayer;
+    const insideGridLayer = adapter.getMap().getLayers().item(5) as VectorLayer;
+    const outsideGridStyles = fixedCellGridLayer.getStyleFunction()?.(fixedCellGridLayer.getSource()?.getFeatures()[0]!, 1) as Style[];
+    const insideGridStyles = insideGridLayer.getStyleFunction()?.(insideGridLayer.getSource()?.getFeatures()[0]!, 1) as Style[];
+    const outsideGridStyle = outsideGridStyles[0]!;
+    const insideGridStyle = insideGridStyles[0]!;
+    expect(outsideGridStyle.getStroke()?.getColor()).toBe("rgba(209, 215, 220, 0.58)");
+    expect(insideGridStyle.getStroke()?.getColor()).toBe("rgba(209, 215, 220, 0.28)");
+    expect(insideGridLayer.getVisible()).toBe(true);
+    const terrainOutlineLayer = adapter.getMap().getLayers().item(6) as VectorLayer;
     const terrainOutline = terrainOutlineLayer.getSource()?.getFeatures()[0];
     expect(terrainOutline?.getGeometry()).toBeInstanceOf(MultiLineString);
     const outlineStyle = terrainOutlineLayer.getStyleFunction()?.(terrainOutline!, 1) as Style;

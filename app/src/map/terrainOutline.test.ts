@@ -1,5 +1,5 @@
-import { cellId } from "./gridGeometry";
-import { terrainOutlineSegments } from "./terrainOutline";
+import { cellId, cellPolygon } from "./gridGeometry";
+import { splitTerrainGridSegments, terrainOutlineSegments } from "./terrainOutline";
 
 describe("terrainOutlineSegments", () => {
   it("keeps every edge of one interior terrain cell", () => {
@@ -18,5 +18,18 @@ describe("terrainOutlineSegments", () => {
       "outside",
     ]);
     expect(segments).toHaveLength(12);
+  });
+
+  it("separates grid edges inside terrain from those outside it", () => {
+    const first = cellPolygon(10, 10)!;
+    const second = cellPolygon(20, 20)!;
+    const fixed = [
+      [first[0]!, first[1]!],
+      [first[1]!, first[2]!],
+      [second[0]!, second[1]!],
+    ];
+    const split = splitTerrainGridSegments(fixed, [cellId(10, 10)]);
+    expect(split.inside).toHaveLength(2);
+    expect(split.outside).toHaveLength(1);
   });
 });

@@ -2,6 +2,10 @@ import type { Position } from "../backend";
 import { cellPolygon, parseCellId } from "./gridGeometry";
 
 export type TerrainOutlineSegment = [Position, Position];
+export type TerrainGridSegments = {
+  inside: TerrainOutlineSegment[];
+  outside: TerrainOutlineSegment[];
+};
 
 const coordinateKey = ([x, y]: Position): string => `${x.toFixed(9)},${y.toFixed(9)}`;
 
@@ -33,4 +37,27 @@ export const terrainOutlineSegments = (cellIds: Iterable<string>): TerrainOutlin
     }
   }
   return [...edges.values()].filter(({ count }) => count === 1).map(({ segment }) => segment);
+};
+
+/** Splits the fixed editing grid into edges inside terrain and outside it. */
+export const splitTerrainGridSegments = (
+  fixedSegments: readonly Position[][],
+  cellIds: Iterable<string>,
+): TerrainGridSegments => {
+  const insideKeys = new Set<string>();
+  for (const id of new Set(cellIds)) {
+    const position = parseCellId(id);
+    if (!position) continue;
+    const ring = cellPolygon(...position);
+    if (!ring) continue;
+    for (let index = 1; index < ring.length; index += 1) insideKeys.add(edgeKey(ring[index - 1]!, ring[index]!));
+  }
+  const result: TerrainGridSegments = { inside: [], outside: [] };
+  for (const segment of fixedSegments) {
+    const start = segment[0];
+    const end = segment[1];
+    if (!start || !end) continue;
+    result[insideKeys.has(edgeKey(start, end)) ? "inside" : "outside"].push([[...start], [...end]]);
+  }
+  return result;
 };
