@@ -2,16 +2,20 @@ import { MakerDMG } from "@electron-forge/maker-dmg";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 
 import { ignoreRealmPackagePath, realmPackageExtraResources } from "./scripts/package-contents";
+import { sanitizeMacInfoPlistHook } from "./scripts/sanitize-macos-info-plist";
 
 const config = {
   outDir: process.env.REALM_FORGE_OUT_DIR ?? "out",
   packagerConfig: {
     asar: true,
     appBundleId: "dev.akihisa.realm",
-    osxMinimumSystemVersion: "14.0.0",
     appCategoryType: "public.app-category.graphics-design",
     name: "Realm",
     extendInfo: {
+      LSMinimumSystemVersion: "14.0",
+      NSAppTransportSecurity: {
+        NSAllowsArbitraryLoads: false,
+      },
       CFBundleDocumentTypes: [{
         CFBundleTypeName: "Realm World Map",
         CFBundleTypeRole: "Editor",
@@ -33,6 +37,7 @@ const config = {
     icon: "assets/icons/icon",
     extraResource: realmPackageExtraResources(process.cwd()),
     ignore: ignoreRealmPackagePath,
+    afterComplete: [sanitizeMacInfoPlistHook],
   },
   makers: [new MakerDMG({})],
   plugins: [

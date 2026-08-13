@@ -20,6 +20,8 @@ describe("window security and options", () => {
     expect(security.isAllowedRendererNavigation("http://127.0.0.1:1421/route", "file:///app/index.html", "http://127.0.0.1:1420")).toBe(false);
     expect(security.isSafeExternalUrl("https://example.com")).toBe(false);
     expect(security.rendererContentSecurityPolicy()).toContain("script-src 'self'");
+    expect(security.rendererContentSecurityPolicy()).not.toContain("script-src 'self' 'unsafe-inline'");
+    expect(security.rendererContentSecurityPolicy("http://127.0.0.1:1420")).toContain("script-src 'self' 'unsafe-inline'");
     expect(security.rendererContentSecurityPolicy("http://127.0.0.1:1420")).toContain("ws://127.0.0.1:1420");
   });
 

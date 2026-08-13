@@ -79,7 +79,7 @@ export function rendererContentSecurityPolicy(devServerUrl?: string): string {
     "object-src 'none'",
     "frame-ancestors 'none'",
     "form-action 'none'",
-    "script-src 'self'",
+    `script-src 'self'${devServerUrl ? " 'unsafe-inline'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",

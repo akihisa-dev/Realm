@@ -44,6 +44,22 @@ if (metadata.CFBundleIdentifier !== "dev.akihisa.realm") {
 if (metadata.CFBundleShortVersionString !== packageJson.version) {
   throw new Error(`Bundle version mismatch: expected ${packageJson.version}, found ${metadata.CFBundleShortVersionString ?? "missing"}`);
 }
+const minimumSystemVersion = Number.parseFloat(metadata.LSMinimumSystemVersion ?? "");
+if (!Number.isFinite(minimumSystemVersion) || minimumSystemVersion < 14) {
+  throw new Error(`Packaged minimum macOS version must be 14 or later: ${metadata.LSMinimumSystemVersion ?? "missing"}`);
+}
+if (metadata.NSAppTransportSecurity?.NSAllowsArbitraryLoads !== false) {
+  throw new Error("Packaged app must not allow arbitrary network transport loads.");
+}
+for (const key of [
+  "NSAudioCaptureUsageDescription",
+  "NSBluetoothAlwaysUsageDescription",
+  "NSBluetoothPeripheralUsageDescription",
+  "NSCameraUsageDescription",
+  "NSMicrophoneUsageDescription",
+]) {
+  if (Object.hasOwn(metadata, key)) throw new Error(`Packaged app must not declare unused macOS permission ${key}.`);
+}
 const dmg = path.join(appDir, macBuildTarget.outputDirectory, macBuildTarget.dmgDirectory, forgeDmgFileName(packageJson.version));
 await access(dmg);
 console.log(`[check:package] OK: ${appBundle} (arm64, ${report.asarFileCount} asar files, metadata and legal resources checked)`);

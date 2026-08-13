@@ -68,9 +68,16 @@ From Finder, use the executable shortcuts at the repository root:
 - Double-click [`Realmをテスト起動.command`](../Realmをテスト起動.command) to start the Electron application in development mode. It does not open a `.realmmap` automatically.
 - Double-click [`Realmをビルド.command`](../Realmをビルド.command) to build and inspect the Apple Silicon `.app` and DMG without launching the packaged application.
 
-Both shortcuts use the pinned local environment and the already-installed dependencies under `app/`; they never install tools or packages automatically. Before starting, Realm compares the committed `pnpm-lock.yaml` with pnpm's installed lock snapshot. A dependency change fails closed and asks for `pnpm install --frozen-lockfile`, while an application-version-only change does not invalidate an otherwise current installation. When the Homebrew setup above is present, the shortcuts resolve its pinned Node.js path even if Finder did not inherit the interactive shell's `PATH`. The Terminal window waits for Return after completion so that errors remain visible. Their reusable shell entrypoints are `script/build_and_run.sh` and `script/build_macos.sh`; the Codex Run action uses the former.
+Both shortcuts use the pinned local environment and the already-installed dependencies under `app/`; they never install tools or packages automatically. Before starting, Realm compares the committed `pnpm-lock.yaml` with pnpm's installed lock snapshot. A dependency change fails closed and asks for `pnpm install --frozen-lockfile`, while an application-version-only change does not invalidate an otherwise current installation. When the Homebrew setup above is present, the shortcuts resolve its pinned Node.js path even if Finder did not inherit the interactive shell's `PATH`. The development launcher uses a repository-specific directory under the system temporary area for Electron `userData`; it rejects symlinks, another owner, non-directories, and permissions other than `0700`. Development worlds therefore never share the packaged application's user-data directory. The Terminal window waits for Return after completion so that errors remain visible. Their reusable shell entrypoints are `script/build_and_run.sh` and `script/build_macos.sh`; the Codex Run action uses the former.
 
 Any test that requires Realm to be running must use `Realmをテスト起動.command` or its `script/build_and_run.sh` entrypoint. Do not test with a built, packaged, or installed `.app`. Package verification is static and may inspect the bundle, executable architecture, metadata, signatures, DMG, and checksums without launching it.
+
+With explicit permission to launch the development application, `pnpm smoke:electron`
+starts Electron with a fresh temporary `userData` directory, authenticates a fixed
+preload readiness channel, verifies the main window, renderer, preload API, and empty
+library, writes a JSON report, and exits. `pnpm smoke:package` is intentionally static
+in normal and release gates: it records executable and platform evidence without
+launching the packaged app.
 
 The dependency and license checks inspect the pnpm lockfile and packaged
 Electron/Vite graph. They fail closed on stale package artifacts, missing

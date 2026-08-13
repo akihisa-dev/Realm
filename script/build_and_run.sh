@@ -207,4 +207,15 @@ release_state_lock
 trap - EXIT
 
 echo "Starting Realm in development mode..."
+STATE_KEY="$(/usr/bin/stat -f '%d-%i' "$ROOT_DIR")"
+REALM_DEV_USER_DATA_DIR="${TMPDIR:-/tmp}/dev.akihisa.realm-${UID}-${STATE_KEY}.user-data"
+if [[ -L "$REALM_DEV_USER_DATA_DIR" ]]; then fail "development user data path must not be a symlink: $REALM_DEV_USER_DATA_DIR"; fi
+if [[ -e "$REALM_DEV_USER_DATA_DIR" ]]; then
+  [[ -d "$REALM_DEV_USER_DATA_DIR" ]] || fail "development user data path is not a directory: $REALM_DEV_USER_DATA_DIR"
+  [[ "$(/usr/bin/stat -f '%Su' "$REALM_DEV_USER_DATA_DIR")" == "$(id -un)" ]] || fail "development user data path is not owned by the current user"
+  [[ "$(/usr/bin/stat -f '%Lp' "$REALM_DEV_USER_DATA_DIR")" == "700" ]] || fail "development user data path permissions must be 700"
+else
+  mkdir -m 700 "$REALM_DEV_USER_DATA_DIR"
+fi
+export REALM_DEV_USER_DATA_DIR
 exec pnpm start

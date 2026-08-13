@@ -9,7 +9,7 @@ import { installWindowSecurityPolicy, isAllowedRendererNavigation } from "./wind
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
-export function createMainWindow(app: Pick<App, "quit">): BrowserWindow {
+export function createMainWindow(app: Pick<App, "quit">, options: { load?: boolean } = {}): BrowserWindow {
   const preloadPath = path.join(__dirname, "preload.js");
   const rendererPath = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
   const window = new BrowserWindow(createMainWindowOptions(preloadPath));
@@ -17,11 +17,13 @@ export function createMainWindow(app: Pick<App, "quit">): BrowserWindow {
   installWindowSecurityPolicy(window, (url) => isAllowedRendererNavigation(url, rendererUrl, MAIN_WINDOW_VITE_DEV_SERVER_URL), { devServerUrl: MAIN_WINDOW_VITE_DEV_SERVER_URL });
   showWhenReady(window);
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void loadDevServerUrlWithRetry(window, MAIN_WINDOW_VITE_DEV_SERVER_URL);
-  } else {
-    void window.loadFile(rendererPath);
-  }
+  if (options.load !== false) loadMainWindow(window);
   window.on("closed", () => app.quit());
   return window;
+}
+
+export function loadMainWindow(window: BrowserWindow): void {
+  const rendererPath = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) void loadDevServerUrlWithRetry(window, MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  else void window.loadFile(rendererPath);
 }

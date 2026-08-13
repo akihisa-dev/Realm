@@ -4,7 +4,9 @@ import { pathToFileURL } from "node:url";
 
 import { createRealmCommands } from "./commands/realmCommands";
 import { registerIpcHandlers, type RealmIpcRegistration } from "./ipc/registerIpcHandlers";
-import { createMainWindow } from "./mainWindow";
+import { createMainWindow, loadMainWindow } from "./mainWindow";
+import { configureDevelopmentUserDataPath } from "./developmentUserData";
+import { attachElectronSmoke, configureElectronSmokeUserDataPath, resolveElectronSmokeConfig } from "./electronSmoke";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -13,11 +15,6 @@ let mainWindow: BrowserWindow | null = null;
 let closeIpcHandlers: RealmIpcRegistration | null = null;
 let commands: ReturnType<typeof createRealmCommands> | null = null;
 let quitting = false;
-
-function configureUserDataDirectory(): void {
-  const override = process.env.REALM_DEV_USER_DATA_DIR;
-  if (override && path.isAbsolute(override)) app.setPath("userData", override);
-}
 
 function registerRealmIpc(window: BrowserWindow): void {
   commands ??= createRealmCommands({ libraryDirectory: path.join(app.getPath("userData"), "library") });
@@ -60,12 +57,19 @@ function registerRealmIpc(window: BrowserWindow): void {
 }
 
 function createWindow(): void {
-  mainWindow = createMainWindow(app);
+  mainWindow = createMainWindow(app, { load: false });
   registerRealmIpc(mainWindow);
+  attachElectronSmoke(app, mainWindow, electronSmokeConfig, ipcMain, () => commands?.listProjects() ?? Promise.resolve([]));
+  loadMainWindow(mainWindow);
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
 }
+
+const electronSmokeConfig = resolveElectronSmokeConfig();
+app.setName("Realm");
+configureDevelopmentUserDataPath(app, MAIN_WINDOW_VITE_DEV_SERVER_URL, process.env.REALM_DEV_USER_DATA_DIR);
+configureElectronSmokeUserDataPath(app, electronSmokeConfig);
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -77,9 +81,6 @@ if (!gotLock) {
       mainWindow.focus();
     }
   });
-
-  app.setName("Realm");
-  configureUserDataDirectory();
 
   app.whenReady().then(async () => {
     if (process.platform !== "darwin") {
@@ -105,6 +106,7 @@ if (!gotLock) {
       // leave the serialized mutation queue before closing SQLite.
       await registration?.drain();
       await commands?.closeProject();
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
       registration?.();
       closeIpcHandlers = null;
       app.quit();

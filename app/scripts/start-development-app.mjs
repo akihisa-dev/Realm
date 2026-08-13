@@ -1,0 +1,11 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+const scriptPath = fileURLToPath(import.meta.url);
+const appRoot = path.resolve(path.dirname(scriptPath), "..");
+const args = process.argv.slice(2);
+if (args.length !== 2 || args[0] !== "--user-data-dir" || !path.isAbsolute(args[1])) throw new Error("Usage: node scripts/start-development-app.mjs --user-data-dir <absolute-path>");
+process.env.REALM_DEV_USER_DATA_DIR = args[1];
+const { api } = await import("@electron-forge/core");
+const child = await api.start({ dir: appRoot, interactive: true });
+child.once("exit", (code) => { process.exitCode = code ?? 1; });
+process.once("SIGTERM", () => child.kill("SIGTERM"));
