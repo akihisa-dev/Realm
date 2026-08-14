@@ -28,7 +28,8 @@ describe("terrain boundary resize in RealmMapAdapter", () => {
     };
     const start = cellCenter(10, 10);
     const outside = cellCenter(10, 9);
-    expect(grab.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
+    const boundary: [number, number] = [(start[0] + outside[0]) / 2, (start[1] + outside[1]) / 2];
+    expect(grab.handleDownEvent({ originalEvent: pointer, coordinate: boundary })).toBe(true);
     expect(smoothLayer.getVisible()).toBe(true);
     expect((smoothSource?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(1);
     grab.handleDragEvent({ originalEvent: pointer, coordinate: outside });

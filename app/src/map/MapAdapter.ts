@@ -578,7 +578,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (mode === "grab") {
       this.setSelected(null);
       this.grab = new RegionGrabController({
-        cellAt: (position) => this.cellAtCoordinate(position), attributes: () => this.cellAttributesById,
+        cellAt: (position) => this.cellAtCoordinate(position), cellCandidatesAt: (position) => gridCellIdsWithinPaintPosition(position, 1), attributes: () => this.cellAttributesById,
         getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id),
         changed: () => this.cellLayer.changed(), setRegionSmoothVisible: (visible, regionIdentity) => {
           this.regionSmoothHiddenIdentity = visible ? null : regionIdentity ?? null;

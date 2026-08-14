@@ -7,6 +7,7 @@ type ResizableAttribute = "terrain" | "region";
 
 type Options = {
   cellAt: (position: Position) => string | null;
+  cellCandidatesAt?: (position: Position) => readonly string[];
   attributes: () => ReadonlyMap<string, readonly CellAttributeSnapshot[]>;
   getFeature: (id: string) => Feature | undefined;
   ensureFeatures: (ids: Iterable<string>) => void;
@@ -56,6 +57,23 @@ export class RegionGrabController {
         if (terrain && isRegionBoundaryCell(anchor, terrainComponent)) {
           this.beginResize("terrain", terrain.value, null, terrainComponent, terrainComponent, anchor, position);
           return true;
+        }
+        if (!region && !terrain) {
+          for (const candidate of new Set(options.cellCandidatesAt?.(position) ?? [])) {
+            const candidateRegion = attributes.get(candidate)?.find((item) => item.attribute === "region");
+            const candidateRegionSource = candidateRegion ? sameRegionCells(candidate, attributes) : [];
+            const candidateRegionComponent = candidateRegionSource.length > 0 ? connectedRegionCells(candidate, attributes) : [];
+            if (candidateRegion && isRegionBoundaryCell(candidate, candidateRegionComponent)) {
+              this.beginResize("region", candidateRegion.value, candidateRegion.regionId ?? null, candidateRegionSource, candidateRegionComponent, candidate, position);
+              return true;
+            }
+            const candidateTerrain = attributes.get(candidate)?.find((item) => item.attribute === "terrain");
+            const candidateTerrainComponent = candidateTerrain ? connectedTerrainCells(candidate, attributes) : [];
+            if (candidateTerrain && isRegionBoundaryCell(candidate, candidateTerrainComponent)) {
+              this.beginResize("terrain", candidateTerrain.value, null, candidateTerrainComponent, candidateTerrainComponent, candidate, position);
+              return true;
+            }
+          }
         }
         if (regionSource.length === 0) return false;
         this.sourceIds = regionSource; this.sourceAnchor = anchor; this.update(regionSource, false); return true;
