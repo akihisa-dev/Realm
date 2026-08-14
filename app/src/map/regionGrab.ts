@@ -70,4 +70,14 @@ export const translateRegionCells = (sourceIds: readonly string[], sourceAnchor:
 };
 export const clipRegionCellsToTerrain = (cellIds: readonly string[], attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>): string[] =>
   cellIds.filter((id) => attributes.get(id)?.some((item) => item.attribute === "terrain") === true);
+/** Removes destination cells occupied by a different persisted region, while allowing the moving region to overlap itself. */
+export const clipRegionCellsToAvailableTargets = (
+  cellIds: readonly string[],
+  sourceIds: readonly string[],
+  sourceIdentity: string,
+  attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>,
+): string[] => {
+  const sourceSet = new Set(sourceIds);
+  return cellIds.filter((id) => sourceSet.has(id) || !attributes.get(id)?.some((item) => item.attribute === "region" && (item.regionId ?? item.value) !== sourceIdentity));
+};
 export const sameCellSet = (left: readonly string[], right: readonly string[]): boolean => left.length === right.length && right.every((id) => new Set(left).has(id));

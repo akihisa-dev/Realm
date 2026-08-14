@@ -433,11 +433,11 @@ export class MemoryRealmBackend implements RealmBackend {
     const regionId = normalizeRegionId(sourceRegions[0]!.regionId ?? crypto.randomUUID());
     const completeRegion = project.cells.filter((cell) => cell.attribute === "region" && (cell.regionId ?? cell.value) === regionIdentity).map((cell) => cell.cellId);
     if (completeRegion.length !== source.length || completeRegion.some((id) => !sourceSet.has(id))) throw new Error("領域全体を移動してください。");
-    if (project.cells.some((cell) => cell.attribute === "region" && !sourceSet.has(cell.cellId) && target.includes(cell.cellId) && (cell.regionId ?? cell.value) !== regionIdentity)) throw new Error("移動先に別の領域があります。");
+    const availableTarget = target.filter((id) => !project.cells.some((cell) => cell.attribute === "region" && cell.cellId === id && !sourceSet.has(id) && (cell.regionId ?? cell.value) !== regionIdentity));
     if (source.every((id, index) => id === target[index])) return this.result(project);
     this.checkpoint(project);
     project.cells = project.cells.filter((cell) => !(cell.attribute === "region" && sourceSet.has(cell.cellId)));
-    for (const cellId of target) project.cells.push({ cellId, attribute: "region", value: color, regionId });
+    for (const cellId of availableTarget) project.cells.push({ cellId, attribute: "region", value: color, regionId });
     return this.result(project);
   }
   async viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]> {

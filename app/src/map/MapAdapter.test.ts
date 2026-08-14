@@ -105,7 +105,7 @@ describe("RealmMapAdapter", () => {
     requestAnimationFrame.mockRestore();
   });
 
-  it("renders only terrain-backed region components separately and hides the stale smooth mass during grab", () => {
+  it("renders only terrain-backed region components separately and hides only the grabbed smooth mass", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
@@ -130,9 +130,10 @@ describe("RealmMapAdapter", () => {
       { cellId: "20:20", attribute: "region", value: "#2468AC", regionId: "region-a" },
       { cellId: "30:30", attribute: "terrain", value: "terrain" },
       { cellId: "30:30", attribute: "region", value: "#2468AC", regionId: "region-a" },
+      { cellId: "40:40", attribute: "terrain", value: "terrain" },
+      { cellId: "40:40", attribute: "region", value: "#AA0000", regionId: "region-b" },
     ]);
-    expect(regionLayer.getSource()?.getFeatures()).toHaveLength(3);
-
+    expect(regionLayer.getSource()?.getFeatures()).toHaveLength(4);
     adapter.setMode("grab");
     const pointer = new MouseEvent("pointerdown", { button: 0, bubbles: true });
     Object.defineProperty(pointer, "isPrimary", { value: true });
@@ -141,7 +142,9 @@ describe("RealmMapAdapter", () => {
       handleUpEvent: (event: unknown) => boolean;
     };
     expect(grab.handleDownEvent({ originalEvent: pointer, coordinate: cellCenter(10, 10) })).toBe(true);
-    expect(regionLayer.getVisible()).toBe(false);
+    expect(regionLayer.getVisible()).toBe(true);
+    const style = regionLayer.getStyleFunction(); const grabbedFeature = regionLayer.getSource()?.getFeatures().find((feature) => feature.get("regionIdentity") === "region-a"); const otherFeature = regionLayer.getSource()?.getFeatures().find((feature) => feature.get("regionIdentity") === "region-b");
+    expect(style?.(grabbedFeature!, 1)).toEqual([]); expect(style?.(otherFeature!, 1)).toBeInstanceOf(Style);
     grab.handleUpEvent({ originalEvent: pointer, coordinate: cellCenter(10, 11) });
     expect(regionLayer.getVisible()).toBe(true);
 

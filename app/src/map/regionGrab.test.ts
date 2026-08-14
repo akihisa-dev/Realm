@@ -1,7 +1,7 @@
 import Feature from "ol/Feature";
 import { describe, expect, it, vi } from "vitest";
 import { RegionGrabController } from "./RegionGrabController";
-import { clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
+import { clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
 import { cellCenter, cellIdsWithinPaintPosition } from "./gridGeometry";
 
 const region = (cellId: string, value: string, regionId = "region-a") => ({ cellId, attribute: "region" as const, value, regionId });
@@ -46,6 +46,16 @@ describe("region grab geometry", () => {
     expect(clipRegionCellsToTerrain(["5:3", "6:3", "6:4"], attributes)).toEqual(["5:3"]);
   });
 
+  it("clips only targets occupied by another region, including terrainless cells", () => {
+    const attributes = new Map([
+      ["5:3", [terrain("5:3")]],
+      ["6:3", [region("6:3", "#00AA00", "region-b")]],
+      ["7:3", [region("7:3", "#AA0000", "region-a")]],
+      ["20:20", [region("20:20", "#00AA00", "region-b")]],
+    ]);
+    expect(clipRegionCellsToAvailableTargets(["5:3", "6:3", "7:3", "20:20"], ["2:2", "3:2"], "region-a", attributes)).toEqual(["5:3", "7:3"]);
+  });
+
   it("previews only the terrain portion, emits one in-world move, and cancels an outside release", () => {
     const attributes = new Map([
       ["2:1", [region("2:1", "#AA0000")]],
@@ -57,6 +67,7 @@ describe("region grab geometry", () => {
       ["3:3", [region("3:3", "#AA0000")]],
       ["20:20", [region("20:20", "#AA0000")]],
       ["5:3", [terrain("5:3")]],
+      ["6:3", [region("6:3", "#00AA00", "region-b")]],
     ]);
     const features = new Map<string, Feature>();
     const emitted: Array<{ sourceCellIds: string[]; targetCellIds: string[] }> = [];
@@ -75,7 +86,7 @@ describe("region grab geometry", () => {
     const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean; handleDragEvent: (event: unknown) => void; handleUpEvent: (event: unknown) => boolean };
     const pointer = { isPrimary: true, button: 0 };
     expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: [0, 0] })).toBe(true);
-    expect(setRegionSmoothVisible).toHaveBeenLastCalledWith(false);
+    expect(setRegionSmoothVisible).toHaveBeenLastCalledWith(false, "region-a");
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: [1, 0] });
     expect(features.get("5:3")?.get("grabPreview")).toBe(true);
     expect(features.get("6:3")).toBeUndefined();

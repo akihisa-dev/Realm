@@ -147,9 +147,13 @@ export class RealmCommands implements RealmBackend {
     const sourceSet = new Set(source);
     const allRegionRows = session.database.prepare("SELECT cell_x AS cellX,cell_y AS cellY FROM cell_attributes WHERE grid_version=? AND layer='region' AND region_id=?").all(GRID_VERSION, regionId) as Record<string, unknown>[];
     const allRegionIds = new Set(allRegionRows.map((row) => `${Number(row.cellX)}:${Number(row.cellY)}`)); if (allRegionIds.size !== sourceSet.size || [...allRegionIds].some((id) => !sourceSet.has(id))) throw invalid("The entire region must be moved together.");
-    if (target.some((id) => { const [x, y] = parseCellId(id); const existing = read.get(GRID_VERSION, x, y) as { regionId?: unknown } | undefined; return Boolean(existing && !sourceSet.has(id) && String(existing.regionId) !== regionId); })) throw invalid("The target contains another region.");
+    const availableTarget = target.filter((id) => {
+      const [x, y] = parseCellId(id);
+      const existing = read.get(GRID_VERSION, x, y) as { regionId?: unknown } | undefined;
+      return !existing || sourceSet.has(id) || String(existing.regionId) === regionId;
+    });
     if (source.every((id, index) => id === target[index])) return projectSnapshot(session);
-    const before = captureState(session.database); transaction(session.database, () => { const remove = session.database.prepare("DELETE FROM cell_attributes WHERE grid_version=? AND cell_x=? AND cell_y=? AND layer='region'"); const insert = session.database.prepare("INSERT INTO cell_attributes(grid_version,cell_x,cell_y,layer,value,region_id) VALUES (?,?,?,?,?,?) ON CONFLICT(grid_version,cell_x,cell_y,layer) DO UPDATE SET value=excluded.value,region_id=excluded.region_id"); for (const id of source) { const [x, y] = parseCellId(id); remove.run(GRID_VERSION, x, y); } for (const id of target) { const [x, y] = parseCellId(id); insert.run(GRID_VERSION, x, y, "region", color, regionId); } }); session.checkpoint(before, "move-region-cells"); return projectSnapshot(session);
+    const before = captureState(session.database); transaction(session.database, () => { const remove = session.database.prepare("DELETE FROM cell_attributes WHERE grid_version=? AND cell_x=? AND cell_y=? AND layer='region'"); const insert = session.database.prepare("INSERT INTO cell_attributes(grid_version,cell_x,cell_y,layer,value,region_id) VALUES (?,?,?,?,?,?) ON CONFLICT(grid_version,cell_x,cell_y,layer) DO UPDATE SET value=excluded.value,region_id=excluded.region_id"); for (const id of source) { const [x, y] = parseCellId(id); remove.run(GRID_VERSION, x, y); } for (const id of availableTarget) { const [x, y] = parseCellId(id); insert.run(GRID_VERSION, x, y, "region", color, regionId); } }); session.checkpoint(before, "move-region-cells"); return projectSnapshot(session);
   }
   async viewCellAttributes(input: CellViewportInput): Promise<ReturnType<typeof cellAttributesSnapshot>> { return cellAttributesSnapshot(this.current(), input); }
   async undoProject(): Promise<RealmSnapshot> { const session = this.current(); session.undo(); return projectSnapshot(session); }

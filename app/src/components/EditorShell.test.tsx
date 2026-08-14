@@ -143,6 +143,30 @@ it("keeps a grabbed region's hidden overhang at the destination", async () => {
   ]));
 });
 
+it("keeps the stationary region when a grabbed region overlaps it", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://grab-overlap-editor.realmmap", name: "Grab overlap editor" });
+  const movingRegionId = "77777777-7777-4777-8777-777777777777";
+  const stationaryRegionId = "88888888-8888-4888-8888-888888888888";
+  await backend.applyCellAttributes({ cellIds: ["1:1", "2:1"], attribute: "region", value: "#2468AC", regionId: movingRegionId });
+  await backend.applyCellAttributes({ cellIds: ["4:2"], attribute: "region", value: "#AA0000", regionId: stationaryRegionId });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テストグラブ" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト領域移動" }));
+
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    { cellId: "4:2", attribute: "region", value: "#AA0000", regionId: stationaryRegionId },
+    { cellId: "5:2", attribute: "region", value: "#2468AC", regionId: movingRegionId },
+  ])));
+  expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([
+    { cellId: "1:1", attribute: "region", value: "#2468AC", regionId: movingRegionId },
+    { cellId: "2:1", attribute: "region", value: "#2468AC", regionId: movingRegionId },
+  ]));
+});
+
 it("restores persisted region cells after a grab save fails", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://grab-failure.realmmap", name: "Grab failure" });

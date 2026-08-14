@@ -29,13 +29,13 @@ import { MAX_SMOOTHING_PASSES, refineDrawnGeometry } from "./drawingGeometry";
 import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
 import { createCellStyle, createFeatureStyle } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
-import { paintMapTexture } from "./mapTexture";
 import { assertGeometryWithinWorld } from "./geometryGuard";
 import { exactCellBoundaryPolygons, smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments } from "./terrainOutline";
 import { TerrainOutlineAnimator } from "./terrainOutlineAnimator";
 import { CellRegionController } from "./CellRegionController";
 import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
+import { exportMapRaster } from "./mapRasterExporter";
 import { RegionGrabController } from "./RegionGrabController";
 import { adjacentCellIds, connectedCellComponents } from "./regionGrab";
 import { nudgeGeometry, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
@@ -83,6 +83,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly terrainSmoothLayer: VectorLayer;
   private readonly regionSmoothSource = new VectorSource({ wrapX: false });
   private readonly regionSmoothLayer: VectorLayer;
+  private regionSmoothHiddenIdentity: string | null = null;
   private readonly terrainOutlineAnimator: TerrainOutlineAnimator;
   private readonly cellRegion: CellRegionController;
   private readonly cellGridSource = new VectorSource({ wrapX: false });
@@ -220,7 +221,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
       zIndex: 7,
     });
     this.terrainSmoothLayer = new VectorLayer({ source: this.terrainSmoothSource, style: () => new Style({ stroke: new Stroke({ color: mapTheme(this.activeThemeId, this.themeOverrides).landInk, width: 1.8, lineJoin: "round", lineCap: "round" }) }), visible: false, zIndex: 8 });
-    this.regionSmoothLayer = new VectorLayer({ source: this.regionSmoothSource, style: (feature) => { const color = String(feature.get("regionColor")); return new Style({ fill: new Fill({ color: colorWithOpacity(color, 0.2) }), stroke: new Stroke({ color: colorWithOpacity(color, 0.78), width: 1.1, lineJoin: "round", lineCap: "round" }) }); }, zIndex: 6 });
+    this.regionSmoothLayer = new VectorLayer({ source: this.regionSmoothSource, style: (feature) => {
+      if (this.regionSmoothHiddenIdentity !== null && feature.get("regionIdentity") === this.regionSmoothHiddenIdentity) return [];
+      const color = String(feature.get("regionColor"));
+      return new Style({ fill: new Fill({ color: colorWithOpacity(color, 0.2) }), stroke: new Stroke({ color: colorWithOpacity(color, 0.78), width: 1.1, lineJoin: "round", lineCap: "round" }) });
+    }, zIndex: 6 });
     this.cellGridSource.addFeature(new Feature({ geometry: new MultiLineString(this.fixedCellGridLines) }));
     this.cellGridLayer = new VectorLayer({
       source: this.cellGridSource,
@@ -575,7 +580,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.grab = new RegionGrabController({
         cellAt: (position) => this.cellAtCoordinate(position), attributes: () => this.cellAttributesById,
         getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id),
-        changed: () => this.cellLayer.changed(), setRegionSmoothVisible: (visible) => this.regionSmoothLayer.setVisible(visible),
+        changed: () => this.cellLayer.changed(), setRegionSmoothVisible: (visible, regionIdentity) => {
+          this.regionSmoothHiddenIdentity = visible ? null : regionIdentity ?? null;
+          this.regionSmoothLayer.changed();
+        },
         emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); },
         emitResize: (input) => { for (const listener of this.regionResizeListeners) listener(input); },
       });
@@ -985,7 +993,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     const terrainRings = smoothCellBoundaryRings(terrainCellIds);
     if (terrainRings.length > 0) this.terrainSmoothSource.addFeature(new Feature({ geometry: new MultiLineString(terrainRings) }));
     this.regionSmoothSource.clear();
-    const regionIdsByIdentity = new globalThis.Map<string, { color: string; ids: string[] }>();
+    const regionIdsByIdentity = new globalThis.Map<string, { color: string; ids: string[]; identity: string }>();
     for (const [id, values] of byCell) {
       const region = values.find(({ attribute }) => attribute === "region"); if (!region) continue;
       // Persisted region rows may extend beyond terrain. Keep those rows in
@@ -995,15 +1003,15 @@ export class RealmMapAdapter implements RealmMapRenderer {
       const color = /^#[\da-f]{6}$/i.test(region.value) ? region.value.toUpperCase() : mapTheme(this.activeThemeId, this.themeOverrides).region;
       const identity = region.regionId ?? region.value;
       const key = `${identity}\u0000${color}`;
-      const entry = regionIdsByIdentity.get(key) ?? { color, ids: [] }; entry.ids.push(id); regionIdsByIdentity.set(key, entry);
+      const entry = regionIdsByIdentity.get(key) ?? { color, ids: [], identity }; entry.ids.push(id); regionIdsByIdentity.set(key, entry);
     }
-    for (const { color, ids } of regionIdsByIdentity.values()) for (const component of connectedCellComponents(ids)) {
+    for (const { color, ids, identity } of regionIdsByIdentity.values()) for (const component of connectedCellComponents(ids)) {
       // Smoothing a concave boundary can round a corner into the cell just
       // outside terrain. Keep components touching that mask boundary exact;
       // interior components retain the softer presentation curve.
       const touchesTerrainBoundary = component.some((id) => adjacentCellIds(id).length < 6 || adjacentCellIds(id).some((next) => !terrainSet.has(next)));
       const polygons = touchesTerrainBoundary ? exactCellBoundaryPolygons(component) : smoothCellBoundaryPolygons(component);
-      for (const polygon of polygons) this.regionSmoothSource.addFeature(new Feature({ geometry: new Polygon(polygon), regionColor: color }));
+      for (const polygon of polygons) this.regionSmoothSource.addFeature(new Feature({ geometry: new Polygon(polygon), regionColor: color, regionIdentity: identity }));
     }
     this.cellRegion.animateChanges(previous, renderedByCell, (id) => this.getCellFeature(id));
     this.cellLayer.changed();
@@ -1080,61 +1088,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.map.un("moveend", onMoveEnd);
     };
   }
-  updateSize(): void {
-    this.map.updateSize();
-    this.rebaseZoom();
-  }
-  async exportRaster(mimeType: "image/png" | "image/jpeg", requestedScale = 1, extent: "viewport" | "world" = "viewport", size?: ExportCanvasSize): Promise<MapRaster> {
-    const [sourceWidth = 0, sourceHeight = 0] = this.map.getSize() ?? [];
-    const scale = Math.max(1, Math.min(4, Math.round(requestedScale)));
-    const baseWidth = size?.width ?? sourceWidth;
-    const baseHeight = size?.height ?? sourceHeight;
-    const quality = size?.quality ?? 0.92;
-    if (!Number.isInteger(baseWidth) || !Number.isInteger(baseHeight) || baseWidth < 1 || baseHeight < 1) throw new Error("書き出しキャンバスの寸法が不正です。");
-    if (!Number.isFinite(quality) || quality < 0.5 || quality > 1) throw new Error("書き出し品質は50〜100%で指定してください。");
-    if (size && (baseWidth < 512 || baseWidth > 8192 || baseHeight < 512 || baseHeight > 8192)) throw new Error("書き出しキャンバスは512〜8192pxで指定してください。");
-    const width = baseWidth * scale;
-    const height = baseHeight * scale;
-    if (width <= 0 || height <= 0) throw new Error("地図のサイズを取得できません。");
-    if (width > 16_384 || height > 16_384 || width * height > 67_108_864) throw new Error("書き出し解像度が大きすぎます。");
-    const view = this.map.getView();
-    const originalCenter = view.getCenter()?.slice() as [number, number] | undefined;
-    const originalResolution = view.getResolution();
-    const selectedFeatureIds = this.selectedFeatureIds();
-    this.setSelectedFeatures([]);
-    try {
-      this.map.setSize([width, height]);
-      if (extent === "world") view.fit([...this.worldExtent], { size: [width, height], padding: [24 * scale, 24 * scale, 24 * scale, 24 * scale] });
-      else {
-        if (originalResolution !== undefined) view.setResolution(originalResolution / scale);
-        if (originalCenter) view.setCenter(originalCenter);
-      }
-      this.map.renderSync();
-      const output = document.createElement("canvas");
-      output.width = width;
-      output.height = height;
-      const context = output.getContext("2d");
-      if (!context) throw new Error("地図画像を作成できません。");
-      if (mimeType !== "image/png" || size?.transparent !== true) {
-        context.fillStyle = mapTheme(this.activeThemeId, this.themeOverrides).canvas;
-        context.fillRect(0, 0, width, height);
-      }
-      for (const canvas of this.target.querySelectorAll<HTMLCanvasElement>("canvas")) {
-        if (canvas.width > 0 && canvas.height > 0) context.drawImage(canvas, 0, 0, width, height);
-      }
-      if (mimeType !== "image/png" || size?.transparent !== true) paintMapTexture(context, width, height, this.activeThemeId);
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        output.toBlob((value) => value ? resolve(value) : reject(new Error("地図画像を作成できません。")), mimeType, quality);
-      });
-      return { bytes: [...new Uint8Array(await blob.arrayBuffer())], width, height };
-    } finally {
-      this.map.setSize([sourceWidth, sourceHeight]);
-      if (originalResolution !== undefined) view.setResolution(originalResolution);
-      if (originalCenter) view.setCenter(originalCenter);
-      this.setSelectedFeatures(selectedFeatureIds);
-      this.map.renderSync();
-    }
-  }
+  updateSize(): void { this.map.updateSize(); this.rebaseZoom(); }
+  async exportRaster(mimeType: "image/png" | "image/jpeg", requestedScale = 1, extent: "viewport" | "world" = "viewport", size?: ExportCanvasSize): Promise<MapRaster> { return exportMapRaster({ map: this.map, target: this.target, worldExtent: this.worldExtent, activeThemeId: this.activeThemeId, themeOverrides: this.themeOverrides, selectedFeatureIds: this.selectedFeatureIds(), setSelectedFeatures: (featureIds) => this.setSelectedFeatures(featureIds), mimeType, requestedScale, extent, size }); }
 
   private rebaseZoom(): void {
     const view = this.map.getView();

@@ -141,4 +141,24 @@ describe("RealmCommands user-visible operations", () => {
       { cellId: "20:20", attribute: "region", value: "#AA0000", regionId },
     ]));
   });
+
+  it("keeps the stationary region and clips only the grabbed side on overlap", async () => {
+    const dir = directory(); const commands = new RealmCommands({ libraryDirectory: dir }); await commands.createProject({ name: "Grab overlap" });
+    const movingRegionId = "55555555-5555-4555-8555-555555555555";
+    const stationaryRegionId = "66666666-6666-4666-8666-666666666666";
+    await commands.applyCellAttributes({ cellIds: ["2:2", "3:2"], attribute: "region", value: "#AA0000", regionId: movingRegionId });
+    await commands.applyCellAttributes({ cellIds: ["5:3"], attribute: "region", value: "#00AA00", regionId: stationaryRegionId });
+
+    await commands.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] });
+
+    const moved = await commands.viewCellAttributes({});
+    expect(moved).toEqual(expect.arrayContaining([
+      { cellId: "5:3", attribute: "region", value: "#00AA00", regionId: stationaryRegionId },
+      { cellId: "6:3", attribute: "region", value: "#AA0000", regionId: movingRegionId },
+    ]));
+    expect(moved).not.toEqual(expect.arrayContaining([
+      { cellId: "2:2", attribute: "region", value: "#AA0000", regionId: movingRegionId },
+      { cellId: "3:2", attribute: "region", value: "#AA0000", regionId: movingRegionId },
+    ]));
+  });
 });

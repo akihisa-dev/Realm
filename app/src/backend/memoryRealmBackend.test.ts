@@ -245,6 +245,27 @@ it("moves every cell with one region ID, including a visually separated componen
   ]));
 });
 
+it("keeps the stationary region and clips only the grabbed side on overlap", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://grab-overlap.realmmap", name: "Grab overlap" });
+  const movingRegionId = "55555555-5555-4555-8555-555555555555";
+  const stationaryRegionId = "66666666-6666-4666-8666-666666666666";
+  await backend.applyCellAttributes({ cellIds: ["2:2", "3:2"], attribute: "region", value: "#AA0000", regionId: movingRegionId });
+  await backend.applyCellAttributes({ cellIds: ["5:3"], attribute: "region", value: "#00AA00", regionId: stationaryRegionId });
+
+  await backend.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] });
+
+  const moved = await backend.viewCellAttributes({});
+  expect(moved).toEqual(expect.arrayContaining([
+    { cellId: "5:3", attribute: "region", value: "#00AA00", regionId: stationaryRegionId },
+    { cellId: "6:3", attribute: "region", value: "#AA0000", regionId: movingRegionId },
+  ]));
+  expect(moved).not.toEqual(expect.arrayContaining([
+    { cellId: "2:2", attribute: "region", value: "#AA0000", regionId: movingRegionId },
+    { cellId: "3:2", attribute: "region", value: "#AA0000", regionId: movingRegionId },
+  ]));
+});
+
 it("matches strict native geometry write validation and keeps failed mutations atomic", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://geometry-contract.realmmap", name: "Geometry" });
