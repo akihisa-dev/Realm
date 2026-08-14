@@ -1,5 +1,5 @@
 import type { Position } from "../backend";
-import { cellPolygon, parseCellId } from "./gridGeometry";
+import { cellCenter, cellPolygon, parseCellId } from "./gridGeometry";
 
 export type TerrainOutlineSegment = [Position, Position];
 export type TerrainGridSegments = {
@@ -60,6 +60,17 @@ export const splitTerrainGridSegments = (
     result[insideKeys.has(edgeKey(start, end)) ? "inside" : "outside"].push([[...start], [...end]]);
   }
   return result;
+};
+
+/** Returns one renderer-only marker position for each valid terrain cell. */
+export const terrainCellCenters = (cellIds: Iterable<string>): Position[] => {
+  const centers: Position[] = [];
+  for (const id of new Set(cellIds)) {
+    const position = parseCellId(id);
+    if (!position) continue;
+    centers.push([...cellCenter(...position)] as Position);
+  }
+  return centers;
 };
 
 export type CellBoundaryRing = Position[];

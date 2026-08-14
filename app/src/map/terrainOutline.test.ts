@@ -1,5 +1,5 @@
-import { cellId, cellPolygon } from "./gridGeometry";
-import { exactCellBoundaryRings, smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments, terrainOutlineSegments } from "./terrainOutline";
+import { cellCenter, cellId, cellPolygon } from "./gridGeometry";
+import { exactCellBoundaryRings, smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments, terrainCellCenters, terrainOutlineSegments } from "./terrainOutline";
 
 describe("terrainOutlineSegments", () => {
   it("keeps every edge of one interior terrain cell", () => {
@@ -31,6 +31,13 @@ describe("terrainOutlineSegments", () => {
     const split = splitTerrainGridSegments(fixed, [cellId(10, 10)]);
     expect(split.inside).toHaveLength(2);
     expect(split.outside).toHaveLength(1);
+  });
+
+  it("derives one center marker per valid terrain cell", () => {
+    expect(terrainCellCenters([cellId(10, 10), cellId(10, 10), "outside", cellId(11, 10)])).toEqual([
+      cellCenter(10, 10),
+      cellCenter(11, 10),
+    ]);
   });
 
   it("builds deterministic bounded curves while retaining holes and islands", () => {
