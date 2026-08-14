@@ -68,9 +68,13 @@ export const isRegionBoundaryCell = (cellId: string, component: readonly string[
   return componentSet.has(cellId) && adjacentIds(cellId).some((next) => !componentSet.has(next));
 };
 /** Returns persisted terrain/region cells whose boundary is under a pointer. */
-export const resizableCellIdsAt = (position: Position, attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>): string[] => {
+export const resizableCellIdsAt = (
+  position: Position,
+  attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>,
+  candidateIds = cellIdsWithinPaintPosition(position, 1),
+): string[] => {
   const result = new Set<string>();
-  for (const id of cellIdsWithinPaintPosition(position, 1)) {
+  for (const id of candidateIds) {
     const values = attributes.get(id) ?? [];
     const region = values.find((item) => item.attribute === "region");
     if (region && adjacentIds(id).some((next) => {

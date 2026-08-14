@@ -188,6 +188,35 @@ describe("region grab geometry", () => {
     controller.dispose();
   });
 
+  it("pulls a neighboring terrain boundary when the nearest cell only has a region", () => {
+    const center = "10:10";
+    const ring = cellIdsWithinPaintPosition(cellCenter(10, 10), 1).filter((id) => id !== center);
+    const terrainId = ring[0]!;
+    const attributes = new Map<string, Array<ReturnType<typeof region> | ReturnType<typeof terrain>>>();
+    for (const id of ring) attributes.set(id, [region(id, "#AA0000")]);
+    attributes.set(center, [region(center, "#AA0000")]);
+    attributes.set(terrainId, [region(terrainId, "#AA0000"), terrain(terrainId)]);
+    const setTerrainSmoothVisible = vi.fn();
+    const controller = new RegionGrabController({
+      cellAt: () => center,
+      cellCandidatesAt: () => [center, ...ring],
+      allowMove: false,
+      attributes: () => attributes,
+      getFeature: () => undefined,
+      ensureFeatures: () => undefined,
+      removeUnused: () => undefined,
+      changed: vi.fn(),
+      setRegionSmoothVisible: vi.fn(),
+      setTerrainSmoothVisible,
+      emit: vi.fn(),
+      emitResize: vi.fn(),
+    });
+    const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean };
+    expect(interaction.handleDownEvent({ originalEvent: { isPrimary: true, button: 0 }, coordinate: cellCenter(10, 10) })).toBe(true);
+    expect(setTerrainSmoothVisible).toHaveBeenCalledWith(false, [terrainId]);
+    controller.dispose();
+  });
+
   it("expands and retracts a terrain boundary as one cell-layer update", () => {
     const attributes = new Map([
       ["10:10", [terrain("10:10")]],
