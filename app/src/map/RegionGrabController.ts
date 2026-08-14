@@ -1,7 +1,7 @@
 import Feature from "ol/Feature";
 import PointerInteraction from "ol/interaction/Pointer";
 import type { CellAttributeSnapshot, MoveRegionCellsInput, Position } from "../backend";
-import { connectedRegionCells, sameCellSet, translateRegionCells } from "./regionGrab";
+import { clipRegionCellsToTerrain, connectedRegionCells, sameCellSet, translateRegionCells } from "./regionGrab";
 
 type Options = {
   cellAt: (position: Position) => string | null;
@@ -29,7 +29,7 @@ export class RegionGrabController {
         if (!pointer.isPrimary || pointer.button !== 0) return false;
         const anchor = options.cellAt(event.coordinate as Position); if (!anchor) return false;
         const source = connectedRegionCells(anchor, options.attributes()); if (source.length === 0) return false;
-        this.sourceAnchor = anchor; this.sourceIds = source; this.update(source); return true;
+        this.sourceAnchor = anchor; this.sourceIds = source; this.update(source, false); return true;
       },
       handleDragEvent: (event) => {
         if (!this.sourceAnchor) return;
@@ -50,16 +50,17 @@ export class RegionGrabController {
   cancel(): void { this.clearPreview(); this.sourceIds = []; this.targetIds = []; this.sourceAnchor = null; this.previewValid = false; this.interaction.setActive(false); this.interaction.setActive(true); }
   dispose(): void { this.cancel(); this.interaction.dispose(); }
 
-  private update(targetIds: readonly string[] | null): void {
+  private update(targetIds: readonly string[] | null, clipToTerrain = true): void {
     this.clearPreview();
     if (targetIds === null || targetIds.length !== this.sourceIds.length || new Set(targetIds).size !== targetIds.length) { this.targetIds = []; this.previewValid = false; return; }
     const attributes = this.options.attributes(); const sourceSet = new Set(this.sourceIds);
-    this.previewValid = !targetIds.some((id) => !sourceSet.has(id) && attributes.get(id)?.some((item) => item.attribute === "region"));
-    this.targetIds = [...targetIds]; const sourceRegions = this.sourceIds.map((id) => attributes.get(id)?.find((item) => item.attribute === "region"));
+    const previewTargetIds = clipToTerrain ? clipRegionCellsToTerrain(targetIds, attributes) : [...targetIds];
+    this.previewValid = !previewTargetIds.some((id) => !sourceSet.has(id) && attributes.get(id)?.some((item) => item.attribute === "region"));
+    this.targetIds = [...targetIds]; const region = attributes.get(this.sourceIds[0] ?? "")?.find((item) => item.attribute === "region");
     for (const id of this.sourceIds) { this.options.getFeature(id)?.set("grabSourceHidden", true, true); this.previewIds.add(id); }
-    this.options.ensureFeatures(targetIds);
-    for (let index = 0; index < targetIds.length; index += 1) {
-      const id = targetIds[index]!; const existing = attributes.get(id) ?? []; const region = sourceRegions[index];
+    this.options.ensureFeatures(previewTargetIds);
+    for (const id of previewTargetIds) {
+      const existing = attributes.get(id) ?? [];
       const feature = this.options.getFeature(id); feature?.set("attributes", region ? [...existing.filter((item) => item.attribute !== "region"), region] : existing, true); feature?.set("grabPreview", true, true); this.previewIds.add(id);
     }
     this.options.changed();

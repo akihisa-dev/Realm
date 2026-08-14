@@ -184,18 +184,19 @@ it("persists project view settings without accepting unknown state", async () =>
   await expect(backend.updateProjectSettings({ settings: { viewport: true } as never })).rejects.toThrow("不正");
 });
 
-it("moves one contiguous region mass atomically and keeps terrain attributes", async () => {
+it("clips one contiguous region mass to terrain atomically and keeps terrain attributes", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://grab.realmmap", name: "Grab" });
   await backend.applyCellAttributes({ cellIds: ["2:2", "3:2"], attribute: "region", value: "#AA0000" });
-  await backend.applyCellAttributes({ cellIds: ["2:2"], attribute: "terrain", value: "terrain" });
+  await backend.applyCellAttributes({ cellIds: ["2:2", "5:3"], attribute: "terrain", value: "terrain" });
   const before = await backend.getOpenProject();
   await backend.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] });
   expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
     { cellId: "2:2", attribute: "terrain", value: "terrain" },
     { cellId: "5:3", attribute: "region", value: "#AA0000" },
-    { cellId: "6:3", attribute: "region", value: "#AA0000" },
+    { cellId: "5:3", attribute: "terrain", value: "terrain" },
   ]));
+  expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([{ cellId: "6:3", attribute: "region", value: "#AA0000" }]));
   expect((await backend.undoProject()).canRedo).toBe(true);
   expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
     { cellId: "2:2", attribute: "region", value: "#AA0000" },

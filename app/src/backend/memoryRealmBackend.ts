@@ -423,11 +423,13 @@ export class MemoryRealmBackend implements RealmBackend {
     if (sourceRegions.some((cell) => !cell)) throw new Error("移動する領域が見つかりません。");
     const color = sourceRegions[0]!.value;
     if (sourceRegions.some((cell) => cell!.value !== color)) throw new Error("同じ色の領域だけを移動できます。");
-    if (project.cells.some((cell) => cell.attribute === "region" && !sourceSet.has(cell.cellId) && target.includes(cell.cellId))) throw new Error("移動先に別の領域があります。");
+    const terrainIds = new Set(project.cells.filter((cell) => cell.attribute === "terrain").map((cell) => cell.cellId));
+    const clippedTarget = target.filter((id) => terrainIds.has(id));
+    if (project.cells.some((cell) => cell.attribute === "region" && !sourceSet.has(cell.cellId) && clippedTarget.includes(cell.cellId))) throw new Error("移動先に別の領域があります。");
     if (source.every((id, index) => id === target[index])) return this.result(project);
     this.checkpoint(project);
     project.cells = project.cells.filter((cell) => !(cell.attribute === "region" && sourceSet.has(cell.cellId)));
-    for (const cellId of target) project.cells.push({ cellId, attribute: "region", value: color });
+    for (const cellId of clippedTarget) project.cells.push({ cellId, attribute: "region", value: color });
     return this.result(project);
   }
   async viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]> {

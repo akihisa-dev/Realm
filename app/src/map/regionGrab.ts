@@ -30,4 +30,6 @@ export const translateRegionCells = (sourceIds: readonly string[], sourceAnchor:
   const translated = sourceIds.map((id) => { const axial = axialFor(id); return axial ? idForAxial([axial[0] + delta[0], axial[1] + delta[1]]) : null; });
   return translated.every((id): id is string => id !== null) ? translated : null;
 };
+export const clipRegionCellsToTerrain = (cellIds: readonly string[], attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>): string[] =>
+  cellIds.filter((id) => attributes.get(id)?.some((item) => item.attribute === "terrain") === true);
 export const sameCellSet = (left: readonly string[], right: readonly string[]): boolean => left.length === right.length && right.every((id) => new Set(left).has(id));

@@ -1,9 +1,10 @@
 import Feature from "ol/Feature";
 import { describe, expect, it, vi } from "vitest";
 import { RegionGrabController } from "./RegionGrabController";
-import { connectedRegionCells, sameCellSet, translateRegionCells } from "./regionGrab";
+import { clipRegionCellsToTerrain, connectedRegionCells, sameCellSet, translateRegionCells } from "./regionGrab";
 
 const region = (cellId: string, value: string) => ({ cellId, attribute: "region" as const, value });
+const terrain = (cellId: string) => ({ cellId, attribute: "terrain" as const, value: "terrain" });
 
 describe("region grab geometry", () => {
   it("collects one same-color hex-connected mass and excludes touching colors", () => {
@@ -25,11 +26,20 @@ describe("region grab geometry", () => {
     expect(translateRegionCells(["127:72"], "127:72", "128:72")).toBeNull();
   });
 
-  it("emits one move only for an in-world release and cancels an outside release", () => {
+  it("keeps only translated cells that have terrain", () => {
+    const attributes = new Map([
+      ["5:3", [terrain("5:3")]],
+      ["6:3", [region("6:3", "#00AA00")]],
+    ]);
+    expect(clipRegionCellsToTerrain(["5:3", "6:3", "6:4"], attributes)).toEqual(["5:3"]);
+  });
+
+  it("previews only the terrain portion, emits one in-world move, and cancels an outside release", () => {
     const attributes = new Map([
       ["2:2", [region("2:2", "#AA0000")]],
       ["3:2", [region("3:2", "#AA0000")]],
       ["2:3", [{ cellId: "2:3", attribute: "terrain" as const, value: "terrain" }, region("2:3", "#AA0000")]],
+      ["5:3", [terrain("5:3")]],
     ]);
     const features = new Map<string, Feature>();
     const emitted: Array<{ sourceCellIds: string[]; targetCellIds: string[] }> = [];
@@ -46,6 +56,8 @@ describe("region grab geometry", () => {
     const pointer = { isPrimary: true, button: 0 };
     expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: [0, 0] })).toBe(true);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: [1, 0] });
+    expect(features.get("5:3")?.get("grabPreview")).toBe(true);
+    expect(features.get("6:3")).toBeUndefined();
     expect(interaction.handleUpEvent({ originalEvent: pointer, coordinate: [1, 0] })).toBe(false);
     expect(emitted).toEqual([{ sourceCellIds: ["2:2", "3:2", "2:3"], targetCellIds: ["5:3", "6:3", "6:4"] }]);
 
