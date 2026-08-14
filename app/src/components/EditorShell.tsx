@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errorMessage, type CellAttributeSnapshot, type MoveRegionCellsInput, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
+import { DEFAULT_ERASE_TARGET, eraseTargetDefinition, type EraseTarget } from "./editor/eraseTargets";
 import { mapErrorMessage } from "../locales/ja";
 
 type Tool = "terrain" | "region" | "erase" | "grab";
@@ -34,6 +35,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [operating, setOperating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeToolRef = useRef<Tool>("terrain");
+  const eraseTargetRef = useRef<EraseTarget>(DEFAULT_ERASE_TARGET);
   const viewedIdentity = useRef(`${snapshot.path}:${snapshot.world.id}`);
   const mounted = useRef(true);
   const commandTail = useRef<Promise<void>>(Promise.resolve());
@@ -66,6 +68,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const selectTool = (tool: Tool) => {
     activeToolRef.current = tool;
     setActiveTool(tool);
+  };
+
+  const selectEraseTarget = (target: EraseTarget) => {
+    eraseTargetRef.current = target;
   };
 
   const refreshCellAttributes = async (identity: string): Promise<void> => {
@@ -142,7 +148,11 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       setSelectedCellIds([]);
       return;
     }
-    const attribute = tool === "region" ? "region" : "terrain";
+    const attribute = tool === "region"
+      ? "region"
+      : tool === "erase"
+        ? eraseTargetDefinition(eraseTargetRef.current).attribute
+        : "terrain";
     const value = tool === "terrain" ? "terrain" : tool === "region" ? regionColor : null;
     const mutation = ++cellMutation.current;
     updateOptimisticCellAttributes(nextIds, attribute, value);
@@ -224,8 +234,9 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             onRegionMove={moveRegion}
             regionColor={regionColor}
             onToolChange={selectTool}
+            onEraseTargetChange={selectEraseTarget}
             onRegionColorChange={setRegionColor}
-            onError={(code) => setError(mapErrorMessage(code, activeToolRef.current === "region" ? "region" : "terrain"))}
+            onError={(code) => setError(mapErrorMessage(code, activeToolRef.current === "region" || (activeToolRef.current === "erase" && eraseTargetRef.current === "region") ? "region" : "terrain"))}
             onZoomChange={setZoom}
             zoom={zoom}
           />

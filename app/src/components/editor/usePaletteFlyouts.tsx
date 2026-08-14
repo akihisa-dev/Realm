@@ -5,6 +5,7 @@ import { HandGrabbing } from "@phosphor-icons/react/dist/csr/HandGrabbing";
 import { createPortal } from "react-dom";
 import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
 import { positionPaletteFlyout, type PaletteRect } from "../paletteFlyout";
+import { DEFAULT_ERASE_TARGET, ERASE_TARGETS, type EraseTarget } from "./eraseTargets";
 
 type RadialPalettePosition = { x: number; y: number };
 type RadialPaletteState = RadialPalettePosition & { phase: "opening" | "open" | "closing" };
@@ -12,7 +13,7 @@ type FlyoutPosition = { left: number; top: number; side: "left" | "right" | "top
 type FlyoutKind = "paint" | "region" | "erase";
 
 const PAINT_RANGE_FLYOUT_SIZE = { width: 176, height: 58 };
-const ERASE_FLYOUT_SIZE = { width: 220, height: 100 };
+const ERASE_FLYOUT_SIZE = { width: 220, height: 136 };
 const PALETTE_FLYOUT_GAP = 12;
 const FLYOUT_FALLBACK_POSITION: FlyoutPosition = { left: 12, top: 12, side: "right" };
 const PAINT_RANGE_FLYOUT_ID = "map-paint-range-flyout";
@@ -56,6 +57,7 @@ export type PaletteFlyoutOptions = {
   hostRef: RefObject<HTMLDivElement | null>;
   mode: "pan" | "cell-select" | "cell-region" | "grab" | "cell-erase" | "region";
   onToolChange: ((tool: "terrain" | "region" | "erase" | "grab") => void) | undefined;
+  onEraseTargetChange: ((target: EraseTarget) => void) | undefined;
   onRegionColorChange: ((color: string) => void) | undefined;
 };
 
@@ -72,7 +74,7 @@ export type PaletteFlyoutState = {
 };
 
 /** Owns map tool palette state, placement, portal rendering, and focus-safe dismissal. */
-export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
+export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEraseTargetChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
   const radialPaletteRef = useRef<HTMLDivElement>(null);
   const paintRangeButtonRef = useRef<HTMLButtonElement>(null);
   const eraseButtonRef = useRef<HTMLButtonElement>(null);
@@ -85,6 +87,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onReg
   const [paintRangeFlyoutOpen, setPaintRangeFlyoutOpen] = useState(false);
   const [paintRangeFlyoutPosition, setPaintRangeFlyoutPosition] = useState<FlyoutPosition | null>(null);
   const [eraseRange, setEraseRange] = useState(CELL_PAINT_RANGE_MIN);
+  const [eraseTarget, setEraseTarget] = useState<EraseTarget>(DEFAULT_ERASE_TARGET);
   const [eraseFlyoutOpen, setEraseFlyoutOpen] = useState(false);
   const [eraseFlyoutPosition, setEraseFlyoutPosition] = useState<FlyoutPosition | null>(null);
   const [regionFlyoutOpen, setRegionFlyoutOpen] = useState(false);
@@ -151,6 +154,12 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onReg
     event.stopPropagation();
   };
 
+  const selectEraseTarget = (target: EraseTarget) => {
+    onToolChange?.("erase");
+    setEraseTarget(target);
+    onEraseTargetChange?.(target);
+  };
+
   useLayoutEffect(() => {
     if (!paintRangeFlyoutOpen && !eraseFlyoutOpen && !regionFlyoutOpen) return undefined;
     const updatePositions = () => {
@@ -200,7 +209,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onReg
       resizeObserver?.disconnect();
       window.removeEventListener("resize", updatePositions);
     };
-  }, [eraseFlyoutOpen, eraseRange, paintRange, paintRangeFlyoutOpen, radialPaletteState, regionFlyoutOpen]);
+  }, [eraseFlyoutOpen, eraseRange, eraseTarget, paintRange, paintRangeFlyoutOpen, radialPaletteState, regionFlyoutOpen]);
 
   useEffect(() => {
     if (!radialPaletteState) return undefined;
@@ -362,6 +371,22 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onReg
       aria-label="消しゴムの調整"
       onPointerDown={(event) => event.stopPropagation()}
     >
+      <div className="eraser-targets" role="group" aria-label="削除対象">
+        <span className="eraser-targets-label">削除対象</span>
+        <div className="eraser-target-buttons">
+          {ERASE_TARGETS.map((target) => (
+            <button
+              key={target.id}
+              className="eraser-target-button"
+              type="button"
+              aria-pressed={eraseTarget === target.id}
+              onClick={() => selectEraseTarget(target.id)}
+            >
+              {target.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="eraser-range-label">
         <label htmlFor="map-eraser-range">太さ</label>
         <output htmlFor="map-eraser-range">{eraseRange}セル</output>

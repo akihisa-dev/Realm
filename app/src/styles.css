@@ -76,6 +76,12 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .radial-palette-eraser-tool { padding: 0; }
 .palette-flyout { position: fixed; z-index: 10; display: grid; visibility: visible; opacity: 1; pointer-events: auto; box-sizing: border-box; grid-template-columns: minmax(0, 1fr) minmax(0, auto); gap: 4px 10px; width: min(176px, calc(100vw - 24px)); max-width: calc(100vw - 24px); padding: 10px 12px; border: 1px solid rgba(29, 32, 37, .16); border-radius: 5px; background: #fff; box-shadow: 0 3px 10px rgba(29, 32, 37, .1); color: #292f35; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif; font-size: 12px; }
 .palette-flyout-erase { width: min(220px, calc(100vw - 24px)); grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.eraser-targets { display: grid; gap: 5px; }
+.eraser-targets-label { font-weight: 600; }
+.eraser-target-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.eraser-target-button { min-width: 0; min-height: 28px; padding: 4px 6px; border: 1px solid #cbd3d7; border-radius: 4px; background: #fff; color: #3e4b53; font-size: 12px; }
+.eraser-target-button:hover, .eraser-target-button:focus-visible { border-color: #078c98; background: #eef8f8; color: #007c89; }
+.eraser-target-button[aria-pressed="true"] { border-color: #078c98; background: #d9f0f1; color: #006c77; font-weight: 600; }
 .eraser-range-label { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 10px; }
 .radial-palette-flyout label { font-weight: 600; }
 .radial-palette-flyout output { color: #53616a; text-align: right; }

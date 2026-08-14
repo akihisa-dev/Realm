@@ -327,7 +327,7 @@ describe("MapCanvas", () => {
     expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
 
     rerender(<MapCanvas mode="cell-erase" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("六角セルを押したままなぞって地形を消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("六角セルを押したままなぞって地形または領域を消去します。消しゴムの調整で削除対象を切り替えられます。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。")).toBeInTheDocument();
     expect(renderer.setMode).toHaveBeenLastCalledWith("cell-erase");
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-mode-cell-erase");
 
@@ -360,7 +360,8 @@ describe("MapCanvas", () => {
       onDraw: vi.fn(() => vi.fn()), onSelectFeatures: vi.fn(() => vi.fn()), onSelect: vi.fn(() => vi.fn()), onCellSelect: vi.fn(() => vi.fn()), onModifyFeatures: vi.fn(() => vi.fn()), onModify: vi.fn(() => vi.fn()), onEraseFeatures: vi.fn(() => vi.fn()), onErase: vi.fn(() => vi.fn()), onLayerShift: vi.fn(() => vi.fn()), onError: vi.fn(() => vi.fn()), onZoomChange: vi.fn(() => vi.fn()), updateSize: vi.fn(), exportRaster: vi.fn(async () => ({ bytes: [], width: 1, height: 1 })), dispose: vi.fn(),
     };
     const onToolChange = vi.fn();
-    render(<MapCanvas onToolChange={onToolChange} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
+    const onEraseTargetChange = vi.fn();
+    render(<MapCanvas onToolChange={onToolChange} onEraseTargetChange={onEraseTargetChange} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
     fireEvent.contextMenu(screen.getByRole("region", { name: "世界地図" }), { clientX: 100, clientY: 100 });
     const eraserButton = screen.getByRole("button", { name: "消しゴム" });
     const paintButton = screen.getByRole("button", { name: "地形を描く（太さ調整）" });
@@ -370,6 +371,15 @@ describe("MapCanvas", () => {
     expect(eraserButton).toHaveAttribute("aria-expanded", "true");
     const eraseFlyout = screen.getByRole("group", { name: "消しゴムの調整" });
     expect(eraseFlyout).toHaveClass("palette-flyout-erase");
+    const eraseTargetGroup = screen.getByRole("group", { name: "削除対象" });
+    expect(eraseTargetGroup).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "地形削除" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "領域削除" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "領域削除" }));
+    expect(onToolChange).toHaveBeenLastCalledWith("erase");
+    expect(onEraseTargetChange).toHaveBeenCalledWith("region");
+    expect(screen.getByRole("button", { name: "領域削除" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "地形削除" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     fireEvent.click(paintButton);
     fireEvent.click(eraserButton);

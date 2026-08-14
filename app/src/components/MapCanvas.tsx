@@ -16,6 +16,7 @@ import { DEFAULT_MAP_THEME_ID, type MapThemeId, type ThemeOverrides } from "../m
 import { useMapAdapterLifecycle } from "./editor/useMapAdapterLifecycle";
 import { usePaletteFlyouts } from "./editor/usePaletteFlyouts";
 import { useRendererSync } from "./editor/useRendererSync";
+import type { EraseTarget } from "./editor/eraseTargets";
 
 export type TerrainMapMode = "pan" | "cell-select" | "cell-region" | "grab" | "cell-erase" | "region";
 
@@ -43,6 +44,7 @@ type MapCanvasProps = {
   onCellSelect?: (cellIds: readonly string[]) => void;
   onRegionMove?: (input: MoveRegionCellsInput) => void;
   onToolChange?: (tool: "terrain" | "region" | "erase" | "grab") => void;
+  onEraseTargetChange?: (target: EraseTarget) => void;
   onRegionColorChange?: (color: string) => void;
   regionColor?: string;
   onModify?: (featureId: string, geometry: GeoJsonGeometry) => void;
@@ -78,6 +80,7 @@ export function MapCanvas({
   onCellSelect,
   onRegionMove,
   onToolChange,
+  onEraseTargetChange,
   onRegionColorChange,
   regionColor,
   onModify,
@@ -103,14 +106,14 @@ export function MapCanvas({
     eraseFlyout,
     regionFlyout,
     regionColor: paletteRegionColor,
-  } = usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onRegionColorChange });
+  } = usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEraseTargetChange, onRegionColorChange });
   const paintRadius = cellPaintRadiusForRange(paintRange);
   const effectivePaintRadius = mode === "cell-select" ? paintRadius : 0;
   const effectiveRegionColor = regionColor ?? paletteRegionColor;
   const mapHelp = mode === "pan"
     ? "ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
     : mode === "cell-erase"
-      ? "六角セルを押したままなぞって地形を消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。"
+      ? "六角セルを押したままなぞって地形または領域を消去します。消しゴムの調整で削除対象を切り替えられます。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。"
       : mode === "cell-region"
         ? "自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。"
       : mode === "grab"

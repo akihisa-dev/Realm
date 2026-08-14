@@ -15,6 +15,7 @@ vi.mock("./MapCanvas", () => ({
     zoom?: number;
     onCellSelect?: (ids: readonly string[]) => void;
     onToolChange?: (tool: "terrain" | "region" | "erase" | "grab") => void;
+    onEraseTargetChange?: (target: "terrain" | "region") => void;
     onRegionMove?: (input: { sourceCellIds: string[]; targetCellIds: string[] }) => void;
     onRegionColorChange?: (color: string) => void;
     onError?: (code: "drawing_self_intersection") => void;
@@ -29,6 +30,7 @@ vi.mock("./MapCanvas", () => ({
       <button type="button" onClick={() => props.onCellSelect?.([])}>テスト選択解除</button>
       <button type="button" onClick={() => props.onError?.("drawing_self_intersection")}>テスト描画エラー</button>
       <button type="button" onClick={() => props.onToolChange?.("erase")}>テスト消しゴム</button>
+      <button type="button" onClick={() => props.onEraseTargetChange?.("region")}>テスト領域削除</button>
       <button type="button" onClick={() => props.onToolChange?.("terrain")}>テスト地形描画</button>
       <button type="button" onClick={() => props.onToolChange?.("region")}>テスト領域</button>
       <button type="button" onClick={() => props.onToolChange?.("grab")}>テストグラブ</button>
@@ -116,10 +118,10 @@ it("saves a colored region without changing terrain cells and supports undo", as
   ]));
 });
 
-it("moves one colored region mass through the grab callback while preserving terrain", async () => {
+it("clips a grabbed region to the terrain cells at the destination", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://grab-editor.realmmap", name: "Grab editor" });
-  await backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "terrain", value: "terrain" });
+  await backend.applyCellAttributes({ cellIds: ["1:1", "4:2"], attribute: "terrain", value: "terrain" });
   await backend.applyCellAttributes({ cellIds: ["1:1", "2:1"], attribute: "region", value: "#2468AC" });
   const snapshot = await backend.getOpenProject();
   if (!snapshot) throw new Error("snapshot missing");
@@ -132,8 +134,9 @@ it("moves one colored region mass through the grab callback while preserving ter
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
     { cellId: "1:1", attribute: "terrain", value: "terrain" },
     { cellId: "4:2", attribute: "region", value: "#2468AC" },
-    { cellId: "5:2", attribute: "region", value: "#2468AC" },
+    { cellId: "4:2", attribute: "terrain", value: "terrain" },
   ])));
+  expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([{ cellId: "5:2", attribute: "region", value: "#2468AC" }]));
   expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([
     { cellId: "1:1", attribute: "region", value: "#2468AC" },
     { cellId: "2:1", attribute: "region", value: "#2468AC" },
@@ -247,6 +250,27 @@ it("erases terrain cells through an already registered map callback without dele
   fireEvent.click(screen.getByRole("button", { name: "テスト遅延セル操作" }));
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([]));
   expect((await backend.getOpenProject())?.features).toEqual([expect.objectContaining({ featureType: "city", name: "旧都市" })]);
+});
+
+it("deletes only region cells after switching the eraser target", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://erase-region.realmmap", name: "Erase region" });
+  await backend.applyCellAttributes({ cellIds: ["1:1", "1:2"], attribute: "terrain", value: "terrain" });
+  await backend.applyCellAttributes({ cellIds: ["1:1", "1:2"], attribute: "region", value: "#2468AC" });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テスト領域削除" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト消しゴム" }));
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-erase");
+  fireEvent.click(screen.getByRole("button", { name: "テスト遅延セル操作" }));
+
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([
+    { cellId: "1:1", attribute: "terrain", value: "terrain" },
+    { cellId: "1:2", attribute: "terrain", value: "terrain" },
+    { cellId: "1:2", attribute: "region", value: "#2468AC" },
+  ]));
 });
 
 it("removes an erased cell from the map before save completes and restores it on failure", async () => {
