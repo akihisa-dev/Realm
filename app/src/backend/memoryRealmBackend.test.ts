@@ -37,6 +37,23 @@ it("creates, edits, deletes, and undoes current features", async () => {
     expect(await backend.viewCellAttributes({})).toHaveLength(2);
   });
 
+  it("clears terrain and region together as one undoable operation", async () => {
+    const backend = new MemoryRealmBackend();
+    await backend.createProject({ path: "browser://terrain-region-erase.realmmap", name: "Terrain region erase" });
+    const regionId = "55555555-5555-4555-8555-555555555555";
+    await backend.applyCellAttributes({ cellIds: ["2:3"], attribute: "terrain", value: "land" });
+    await backend.applyCellAttributes({ cellIds: ["2:3"], attribute: "region", value: "#AA0000", regionId });
+    await backend.applyCellAttributes({ cellIds: ["2:3"], attribute: "terrain", value: null, clearRegion: true });
+    expect(await backend.viewCellAttributes({})).toEqual([]);
+    await backend.undoProject();
+    expect(await backend.viewCellAttributes({})).toEqual([
+      { cellId: "2:3", attribute: "terrain", value: "land" },
+      { cellId: "2:3", attribute: "region", value: "#AA0000", regionId },
+    ]);
+    await expect(backend.applyCellAttributes({ cellIds: ["2:3"], attribute: "terrain", value: "land", clearRegion: true })).rejects.toThrow("領域消去");
+    await expect(backend.applyCellAttributes({ cellIds: ["2:3"], attribute: "region", value: null, clearRegion: true })).rejects.toThrow("領域消去");
+  });
+
   it("covers library errors, import, reopen, redo, and cell validation", async () => {
     const backend = new MemoryRealmBackend();
     await expect(backend.saveProject({ name: "Nope" })).rejects.toThrow("開かれていません");

@@ -119,13 +119,20 @@ export class RealmCommands implements RealmBackend {
   async deleteAssetsBatch(input: { ids: string[] }): Promise<RealmSnapshot> { assertRecord(input); if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > MAX_ASSET_BATCH) throw invalid("The asset batch is invalid."); const ids = input.ids.map(canonicalAssetId); if (new Set(ids).size !== ids.length) throw invalid("An asset batch cannot contain duplicate identifiers."); const session = this.current(); const rows = ids.map((id) => session.database.prepare("SELECT id FROM assets WHERE id=?").get(id)); if (rows.some((row) => !row)) throw new RealmError("not_found", "The asset was not found."); const features = session.database.prepare("SELECT properties_json AS propertiesJson FROM features").all() as Record<string, unknown>[]; try { if (ids.some((id) => features.some((row) => containsAsset(JSON.parse(String(row.propertiesJson)), id)))) throw new RealmError("asset_in_use", "The asset is still referenced by a feature."); } catch (error) { if (error instanceof RealmError) throw error; throw new RealmError("corrupt_project", "A feature contains invalid properties."); } const before = captureState(session.database); transaction(session.database, () => { const statement = session.database.prepare("DELETE FROM assets WHERE id=?"); for (const id of ids) statement.run(id); }); session.checkpoint(before, "delete-assets"); return projectSnapshot(session); }
   async applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot> {
     assertRecord(input); validateCellLayer(input.attribute); const cells = normalizeCellIds(input.cellIds); const value = validateCellValue(input.value);
+    if (input.clearRegion !== undefined && typeof input.clearRegion !== "boolean") throw invalid("The region clearing option is invalid.");
+    if (input.clearRegion === true && (input.attribute !== "terrain" || value !== null)) throw invalid("The region clearing option is invalid.");
     if (input.regionId !== undefined && (input.attribute !== "region" || value === null)) throw invalid("The region identifier is invalid.");
     const regionId = input.attribute === "region" && value !== null ? canonicalUuid(input.regionId ?? randomUUID(), "region") : null;
     const session = this.current(); const before = captureState(session.database);
     transaction(session.database, () => {
       const deleteStatement = session.database.prepare("DELETE FROM cell_attributes WHERE grid_version=? AND cell_x=? AND cell_y=? AND layer=?");
       const insertStatement = session.database.prepare("INSERT INTO cell_attributes(grid_version,cell_x,cell_y,layer,value,region_id) VALUES (?,?,?,?,?,?) ON CONFLICT(grid_version,cell_x,cell_y,layer) DO UPDATE SET value=excluded.value,region_id=excluded.region_id");
-      for (const [x, y] of cells) { if (value === null) deleteStatement.run(GRID_VERSION, x, y, input.attribute); else insertStatement.run(GRID_VERSION, x, y, input.attribute, value, regionId); }
+      for (const [x, y] of cells) {
+        if (value === null) {
+          deleteStatement.run(GRID_VERSION, x, y, input.attribute);
+          if (input.clearRegion === true) deleteStatement.run(GRID_VERSION, x, y, "region");
+        } else insertStatement.run(GRID_VERSION, x, y, input.attribute, value, regionId);
+      }
     });
     session.checkpoint(before, "cell-attributes"); return projectSnapshot(session);
   }

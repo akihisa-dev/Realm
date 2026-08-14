@@ -407,9 +407,12 @@ export class MemoryRealmBackend implements RealmBackend {
   async applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot> {
     const project = this.current(); const ids = [...new Set(input.cellIds)];
     if (!ids.length) throw new Error("セルを選択してください。"); if (ids.some((id) => !validCell(id))) throw new Error("セルの指定が不正です。");
+    if (input.clearRegion !== undefined && typeof input.clearRegion !== "boolean") throw new Error("領域消去の指定が不正です。");
+    if (input.clearRegion === true && (input.attribute !== "terrain" || input.value !== null)) throw new Error("領域消去の指定が不正です。");
     if (input.regionId !== undefined && (input.attribute !== "region" || input.value === null)) throw new Error("領域IDの指定が不正です。");
     if (input.value !== null && !input.value.trim()) throw new Error("属性値を入力してください。"); this.checkpoint(project);
     project.cells = project.cells.filter((cell) => !(ids.includes(cell.cellId) && cell.attribute === input.attribute));
+    if (input.clearRegion === true) project.cells = project.cells.filter((cell) => !(ids.includes(cell.cellId) && cell.attribute === "region"));
     if (input.value !== null) {
       const regionId = input.attribute === "region" ? normalizeRegionId(input.regionId ?? crypto.randomUUID()) : undefined;
       for (const cellId of ids) project.cells.push({ cellId, attribute: input.attribute, value: input.value.trim(), ...(regionId ? { regionId } : {}) });

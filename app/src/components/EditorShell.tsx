@@ -118,7 +118,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     });
   };
 
-  const updateOptimisticCellAttributes = (cellIds: readonly string[], attribute: "terrain" | "region", value: string | null, regionId?: string): void => {
+  const updateOptimisticCellAttributes = (cellIds: readonly string[], attribute: "terrain" | "region", value: string | null, regionId?: string, clearRegion = false): void => {
     // Invalidate an in-flight read before publishing the optimistic state. Its
     // old read result must not overwrite a newer paint operation.
     ++cellRequest.current;
@@ -126,7 +126,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     setCellAttributes((current) => {
       const byCell = new Map(current.map((item) => [`${item.cellId}:${item.attribute}`, item]));
       if (value === null) {
-        for (const cellId of selected) byCell.delete(`${cellId}:${attribute}`);
+        for (const cellId of selected) {
+          byCell.delete(`${cellId}:${attribute}`);
+          if (clearRegion) byCell.delete(`${cellId}:region`);
+        }
       } else {
         for (const cellId of selected) byCell.set(`${cellId}:${attribute}`, { cellId, attribute, value, ...(attribute === "region" && regionId ? { regionId } : {}) });
       }
@@ -152,14 +155,16 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         : "terrain";
     const value = tool === "terrain" ? "terrain" : tool === "region" ? regionColor : null;
     const regionId = tool === "region" ? crypto.randomUUID() : undefined;
+    const clearRegion = tool === "erase" && attribute === "terrain";
     const mutation = ++cellMutation.current;
-    updateOptimisticCellAttributes(nextIds, attribute, value, regionId);
+    updateOptimisticCellAttributes(nextIds, attribute, value, regionId, clearRegion);
     // Completed strokes are represented immediately by the optimistic terrain
     // outline. Keep controlled selection empty so only pointer hover can show
     // a transient fill after commit.
     setSelectedCellIds([]);
+    const input: ApplyCellAttributesInput = { cellIds: nextIds, attribute, value, ...(regionId ? { regionId } : {}), ...(clearRegion ? { clearRegion: true } : {}) };
     void run(
-      () => backend.applyCellAttributes({ cellIds: nextIds, attribute, value, ...(regionId ? { regionId } : {}) }),
+      () => backend.applyCellAttributes(input),
       attribute === "region" ? "セルの領域属性を更新できませんでした。" : "セルの地形属性を更新できませんでした。",
       {
         recover: async (identity) => {

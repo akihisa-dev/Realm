@@ -30,14 +30,14 @@ import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors"
 import { createCellStyle, createFeatureStyle } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
 import { assertGeometryWithinWorld } from "./geometryGuard";
-import { exactCellBoundaryPolygons, smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments } from "./terrainOutline";
+import { smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments } from "./terrainOutline";
 import { TerrainOutlineAnimator } from "./terrainOutlineAnimator";
 import { CellRegionController } from "./CellRegionController";
 import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
 import { exportMapRaster } from "./mapRasterExporter";
 import { RegionGrabController } from "./RegionGrabController";
-import { adjacentCellIds, connectedCellComponents } from "./regionGrab";
+import { connectedCellComponents } from "./regionGrab";
 import { nudgeGeometry, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
 import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 
@@ -970,9 +970,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
     const terrainCellIds = [...byCell.entries()]
       .filter(([, values]) => values.some(({ attribute }) => attribute === "terrain"))
       .map(([id]) => id);
-    const terrainSet = new Set(terrainCellIds);
-    const renderedByCell = new globalThis.Map<string, CellAttributeSnapshot[]>();
-    for (const [id, values] of byCell) renderedByCell.set(id, terrainSet.has(id) ? values : values.filter(({ attribute }) => attribute !== "region"));
+    // Region cells remain visible even when terrain is absent.  The persisted
+    // layers are independent, so hiding region rows here can make a moved or
+    // otherwise terrainless region impossible to find again.
+    const renderedByCell = byCell;
     this.ensureCells(byCell.keys());
     const changedIds = new Set([...this.cellAttributesById.keys(), ...byCell.keys()]);
     for (const id of changedIds) {
@@ -999,21 +1000,13 @@ export class RealmMapAdapter implements RealmMapRenderer {
     const regionIdsByIdentity = new globalThis.Map<string, { color: string; ids: string[]; identity: string }>();
     for (const [id, values] of byCell) {
       const region = values.find(({ attribute }) => attribute === "region"); if (!region) continue;
-      // Persisted region rows may extend beyond terrain. Keep those rows in
-      // the adapter state for future moves, but mask them from the rendered
-      // region layer until terrain exists at the same cell.
-      if (!terrainSet.has(id)) continue;
       const color = /^#[\da-f]{6}$/i.test(region.value) ? region.value.toUpperCase() : mapTheme(this.activeThemeId, this.themeOverrides).region;
       const identity = region.regionId ?? region.value;
       const key = `${identity}\u0000${color}`;
       const entry = regionIdsByIdentity.get(key) ?? { color, ids: [], identity }; entry.ids.push(id); regionIdsByIdentity.set(key, entry);
     }
     for (const { color, ids, identity } of regionIdsByIdentity.values()) for (const component of connectedCellComponents(ids)) {
-      // Smoothing a concave boundary can round a corner into the cell just
-      // outside terrain. Keep components touching that mask boundary exact;
-      // interior components retain the softer presentation curve.
-      const touchesTerrainBoundary = component.some((id) => adjacentCellIds(id).length < 6 || adjacentCellIds(id).some((next) => !terrainSet.has(next)));
-      const polygons = touchesTerrainBoundary ? exactCellBoundaryPolygons(component) : smoothCellBoundaryPolygons(component);
+      const polygons = smoothCellBoundaryPolygons(component);
       for (const polygon of polygons) this.regionSmoothSource.addFeature(new Feature({ geometry: new Polygon(polygon), regionColor: color, regionIdentity: identity }));
     }
     this.cellRegion.animateChanges(previous, renderedByCell, (id) => this.getCellFeature(id));

@@ -316,6 +316,29 @@ it("deletes only region cells after switching the eraser target", async () => {
   ]));
 });
 
+it("erases terrain and its region together as one undoable operation", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://erase-terrain-region.realmmap", name: "Erase terrain and region" });
+  await backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "terrain", value: "terrain" });
+  await backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "region", value: "#2468AC" });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テスト消しゴム" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト遅延セル操作" }));
+
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([]));
+  expect((await backend.getOpenProject())?.canUndo).toBe(true);
+
+  fireEvent.click(screen.getByRole("button", { name: "戻す" }));
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    { cellId: "1:1", attribute: "terrain", value: "terrain" },
+    expect.objectContaining({ cellId: "1:1", attribute: "region", value: "#2468AC" }),
+  ])));
+  expect(await backend.viewCellAttributes({})).toHaveLength(2);
+});
+
 it("removes an erased cell from the map before save completes and restores it on failure", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://erase-optimistic.realmmap", name: "Erase optimistic" });

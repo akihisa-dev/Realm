@@ -71,6 +71,7 @@ export type ApplyCellAttributesInput = {
   attribute: CellAttribute;
   value: string | null;
   regionId?: string;
+  clearRegion?: boolean;
 };
 export type MoveRegionCellsInput = { sourceCellIds: string[]; targetCellIds: string[] };
 
