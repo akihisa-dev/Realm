@@ -776,11 +776,8 @@ describe("RealmMapAdapter", () => {
     const outsideStyle = (cellGridLayer.getStyleFunction()?.(new Feature(), 1) as Style[])[0]!;
     const insideStyle = (insideGridLayer.getStyleFunction()?.(new Feature(), 1) as Style[])[0]!;
     expect(outsideStyle.getStroke()?.getColor()).toBe("rgba(32, 48, 64, 0.28)");
-    expect(insideStyle.getImage()).toBeInstanceOf(CircleStyle);
-    expect((insideStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("rgba(32, 48, 64, 0.32)");
-    expect((insideStyle.getImage() as CircleStyle).getRadius()).toBeCloseTo(0.9375);
-    expect(outsideStyle.getStroke()?.getLineDash()).toEqual([1, 3]);
-    expect(outsideStyle.getStroke()?.getLineCap()).toBe("round");
+    expect(insideStyle.getImage()).toBeInstanceOf(CircleStyle); expect((insideStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("rgba(32, 48, 64, 0.32)"); expect((insideStyle.getImage() as CircleStyle).getRadius()).toBeCloseTo(0.9375);
+    expect(outsideStyle.getStroke()?.getLineDash()).toEqual([1, 3]); expect(outsideStyle.getStroke()?.getLineCap()).toBe("round");
     expect(insideStyle.getStroke()).toBeNull();
     expect(() => adapter.setCellGridOptions({ color: "gray", width: 0.75 })).toThrow(/RRGGBB/);
     expect(() => adapter.setCellGridOptions({ color: "#203040", width: 0.1 })).toThrow(/width/);
@@ -1023,10 +1020,7 @@ describe("RealmMapAdapter", () => {
     const outsideGridStyle = outsideGridStyles[0]!;
     const insideGridStyle = insideGridStyles[0]!;
     expect(outsideGridStyle.getStroke()?.getColor()).toBe("rgba(209, 215, 220, 0.28)");
-    expect(insideGridLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(MultiPoint);
-    expect((insideGridLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiPoint).getPoints()).toHaveLength(1);
-    expect(insideGridStyle.getImage()).toBeInstanceOf(CircleStyle);
-    expect((insideGridStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("rgba(209, 215, 220, 0.32)");
+    expect(insideGridLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(MultiPoint); expect((insideGridLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiPoint).getPoints()).toHaveLength(1); expect(insideGridStyle.getImage()).toBeInstanceOf(CircleStyle); expect((insideGridStyle.getImage() as CircleStyle).getFill()?.getColor()).toBe("rgba(209, 215, 220, 0.32)");
     expect(outsideGridStyle.getStroke()?.getLineDash()).toEqual([1, 3]);
     expect(outsideGridStyle.getStroke()?.getLineCap()).toBe("round");
     expect(insideGridLayer.getVisible()).toBe(true);
