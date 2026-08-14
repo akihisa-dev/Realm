@@ -1051,9 +1051,26 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
   onZoomChange(listener: (zoom: number) => void): () => void {
     const view = this.map.getView();
-    const onResolutionChange = () => listener(this.getZoom());
+    let lastEmittedZoom = this.getZoom();
+    const emitZoomChange = (): void => {
+      const zoom = this.getZoom();
+      if (Math.abs(zoom - lastEmittedZoom) <= 0.01) return;
+      lastEmittedZoom = zoom;
+      listener(zoom);
+    };
+    const onResolutionChange = () => {
+      // Do not feed animation frames back through React while an interaction
+      // is moving the view. The final moveend notification publishes the
+      // settled relative zoom instead.
+      if (!view.getAnimating()) emitZoomChange();
+    };
+    const onMoveEnd = () => emitZoomChange();
     view.on("change:resolution", onResolutionChange);
-    return () => view.un("change:resolution", onResolutionChange);
+    this.map.on("moveend", onMoveEnd);
+    return () => {
+      view.un("change:resolution", onResolutionChange);
+      this.map.un("moveend", onMoveEnd);
+    };
   }
   updateSize(): void {
     this.map.updateSize();

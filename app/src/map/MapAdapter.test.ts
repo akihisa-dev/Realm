@@ -427,6 +427,37 @@ describe("RealmMapAdapter", () => {
     }
   });
 
+  it("applies wheel zoom from the map viewport event", async () => {
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const map = adapter.getMap();
+    adapter.setZoom(3);
+    const wheelZoom = map.getInteractions().getArray().find((item) => item instanceof MouseWheelZoom) as MouseWheelZoom;
+    wheelZoom.setMouseAnchor(false);
+    const zoomChanged = vi.fn();
+    adapter.onZoomChange(zoomChanged);
+    const render = vi.spyOn(map, "render").mockImplementation(() => undefined);
+    (map as unknown as { frameState_: object }).frameState_ = {};
+
+    try {
+      const wheelEvent = new WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true });
+      map.getViewport().dispatchEvent(wheelEvent);
+      expect(wheelEvent.defaultPrevented).toBe(true);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(adapter.getZoom()).toBe(4);
+      expect(zoomChanged).not.toHaveBeenCalled();
+      map.dispatchEvent({ type: "moveend" } as never);
+      expect(zoomChanged).toHaveBeenLastCalledWith(4);
+    } finally {
+      render.mockRestore();
+      adapter.dispose();
+      host.remove();
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps middle-button drag pan available in every tool mode", () => {
     const host = document.createElement("div");
     host.style.width = "640px";
