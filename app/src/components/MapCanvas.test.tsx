@@ -67,7 +67,7 @@ describe("positionPaletteFlyout", () => {
 });
 
 describe("MapCanvas", () => {
-  it("selects the region tool and reports its color through an accessible flyout", () => {
+  it("selects one of ten circular region colors through an accessible flyout", () => {
     const renderer = createPaletteRenderer();
     const onToolChange = vi.fn();
     const onRegionColorChange = vi.fn();
@@ -81,8 +81,12 @@ describe("MapCanvas", () => {
     expect(regionButton).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(regionButton);
     expect(onToolChange).toHaveBeenCalledWith("region");
-    const color = screen.getByLabelText("領域の色", { selector: "input" });
-    fireEvent.change(color, { target: { value: "#2468ac" } });
+    const colors = screen.getAllByRole("radio");
+    expect(colors).toHaveLength(10);
+    expect(screen.getByRole("radio", { name: "領域色 8 #7A6FA8" })).toBeChecked();
+    const color = screen.getByRole("radio", { name: "領域色 6 #2468AC" });
+    expect(color.nextElementSibling).toHaveClass("region-color-swatch");
+    fireEvent.click(color);
     expect(onRegionColorChange).toHaveBeenCalledWith("#2468AC");
   });
 

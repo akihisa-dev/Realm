@@ -13,12 +13,26 @@ type FlyoutPosition = { left: number; top: number; side: "left" | "right" | "top
 type FlyoutKind = "paint" | "region" | "erase";
 
 const PAINT_RANGE_FLYOUT_SIZE = { width: 176, height: 58 };
+const REGION_FLYOUT_SIZE = { width: 220, height: 112 };
 const ERASE_FLYOUT_SIZE = { width: 220, height: 136 };
 const PALETTE_FLYOUT_GAP = 12;
 const FLYOUT_FALLBACK_POSITION: FlyoutPosition = { left: 12, top: 12, side: "right" };
 const PAINT_RANGE_FLYOUT_ID = "map-paint-range-flyout";
 const REGION_FLYOUT_ID = "map-region-flyout";
 const RADIAL_PALETTE_ANIMATION_MS = 360;
+
+export const REGION_COLORS = [
+  "#E45756",
+  "#F28E2B",
+  "#F2CF5B",
+  "#59A14F",
+  "#2A9D8F",
+  "#2468AC",
+  "#6C5BCE",
+  "#7A6FA8",
+  "#C06C84",
+  "#8C6E4A",
+] as const;
 
 const isFiniteRect = (rect: PaletteRect | null): rect is PaletteRect => rect !== null
   && Number.isFinite(rect.left)
@@ -123,7 +137,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEra
       ? anchorRect
       : kind === "paint" ? fallback.paintAnchor : fallback.eraseAnchor;
     const flyoutElement = kind === "paint" ? paintRangeFlyoutRef.current : kind === "region" ? regionFlyoutRef.current : eraseFlyoutRef.current;
-    const fallbackSize = kind === "paint" ? PAINT_RANGE_FLYOUT_SIZE : kind === "region" ? { width: 220, height: 90 } : ERASE_FLYOUT_SIZE;
+    const fallbackSize = kind === "paint" ? PAINT_RANGE_FLYOUT_SIZE : kind === "region" ? REGION_FLYOUT_SIZE : ERASE_FLYOUT_SIZE;
     const size = readElementSize(flyoutElement) ?? fallbackSize;
     return positionPaletteFlyout(palette, anchor, { width: window.innerWidth, height: window.innerHeight }, size, PALETTE_FLYOUT_GAP);
   };
@@ -329,7 +343,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEra
       </div>
       <div className="radial-palette-slot radial-palette-region-tool" style={{ "--slot": 2 } as CSSProperties}>
         <button ref={regionButtonRef} className="radial-palette-range-button" type="button" aria-label="領域" aria-pressed={mode === "cell-region" || mode === "region"} aria-haspopup="true" aria-expanded={regionFlyoutOpen} aria-controls={REGION_FLYOUT_ID} onClick={openRegionFlyout}>
-          <span aria-hidden="true" style={{ display: "block", width: 14, height: 14, borderRadius: 3, background: regionColor }} />
+          <span aria-hidden="true" style={{ display: "block", width: 14, height: 14, borderRadius: "50%", background: regionColor }} />
         </button>
       </div>
       <div className="radial-palette-slot radial-palette-grab-tool" style={{ "--slot": 3 } as CSSProperties}>
@@ -340,9 +354,23 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEra
     </div>
   ) : null;
   const regionFlyout = regionFlyoutOpen && portalRoot ? createPortal(
-    <div ref={regionFlyoutRef} id={REGION_FLYOUT_ID} className={`palette-flyout radial-palette-flyout-${regionPosition.side}`} data-side={regionPosition.side} style={{ position: "fixed", zIndex: 10, display: "grid", visibility: "visible", opacity: 1, pointerEvents: "auto", left: regionPosition.left, top: regionPosition.top }} role="group" aria-label="領域の色" onPointerDown={(event) => event.stopPropagation()}>
-      <label htmlFor="map-region-color">領域の色</label>
-      <input id="map-region-color" type="color" value={regionColor} aria-label="領域の色" onChange={(event) => { const color = event.currentTarget.value.toUpperCase(); setRegionColor(color); onRegionColorChange?.(color); }} />
+    <div ref={regionFlyoutRef} id={REGION_FLYOUT_ID} className={`palette-flyout palette-flyout-region radial-palette-flyout-${regionPosition.side}`} data-side={regionPosition.side} style={{ position: "fixed", zIndex: 10, display: "grid", visibility: "visible", opacity: 1, pointerEvents: "auto", left: regionPosition.left, top: regionPosition.top }} role="group" aria-label="領域の色" onPointerDown={(event) => event.stopPropagation()}>
+      <span className="region-color-label">領域の色</span>
+      <div className="region-color-options" role="radiogroup" aria-label="領域色の候補">
+        {REGION_COLORS.map((color, index) => (
+          <label className="region-color-option" key={color} title={`領域色 ${index + 1} ${color}`}>
+            <input
+              type="radio"
+              name="map-region-color"
+              value={color}
+              checked={regionColor === color}
+              aria-label={`領域色 ${index + 1} ${color}`}
+              onChange={() => { setRegionColor(color); onRegionColorChange?.(color); }}
+            />
+            <span className="region-color-swatch" aria-hidden="true" style={{ backgroundColor: color }} />
+          </label>
+        ))}
+      </div>
     </div>, portalRoot,
   ) : null;
   const paintRangeFlyout = paintRangeFlyoutOpen && portalRoot ? createPortal(
