@@ -108,7 +108,7 @@ export function MapCanvas({
     eraseFlyout,
     regionFlyout,
     regionColor: paletteRegionColor,
-  } = usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEraseTargetChange, onRegionColorChange });
+  } = usePaletteFlyouts({ shellRef, hostRef, mode, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange });
   const paintRadius = cellPaintRadiusForRange(paintRange);
   const effectivePaintRadius = mode === "cell-select" ? paintRadius : 0;
   const effectiveRegionColor = regionColor ?? paletteRegionColor;

@@ -69,8 +69,7 @@ const equalFlyoutPosition = (left: FlyoutPosition, right: FlyoutPosition): boole
 export type PaletteFlyoutOptions = {
   shellRef: RefObject<HTMLDivElement | null>;
   hostRef: RefObject<HTMLDivElement | null>;
-  mode: "pan" | "cell-select" | "cell-region" | "grab" | "cell-erase" | "region";
-  onToolChange: ((tool: "terrain" | "region" | "erase" | "grab") => void) | undefined;
+  regionColor?: string | undefined;
   onEraseTargetChange: ((target: EraseTarget) => void) | undefined;
   onRegionColorChange: ((color: string) => void) | undefined;
 };
@@ -88,7 +87,7 @@ export type PaletteFlyoutState = {
 };
 
 /** Owns map tool palette state, placement, portal rendering, and focus-safe dismissal. */
-export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEraseTargetChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
+export function usePaletteFlyouts({ shellRef, hostRef, mode, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
   const radialPaletteRef = useRef<HTMLDivElement>(null);
   const paintRangeButtonRef = useRef<HTMLButtonElement>(null);
   const eraseButtonRef = useRef<HTMLButtonElement>(null);
@@ -108,7 +107,8 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEra
   const [eraseFlyoutPosition, setEraseFlyoutPosition] = useState<FlyoutPosition | null>(null);
   const [regionFlyoutOpen, setRegionFlyoutOpen] = useState(false);
   const [regionFlyoutPosition, setRegionFlyoutPosition] = useState<FlyoutPosition | null>(null);
-  const [regionColor, setRegionColor] = useState("#7A6FA8");
+  const [localRegionColor, setLocalRegionColor] = useState("#7A6FA8");
+  const effectiveRegionColor = regionColor ?? localRegionColor;
 
   const getFallbackRects = (): { palette: PaletteRect; paintAnchor: PaletteRect; eraseAnchor: PaletteRect } => {
     const shellRect = readElementRect(shellRef.current);
@@ -343,7 +343,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEra
       </div>
       <div className="radial-palette-slot radial-palette-region-tool" style={{ "--slot": 2 } as CSSProperties}>
         <button ref={regionButtonRef} className="radial-palette-range-button" type="button" aria-label="領域" aria-pressed={mode === "cell-region" || mode === "region"} aria-haspopup="true" aria-expanded={regionFlyoutOpen} aria-controls={REGION_FLYOUT_ID} onClick={openRegionFlyout}>
-          <span aria-hidden="true" style={{ display: "block", width: 14, height: 14, borderRadius: "50%", background: regionColor }} />
+          <span aria-hidden="true" style={{ display: "block", width: 14, height: 14, borderRadius: "50%", background: effectiveRegionColor }} />
         </button>
       </div>
       <div className="radial-palette-slot radial-palette-grab-tool" style={{ "--slot": 3 } as CSSProperties}>
@@ -363,9 +363,9 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEra
               type="radio"
               name="map-region-color"
               value={color}
-              checked={regionColor === color}
+              checked={effectiveRegionColor === color}
               aria-label={`領域色 ${index + 1} ${color}`}
-              onChange={() => { setRegionColor(color); onRegionColorChange?.(color); }}
+              onChange={() => { setLocalRegionColor(color); onRegionColorChange?.(color); }}
             />
             <span className="region-color-swatch" aria-hidden="true" style={{ backgroundColor: color }} />
           </label>
@@ -440,7 +440,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEra
   return {
     paintRange,
     eraseRadius: cellPaintRadiusForRange(eraseRange),
-    regionColor,
+    regionColor: effectiveRegionColor,
     radialPalette,
     paintRangeFlyout,
     eraseFlyout,

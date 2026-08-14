@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { errorMessage, type ApplyCellAttributesInput, type CellAttributeSnapshot, type MoveRegionCellsInput, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { DEFAULT_ERASE_TARGET, eraseTargetDefinition, type EraseTarget } from "./editor/eraseTargets";
+import { ObjectManager } from "./editor/ObjectManager";
+import { deriveRegionObjects, type RegionComponent, type RegionObject } from "./editor/regionObjects";
 import { mapErrorMessage } from "../locales/ja";
 
 type Tool = "terrain" | "region" | "erase" | "grab";
@@ -31,6 +33,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [regionColor, setRegionColor] = useState("#7A6FA8");
   const [cellAttributes, setCellAttributes] = useState<CellAttributeSnapshot[]>([]);
   const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
+  const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [regionPaintTargetId, setRegionPaintTargetId] = useState<string | null>(null);
+  const [objectManagerOpen, setObjectManagerOpen] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [operating, setOperating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +48,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const cellRequest = useRef(0);
   const cellMutation = useRef(0);
   const projectIdentity = `${snapshot.path}:${snapshot.world.id}`;
+  const regionObjects = useMemo(() => deriveRegionObjects(cellAttributes), [cellAttributes]);
 
   useEffect(() => {
     mounted.current = true;
@@ -56,9 +63,19 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       cellRequest.current += 1;
       setCellAttributes([]);
       setSelectedCellIds([]);
+      setSelectedRegionIds([]);
+      setSelectedComponentId(null);
+      setRegionPaintTargetId(null);
       setError(null);
     }
   }, [projectIdentity, snapshot]);
+
+  useEffect(() => {
+    const knownIds = new Set(regionObjects.map((region) => region.id));
+    setSelectedRegionIds((current) => current.filter((id) => knownIds.has(id)));
+    setRegionPaintTargetId((current) => current && knownIds.has(current) ? current : null);
+    setSelectedComponentId((current) => current && regionObjects.some((region) => region.components.some((component) => component.id === current)) ? current : null);
+  }, [regionObjects]);
 
   const settings = viewedSnapshot.settings;
   const locked = busy || operating;
@@ -137,6 +154,52 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     });
   };
 
+  const selectRegionObject = (region: RegionObject): void => {
+    setSelectedRegionIds([region.id]);
+    setSelectedComponentId(null);
+    setSelectedCellIds(region.cellIds);
+  };
+
+  const selectRegionObjects = (regionIds: readonly string[]): void => {
+    const ids = [...new Set(regionIds)];
+    const cells = [...new Set(regionObjects.filter((region) => ids.includes(region.id)).flatMap((region) => region.cellIds))];
+    setSelectedRegionIds(ids);
+    setSelectedComponentId(null);
+    setSelectedCellIds(cells);
+  };
+
+  const selectRegionComponent = (region: RegionObject, component: RegionComponent): void => {
+    setSelectedRegionIds([region.id]);
+    setSelectedComponentId(component.id);
+    setSelectedCellIds(component.cellIds);
+  };
+
+  const startNewRegion = (): void => {
+    setRegionPaintTargetId(null);
+    setSelectedRegionIds([]);
+    setSelectedComponentId(null);
+    setSelectedCellIds([]);
+    selectTool("region");
+  };
+
+  const addToRegion = (region: RegionObject): void => {
+    if (!region.persistentId) return;
+    setRegionPaintTargetId(region.id);
+    setRegionColor(region.color);
+    setSelectedRegionIds([region.id]);
+    setSelectedComponentId(null);
+    setSelectedCellIds([]);
+    selectTool("region");
+  };
+
+  const changeRegionColor = (color: string): void => {
+    setRegionColor(color);
+    setRegionPaintTargetId(null);
+    setSelectedRegionIds([]);
+    setSelectedComponentId(null);
+    setSelectedCellIds([]);
+  };
+
   const applyCellSelection = (ids: readonly string[]) => {
     const nextIds = [...new Set(ids)];
     const tool = activeToolRef.current;
@@ -154,7 +217,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         ? eraseTargetDefinition(eraseTargetRef.current).attribute
         : "terrain";
     const value = tool === "terrain" ? "terrain" : tool === "region" ? regionColor : null;
-    const regionId = tool === "region" ? crypto.randomUUID() : undefined;
+    const targetRegion = tool === "region" && regionPaintTargetId
+      ? regionObjects.find((region) => region.id === regionPaintTargetId)
+      : undefined;
+    const regionId = tool === "region" ? targetRegion?.persistentId ?? crypto.randomUUID() : undefined;
     const clearRegion = tool === "erase" && attribute === "terrain";
     const mutation = ++cellMutation.current;
     updateOptimisticCellAttributes(nextIds, attribute, value, regionId, clearRegion);
@@ -231,9 +297,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         <nav aria-label="編集履歴">
           <button type="button" onClick={() => { void run(() => backend.undoProject(), "操作を戻せませんでした。"); }} disabled={locked || !viewedSnapshot.canUndo}>戻す</button>
           <button type="button" onClick={() => { void run(() => backend.redoProject(), "操作を進められませんでした。"); }} disabled={locked || !viewedSnapshot.canRedo}>進む</button>
+          <button className="object-manager-toggle" type="button" aria-label={objectManagerOpen ? "オブジェクトマネージャーを閉じる" : "オブジェクトマネージャーを開く"} aria-pressed={objectManagerOpen} onClick={() => setObjectManagerOpen((current) => !current)}>オブジェクト</button>
         </nav>
       </header>
-      <div className="editor-body">
+      <div className={`editor-body${objectManagerOpen ? "" : " object-manager-is-closed"}`}>
         <section className="map-region" aria-label="地形編集領域">
           <MapCanvas
             // Compatibility region objects remain in snapshots but are not
@@ -255,13 +322,30 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             regionColor={regionColor}
             onToolChange={selectTool}
             onEraseTargetChange={selectEraseTarget}
-            onRegionColorChange={setRegionColor}
+            onRegionColorChange={changeRegionColor}
             onError={(code) => setError(mapErrorMessage(code, activeToolRef.current === "region" || (activeToolRef.current === "erase" && eraseTargetRef.current === "region") ? "region" : "terrain"))}
             onZoomChange={setZoom}
             zoom={zoom}
           />
           {error ? <p className="save-error" role="alert">{error}</p> : null}
         </section>
+        {objectManagerOpen ? (
+          <ObjectManager
+            regions={regionObjects}
+            selectedRegionIds={selectedRegionIds}
+            selectedComponentId={selectedComponentId}
+            regionPaintTargetId={regionPaintTargetId}
+            disabled={locked}
+            onSelectRegion={selectRegionObject}
+            onSelectionChange={selectRegionObjects}
+            onSelectComponent={selectRegionComponent}
+            onStartNewRegion={startNewRegion}
+            onAddToRegion={addToRegion}
+            onMergeRegions={mergeRegions}
+            onSplitComponent={splitRegionComponent}
+            onClose={() => setObjectManagerOpen(false)}
+          />
+        ) : null}
       </div>
     </main>
   );

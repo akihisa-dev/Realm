@@ -75,6 +75,83 @@ it("removes the duplicate rail while keeping the map editor", async () => {
   expect(screen.queryByRole("group", { name: "地図のズーム" })).not.toBeInTheDocument();
 });
 
+it("opens and closes the object manager without removing the map", async () => {
+  const backend = new MemoryRealmBackend();
+  const snapshot = await backend.createProject({ path: "browser://object-manager.realmmap", name: "Object manager" });
+  renderEditor(backend, snapshot);
+
+  expect(screen.getByRole("complementary", { name: "オブジェクトマネージャー" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "右パネルを閉じる" }));
+  expect(screen.queryByRole("complementary", { name: "オブジェクトマネージャー" })).not.toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "世界地図" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "オブジェクトマネージャーを開く" }));
+  expect(screen.getByRole("complementary", { name: "オブジェクトマネージャー" })).toBeInTheDocument();
+});
+
+it("adds a new disconnected chunk to the selected logical region", async () => {
+  const backend = new MemoryRealmBackend();
+  const regionId = "11111111-1111-4111-8111-111111111111";
+  await backend.createProject({ path: "browser://object-add.realmmap", name: "Object add" });
+  await backend.applyCellAttributes({ cellIds: ["8:8"], attribute: "region", value: "#2468AC", regionId });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  await waitFor(() => expect(screen.getByRole("button", { name: "領域 1に領域を追加" })).toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: "領域 1に領域を追加" }));
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-region");
+  fireEvent.click(screen.getByRole("button", { name: "テストセル描画" }));
+
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    expect.objectContaining({ cellId: "8:8", attribute: "region", regionId }),
+    expect.objectContaining({ cellId: "1:1", attribute: "region", regionId }),
+    expect.objectContaining({ cellId: "1:2", attribute: "region", regionId }),
+  ])));
+});
+
+it("merges selected logical regions into the first selected region", async () => {
+  const backend = new MemoryRealmBackend();
+  const firstRegionId = "11111111-1111-4111-8111-111111111111";
+  const secondRegionId = "22222222-2222-4222-8222-222222222222";
+  await backend.createProject({ path: "browser://object-merge.realmmap", name: "Object merge" });
+  await backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "region", value: "#2468AC", regionId: firstRegionId });
+  await backend.applyCellAttributes({ cellIds: ["8:8"], attribute: "region", value: "#E45756", regionId: secondRegionId });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(2));
+  fireEvent.click(screen.getByRole("checkbox", { name: "領域 1を統合対象にする" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "領域 2を統合対象にする" }));
+  fireEvent.click(screen.getByRole("button", { name: "選択した領域を統合" }));
+
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([
+    { cellId: "1:1", attribute: "region", value: "#2468AC", regionId: firstRegionId },
+    { cellId: "8:8", attribute: "region", value: "#2468AC", regionId: firstRegionId },
+  ]));
+});
+
+it("separates one disconnected chunk into a new logical region", async () => {
+  const backend = new MemoryRealmBackend();
+  const regionId = "33333333-3333-4333-8333-333333333333";
+  await backend.createProject({ path: "browser://object-split.realmmap", name: "Object split" });
+  await backend.applyCellAttributes({ cellIds: ["1:1", "2:1", "20:20"], attribute: "region", value: "#2468AC", regionId });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  await waitFor(() => expect(screen.getByText("2個の塊・3セル")).toBeInTheDocument());
+  fireEvent.click(screen.getByRole("button", { name: "領域 1の塊を表示する" }));
+  fireEvent.click(screen.getByRole("button", { name: "領域 1の塊2を分離" }));
+
+  await waitFor(async () => {
+    const attributes = await backend.viewCellAttributes({});
+    expect(attributes.find((item) => item.cellId === "1:1")?.regionId).toBe(regionId);
+    expect(attributes.find((item) => item.cellId === "20:20")?.regionId).toBeDefined();
+    expect(attributes.find((item) => item.cellId === "20:20")?.regionId).not.toBe(regionId);
+  });
+});
+
 it("applies terrain to selected hex cells", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://draw.realmmap", name: "Draw" });
