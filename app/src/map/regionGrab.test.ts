@@ -67,7 +67,7 @@ describe("region grab geometry", () => {
     expect(clipRegionCellsToAvailableTargets(["5:3", "6:3", "7:3", "20:20"], ["2:2", "3:2"], "region-a", attributes)).toEqual(["5:3", "7:3"]);
   });
 
-  it("previews only the terrain portion, emits one in-world move, and cancels an outside release", () => {
+  it("previews terrainless cells, clips overlapping regions, restores attributes, and emits one move", () => {
     const attributes = new Map([
       ["2:1", [region("2:1", "#AA0000")]],
       ["3:1", [region("3:1", "#AA0000")]],
@@ -81,6 +81,7 @@ describe("region grab geometry", () => {
       ["6:3", [region("6:3", "#00AA00", "region-b")]],
     ]);
     const features = new Map<string, Feature>();
+    const sourceFeature = new Feature(); sourceFeature.setId("2:1"); features.set("2:1", sourceFeature);
     const emitted: Array<{ sourceCellIds: string[]; targetCellIds: string[] }> = [];
     const setRegionSmoothVisible = vi.fn();
     const controller = new RegionGrabController({
@@ -100,9 +101,13 @@ describe("region grab geometry", () => {
     expect(setRegionSmoothVisible).toHaveBeenLastCalledWith(false, "region-a");
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: [1, 0] });
     expect(features.get("5:3")?.get("grabPreview")).toBe(true);
+    expect(features.get("6:4")?.get("grabPreview")).toBe(true);
     expect(features.get("6:3")).toBeUndefined();
     expect(interaction.handleUpEvent({ originalEvent: pointer, coordinate: [1, 0] })).toBe(false);
     expect(setRegionSmoothVisible).toHaveBeenLastCalledWith(true);
+    expect(features.get("2:1")?.get("attributes")).toEqual([region("2:1", "#AA0000")]);
+    expect(features.get("5:3")?.get("attributes")).toEqual([terrain("5:3")]);
+    expect(features.get("6:4")).toBeUndefined();
     expect(emitted).toEqual([{ sourceCellIds: ["2:1", "3:1", "2:2", "3:2", "4:2", "2:3", "3:3", "20:20"], targetCellIds: ["5:2", "6:2", "4:3", "5:3", "6:3", "5:4", "6:4", "22:21"] }]);
 
     expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: [0, 0] })).toBe(true);
