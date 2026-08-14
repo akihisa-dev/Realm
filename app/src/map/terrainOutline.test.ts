@@ -45,4 +45,44 @@ describe("terrainOutlineSegments", () => {
     expect(first.length).toBeGreaterThan(1);
     expect(smoothCellBoundaryRings([cellId(10, 10)])[0]!.length).toBeGreaterThan(exactCellBoundaryRings([cellId(10, 10)])[0]!.length);
   });
+
+  it("reduces hex-step waves without changing ring topology or bounds", () => {
+    const ids: string[] = [];
+    for (let row = 20; row <= 28; row += 1) {
+      for (let column = 20; column <= 28; column += 1) {
+        if (row !== 24 || column !== 24) ids.push(cellId(row, column));
+      }
+    }
+    ids.push(cellId(34, 34));
+    const exact = exactCellBoundaryRings(ids);
+    const smooth = smoothCellBoundaryRings(ids);
+    expect(smooth).toEqual(smoothCellBoundaryRings([...ids].reverse()));
+    expect(smooth.length).toBe(exact.length);
+    expect(smooth.every((ring) => ring.length < exact[0]!.length * 4)).toBe(true);
+
+    const bounds = (rings: typeof exact): [number, number, number, number] => {
+      const points = rings.flat();
+      return [Math.min(...points.map(([x]) => x)), Math.max(...points.map(([x]) => x)), Math.min(...points.map(([, y]) => y)), Math.max(...points.map(([, y]) => y))];
+    };
+    const exactBounds = bounds(exact);
+    for (const [minimum, maximum, axis] of [[exactBounds[0], exactBounds[1], 0], [exactBounds[2], exactBounds[3], 1]] as const) {
+      expect(smooth.flat().every((point) => point[axis] >= minimum && point[axis] <= maximum)).toBe(true);
+    }
+    expect(smooth.flat(2).every(Number.isFinite)).toBe(true);
+    expect(smooth.every((ring) => ring[0]![0] === ring.at(-1)![0] && ring[0]![1] === ring.at(-1)![1])).toBe(true);
+    expect(smoothCellBoundaryPolygons(ids).some((polygon) => polygon.length > 1)).toBe(true);
+    expect(smoothCellBoundaryPolygons(ids)).toHaveLength(2);
+  });
+
+  it("handles the complete active grid as one bounded smooth mass", () => {
+    const ids: string[] = [];
+    for (let row = 0; row < 73; row += 1) {
+      for (let column = 0; column < 128; column += 1) ids.push(cellId(row, column));
+    }
+    const rings = smoothCellBoundaryRings(ids);
+    expect(rings).toHaveLength(1);
+    expect(rings[0]![0]).toEqual(rings[0]!.at(-1));
+    expect(rings.flat(2).every(Number.isFinite)).toBe(true);
+    expect(rings.flat().length).toBeLessThanOrEqual(65_536);
+  });
 });

@@ -113,9 +113,125 @@ const chaikin = (ring: CellBoundaryRing): CellBoundaryRing => {
   output.push([...output[0]!] as Position); return output;
 };
 
+const cross = (a: Position, b: Position, c: Position): number =>
+  (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+const distanceSquared = (a: Position, b: Position): number => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+const pointSegmentDistanceSquared = (point: Position, start: Position, end: Position): number => {
+  const dx = end[0] - start[0]; const dy = end[1] - start[1];
+  if (dx === 0 && dy === 0) return distanceSquared(point, start);
+  const t = Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / (dx * dx + dy * dy)));
+  return distanceSquared(point, [start[0] + t * dx, start[1] + t * dy]);
+};
+const segmentsIntersect = (a: Position, b: Position, c: Position, d: Position): boolean => {
+  const epsilon = 1e-9;
+  const orientation = (first: Position, second: Position, third: Position): number => cross(first, second, third);
+  const abC = orientation(a, b, c); const abD = orientation(a, b, d);
+  const cdA = orientation(c, d, a); const cdB = orientation(c, d, b);
+  const onSegment = (point: Position, start: Position, end: Position): boolean =>
+    point[0] >= Math.min(start[0], end[0]) - epsilon && point[0] <= Math.max(start[0], end[0]) + epsilon
+    && point[1] >= Math.min(start[1], end[1]) - epsilon && point[1] <= Math.max(start[1], end[1]) + epsilon;
+  return (abC * abD < -(epsilon ** 2) && cdA * cdB < -(epsilon ** 2))
+    || (Math.abs(abC) <= epsilon && onSegment(c, a, b)) || (Math.abs(abD) <= epsilon && onSegment(d, a, b))
+    || (Math.abs(cdA) <= epsilon && onSegment(a, c, d)) || (Math.abs(cdB) <= epsilon && onSegment(b, c, d));
+};
+const locallySafeShortcut = (ring: readonly Position[], index: number, start: Position, end: Position): boolean => {
+  // A shortcut can only affect the small neighborhood around the removed
+  // vertex. Keeping this window fixed makes simplification linear in ring size.
+  for (let offset = -3; offset <= 3; offset += 1) {
+    const edge = (index + offset + ring.length) % ring.length;
+    if (edge === (index - 1 + ring.length) % ring.length || edge === index) continue;
+    if (segmentsIntersect(start, end, ring[edge]!, ring[(edge + 1) % ring.length]!)) return false;
+  }
+  return true;
+};
+const hasSelfIntersection = (ring: readonly Position[]): boolean => {
+  if (ring.length > 512) return false;
+  for (let first = 1; first < ring.length; first += 1) {
+    for (let second = first + 1; second < ring.length; second += 1) {
+      if (second === first + 1 || (first === 1 && second === ring.length - 1)) continue;
+      if (segmentsIntersect(ring[first - 1]!, ring[first]!, ring[second - 1]!, ring[second]!)) return true;
+    }
+  }
+  return false;
+};
+
+/** Removes only short, locally redundant boundary steps before curve fitting. */
+const simplifyBoundaryRing = (ring: CellBoundaryRing): CellBoundaryRing => {
+  const input = ring.slice(0, -1);
+  if (input.length < 8) return ring;
+  const lengths = input.map((point, index) => Math.sqrt(distanceSquared(point, input[(index + 1) % input.length]!))).sort((a, b) => a - b);
+  const medianEdge = lengths[Math.floor(lengths.length / 2)] ?? 0;
+  const toleranceSquared = (medianEdge * 0.22) ** 2;
+  const originalSign = Math.sign(ringArea(ring));
+  let current = input;
+  for (let pass = 0; pass < 2; pass += 1) {
+    let changed = false;
+    const removed = new Set<number>();
+    const next: CellBoundaryRing = [];
+    for (let index = 0; index < current.length; index += 1) {
+      const previousIndex = (index - 1 + current.length) % current.length;
+      const followingIndex = (index + 1) % current.length;
+      const previous = current[(index - 1 + current.length) % current.length]!;
+      const point = current[index]!;
+      const following = current[(index + 1) % current.length]!;
+      const canRemove = pointSegmentDistanceSquared(point, previous, following) <= toleranceSquared
+        && Math.abs(cross(previous, point, following)) > RING_EPSILON;
+      let safe = canRemove && !removed.has(previousIndex) && !removed.has(followingIndex)
+        && locallySafeShortcut(current, index, previous, following);
+      if (safe && current.length <= 4) safe = false;
+      if (safe) { removed.add(index); changed = true; continue; }
+      next.push(point);
+    }
+    if (!changed) break;
+    const closed = [...next, [...next[0]!] as Position];
+    if (next.length < 4 || Math.sign(ringArea(closed)) !== originalSign || Math.abs(ringArea(closed)) <= RING_EPSILON) return ring;
+    current = next;
+  }
+  return [...current, [...current[0]!] as Position];
+};
+
+type RingBounds = [minX: number, maxX: number, minY: number, maxY: number];
+const ringBounds = (ring: readonly Position[]): RingBounds | null => {
+  if (ring.length === 0) return null;
+  let minX = ring[0]![0]; let maxX = minX; let minY = ring[0]![1]; let maxY = minY;
+  for (const [x, y] of ring.slice(1)) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+  return [minX, maxX, minY, maxY];
+};
+const boundsOverlap = (first: RingBounds, second: RingBounds): boolean =>
+  first[0] <= second[1] && second[0] <= first[1] && first[2] <= second[3] && second[2] <= first[3];
+const sameRing = (first: readonly Position[], second: readonly Position[]): boolean =>
+  first.length === second.length && first.every((point, index) => point[0] === second[index]![0] && point[1] === second[index]![1]);
+
+const simplificationKeepsSeparateRings = (exact: readonly CellBoundaryRing[], simplified: readonly CellBoundaryRing[]): boolean => {
+  if (simplified.some(hasSelfIntersection)) return false;
+  const changed = simplified.map((ring, index) => !sameRing(ring, exact[index] ?? []));
+  const changedIndexes = changed.flatMap((isChanged, index) => isChanged ? [index] : []);
+  if (changedIndexes.length === 0) return true;
+  const exactBounds = exact.map(ringBounds); const simplifiedBounds = simplified.map(ringBounds);
+  const intersects = (leftIndex: number, rightIndex: number): boolean => {
+    if (!simplifiedBounds[leftIndex] || !exactBounds[rightIndex] || !boundsOverlap(simplifiedBounds[leftIndex]!, exactBounds[rightIndex]!)) return false;
+    const left = simplified[leftIndex]!; const right = exact[rightIndex]!;
+    for (let leftEdge = 1; leftEdge < left.length; leftEdge += 1) {
+      for (let rightEdge = 1; rightEdge < right.length; rightEdge += 1) {
+        if (segmentsIntersect(left[leftEdge - 1]!, left[leftEdge]!, right[rightEdge - 1]!, right[rightEdge]!)) return true;
+      }
+    }
+    return false;
+  };
+  for (const first of changedIndexes) {
+    for (let second = 0; second < simplified.length; second += 1) {
+      if (first === second || (changed[second] && second < first)) continue;
+      if (intersects(first, second) || (changed[second] && intersects(second, first))) return false;
+    }
+  }
+  return true;
+};
+
 /** Produces presentation-only curves and falls back to exact rings on unsafe output. */
 export const smoothCellBoundaryRings = (cellIds: Iterable<string>): CellBoundaryRing[] => {
-  const exact = exactCellBoundaryRings(cellIds); const smooth = exact.map((ring) => chaikin(chaikin(ring)));
+  const exact = exactCellBoundaryRings(cellIds); const simplified = exact.map(simplifyBoundaryRing);
+  const safeSimplification = simplificationKeepsSeparateRings(exact, simplified);
+  const smooth = (safeSimplification ? simplified : exact).map((ring) => chaikin(chaikin(ring)));
   const valid = smooth.flat().length <= 65536 && smooth.every((ring) => ring.length >= 4 && samePoint(ring[0]!, ring.at(-1)!) && ring.flat().every(Number.isFinite) && Math.abs(ringArea(ring)) > RING_EPSILON && ring.every(([x, y]) => x >= -180 && x <= 180 && y >= -90 && y <= 90));
   return valid ? smooth : exact;
 };
