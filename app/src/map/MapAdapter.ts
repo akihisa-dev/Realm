@@ -197,9 +197,13 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   constructor({ target }: MapAdapterOptions) {
     this.target = target;
-    this.terrainOutlineAnimator = new TerrainOutlineAnimator(target.ownerDocument.defaultView, (segments) => {
+    this.terrainOutlineAnimator = new TerrainOutlineAnimator(target.ownerDocument.defaultView, (segments, phase) => {
       this.terrainOutlineSource.clear();
       if (segments.length > 0) this.terrainOutlineSource.addFeature(new Feature({ geometry: new MultiLineString(segments) }));
+      // Keep transition and completed boundaries mutually exclusive so the
+      // visible layer cannot lag behind the optimistic cell state.
+      this.terrainOutlineLayer.setVisible(phase === "transition");
+      this.terrainSmoothLayer.setVisible(phase === "complete");
     });
     this.cellRegion = new CellRegionController(target.ownerDocument.defaultView, (feature) => this.featureStyle(feature));
     this.target.style.background = mapTheme(this.activeThemeId).canvas;
@@ -213,7 +217,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       visible: false,
       zIndex: 7,
     });
-    this.terrainSmoothLayer = new VectorLayer({ source: this.terrainSmoothSource, style: () => new Style({ stroke: new Stroke({ color: mapTheme(this.activeThemeId, this.themeOverrides).landInk, width: 1.8, lineJoin: "round", lineCap: "round" }) }), zIndex: 8 });
+    this.terrainSmoothLayer = new VectorLayer({ source: this.terrainSmoothSource, style: () => new Style({ stroke: new Stroke({ color: mapTheme(this.activeThemeId, this.themeOverrides).landInk, width: 1.8, lineJoin: "round", lineCap: "round" }) }), visible: false, zIndex: 8 });
     this.regionSmoothLayer = new VectorLayer({ source: this.regionSmoothSource, style: (feature) => { const color = String(feature.get("regionColor")); return new Style({ fill: new Fill({ color: colorWithOpacity(color, 0.2) }), stroke: new Stroke({ color: colorWithOpacity(color, 0.78), width: 1.1, lineJoin: "round", lineCap: "round" }) }); }, zIndex: 6 });
     this.cellGridSource.addFeature(new Feature({ geometry: new MultiLineString(this.fixedCellGridLines) }));
     this.cellGridLayer = new VectorLayer({
@@ -370,6 +374,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.featureLayer.changed();
     this.cellLayer.changed();
     this.terrainOutlineLayer.changed();
+    this.terrainSmoothLayer.changed();
   }
 
   setThemeOverrides(overrides: ThemeOverrides): void {
@@ -378,6 +383,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.featureLayer.changed();
     this.cellLayer.changed();
     this.terrainOutlineLayer.changed();
+    this.terrainSmoothLayer.changed();
     // GridOptions.color is an independent explicit setting and is intentionally
     // not replaced by a theme override.
     this.graticule.changed();
@@ -734,13 +740,14 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private finishPaintStroke(): void {
     if (this.paintLastPoint === null) return;
     const selected = [...this.paintStrokeSelection];
-    // Clear the in-stroke fill before publishing the completed outline.
-    this.setSelectedCells([]);
-    for (const listener of this.cellSelectListeners) listener([...selected]);
     this.paint?.cancelSequence();
     this.paintLastPoint = null;
     this.paintStrokeSelection.clear();
     this.paintSelectionBeforeStroke = [];
+    // Clear the in-stroke fill before publishing the completed outline. Reset
+    // the gesture state first so a re-entrant React update cannot restore it.
+    this.setSelectedCells([]);
+    for (const listener of this.cellSelectListeners) listener([...selected]);
     this.refreshHoveredCells();
   }
   private cancelPaintStroke(restoreSelection = true): void {
@@ -896,6 +903,16 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellFeatures.delete(id);
   }
 
+  private syncSelectedCellFlags(): void {
+    const erasing = this.activeMode === "cell-erase";
+    for (const [id, feature] of [...this.cellFeatures]) {
+      const selected = this.selectedCellIds.has(id);
+      feature.set("selected", selected && !erasing, true);
+      feature.set("erasePreview", selected && erasing, true); feature.set("paintPreview", selected && !erasing, true);
+      if (!selected) this.removeUnusedCell(id);
+    }
+  }
+
   private validCellIds(cellIds: readonly string[]): string[] {
     return cellIds.filter((id) => parseCellId(id) !== null);
   }
@@ -917,30 +934,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   setSelectedCells(cellIds: readonly string[]): void {
     const validIds = this.validCellIds(cellIds);
-    if (validIds.length === 0 && this.cellFeatures.size === 0) {
-      this.selectedCellIds.clear();
-      return;
-    }
     this.ensureCells(validIds);
     const next = new Set(validIds);
-    for (const id of this.selectedCellIds) {
-      if (!next.has(id)) {
-        const feature = this.getCellFeature(id);
-        feature?.set("selected", false, true);
-        feature?.set("erasePreview", false, true);
-        feature?.set("paintPreview", false, true);
-        this.selectedCellIds.delete(id);
-        this.removeUnusedCell(id);
-      }
-    }
-    const erasing = this.activeMode === "cell-erase";
-    for (const id of next) {
-      const feature = this.getCellFeature(id);
-      if (!this.selectedCellIds.has(id)) feature?.set("selected", !erasing, true);
-      feature?.set("erasePreview", erasing, true);
-      feature?.set("paintPreview", !erasing, true);
-    }
     this.selectedCellIds = next;
+    this.syncSelectedCellFlags();
     this.cellLayer.changed();
   }
 
@@ -962,6 +959,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
     this.cellAttributesById = byCell;
     for (const id of changedIds) this.removeUnusedCell(id);
+    // Attribute reads can arrive after a completed gesture. Normalize the
+    // renderer flags at this boundary so stale selection state cannot turn a
+    // persisted terrain update back into a filled cell.
+    this.syncSelectedCellFlags();
     const terrainCellIds = [...byCell.entries()]
       .filter(([, values]) => values.some(({ attribute }) => attribute === "terrain"))
       .map(([id]) => id);

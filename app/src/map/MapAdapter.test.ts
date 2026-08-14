@@ -146,11 +146,14 @@ describe("RealmMapAdapter", () => {
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
     const outlineLayer = adapter.getMap().getLayers().item(6) as VectorLayer;
+    const smoothLayer = adapter.getMap().getLayers().item(8) as VectorLayer;
     const first = cellId(10, 10);
     const adjacent = cellId(10, 11);
 
     adapter.setCellAttributes([{ cellId: first, attribute: "terrain", value: "terrain" }]);
     expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(6);
+    expect(outlineLayer.getVisible()).toBe(false);
+    expect(smoothLayer.getVisible()).toBe(true);
     expect(callbacks).toHaveLength(0);
 
     adapter.setCellAttributes([
@@ -158,13 +161,21 @@ describe("RealmMapAdapter", () => {
       { cellId: adjacent, attribute: "terrain", value: "terrain" },
     ]);
     expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(11);
+    expect(outlineLayer.getVisible()).toBe(true);
+    expect(smoothLayer.getVisible()).toBe(false);
     callbacks.shift()?.(1_240);
     expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(10);
+    expect(outlineLayer.getVisible()).toBe(false);
+    expect(smoothLayer.getVisible()).toBe(true);
 
     adapter.setCellAttributes([{ cellId: first, attribute: "terrain", value: "terrain" }]);
     expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(11);
+    expect(outlineLayer.getVisible()).toBe(true);
+    expect(smoothLayer.getVisible()).toBe(false);
     callbacks.shift()?.(1_240);
     expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(6);
+    expect(outlineLayer.getVisible()).toBe(false);
+    expect(smoothLayer.getVisible()).toBe(true);
 
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true }) as MediaQueryList));
     adapter.setCellAttributes([
@@ -172,6 +183,8 @@ describe("RealmMapAdapter", () => {
       { cellId: adjacent, attribute: "terrain", value: "terrain" },
     ]);
     expect((outlineLayer.getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString).getLineStrings()).toHaveLength(10);
+    expect(outlineLayer.getVisible()).toBe(false);
+    expect(smoothLayer.getVisible()).toBe(true);
     expect(callbacks).toHaveLength(0);
 
     adapter.dispose();
@@ -180,6 +193,41 @@ describe("RealmMapAdapter", () => {
     now.mockRestore();
     cancelAnimationFrame.mockRestore();
     requestAnimationFrame.mockRestore();
+  });
+
+  it("clears the paint fill before publishing the completed terrain state", () => {
+    const host = document.createElement("div");
+    host.style.width = "640px";
+    host.style.height = "480px";
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
+    const outlineLayer = adapter.getMap().getLayers().item(6) as VectorLayer;
+    const smoothLayer = adapter.getMap().getLayers().item(8) as VectorLayer;
+    let paintedIds: string[] = [];
+    adapter.onCellSelect((cellIds) => {
+      paintedIds = [...cellIds];
+      adapter.setCellAttributes(cellIds.map((cellId) => ({ cellId, attribute: "terrain" as const, value: "terrain" })));
+    });
+    adapter.setMode("cell-select");
+    const cellPaint = adapter.getMap().getInteractions().getArray().at(-1);
+    const pointerDown = new MouseEvent("pointerdown", { button: 0, bubbles: true });
+    Object.defineProperty(pointerDown, "isPrimary", { value: true });
+    cellPaint?.handleEvent({ type: "pointerdown", originalEvent: pointerDown, coordinate: cellCenter(10, 10), activePointers: [pointerDown] } as never);
+    expect(cellLayer.getSource()?.getFeatures().some((feature) => feature.get("selected") === true && feature.get("paintPreview") === true)).toBe(true);
+
+    window.dispatchEvent(new MouseEvent("pointerup", { button: 0 }));
+
+    expect(paintedIds.length).toBeGreaterThan(0);
+    expect(cellLayer.getSource()?.getFeatures().some((feature) => feature.get("selected") === true || feature.get("paintPreview") === true)).toBe(false);
+    expect(outlineLayer.getVisible()).toBe(false);
+    expect(smoothLayer.getVisible()).toBe(true);
+    const persistedFeature = cellLayer.getSource()?.getFeatureById(paintedIds[0]!);
+    expect(persistedFeature).toBeDefined();
+    expect(cellLayer.getStyleFunction()?.(persistedFeature!, 1)).toBeUndefined();
+
+    adapter.dispose();
+    host.remove();
   });
 
   it("selects points, crossing lines, and contained polygons with a lasso", () => {

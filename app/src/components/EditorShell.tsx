@@ -76,12 +76,13 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
 
   const refreshCellAttributes = async (identity: string): Promise<void> => {
     const request = ++cellRequest.current;
+    const mutation = cellMutation.current;
     try {
       const attributes = await backend.viewCellAttributes({});
       const terrainAndRegions = attributes.filter((attribute) => attribute.attribute === "terrain" || attribute.attribute === "region");
-      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request) setCellAttributes(terrainAndRegions);
+      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request && cellMutation.current === mutation) setCellAttributes(terrainAndRegions);
     } catch (cause) {
-      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request) setError(errorMessage(cause, "セル属性を読み込めませんでした。"));
+      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request && cellMutation.current === mutation) setError(errorMessage(cause, "セル属性を読み込めませんでした。"));
     }
   };
 
