@@ -81,6 +81,8 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEra
   const regionButtonRef = useRef<HTMLButtonElement>(null);
   const paintRangeFlyoutRef = useRef<HTMLDivElement>(null);
   const eraseFlyoutRef = useRef<HTMLDivElement>(null);
+  const eraserTargetButtonsRef = useRef<HTMLDivElement>(null);
+  const eraserTargetPillRef = useRef<HTMLSpanElement>(null);
   const regionFlyoutRef = useRef<HTMLDivElement>(null);
   const [radialPaletteState, setRadialPaletteState] = useState<RadialPaletteState | null>(null);
   const [paintRange, setPaintRange] = useState(CELL_PAINT_RANGE_MIN);
@@ -160,9 +162,19 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEra
     onEraseTargetChange?.(target);
   };
 
+  const syncEraseTargetPill = () => {
+    const buttons = eraserTargetButtonsRef.current;
+    const pill = eraserTargetPillRef.current;
+    const activeButton = buttons?.querySelector<HTMLButtonElement>('[aria-pressed="true"]');
+    if (!pill || !activeButton) return;
+    pill.style.left = `${activeButton.offsetLeft}px`;
+    pill.style.width = `${activeButton.offsetWidth}px`;
+  };
+
   useLayoutEffect(() => {
     if (!paintRangeFlyoutOpen && !eraseFlyoutOpen && !regionFlyoutOpen) return undefined;
     const updatePositions = () => {
+      syncEraseTargetPill();
       if (paintRangeFlyoutOpen) {
         const nextPosition = getFlyoutPosition("paint");
         setPaintRangeFlyoutPosition((current) => current && equalFlyoutPosition(current, nextPosition) ? current : nextPosition);
@@ -373,7 +385,8 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, onToolChange, onEra
     >
       <div className="eraser-targets" role="group" aria-label="削除対象">
         <span className="eraser-targets-label">削除対象</span>
-        <div className="eraser-target-buttons">
+        <div ref={eraserTargetButtonsRef} className="eraser-target-buttons">
+          <span ref={eraserTargetPillRef} className="eraser-target-pill" aria-hidden="true" />
           {ERASE_TARGETS.map((target) => (
             <button
               key={target.id}
