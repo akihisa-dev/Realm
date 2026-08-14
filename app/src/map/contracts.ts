@@ -7,7 +7,7 @@ export type MapAdapterOptions = {
   target: HTMLElement;
 };
 
-export type RealmMapMode = "pan" | "cell-select" | "cell-region" | "grab" | "cell-erase" | "erase" | "polygon-hole" | "label-path" | FeatureType;
+export type RealmMapMode = "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "erase" | "polygon-hole" | "label-path" | FeatureType;
 export type FeatureGeometryChange = { id: string; geometry: GeoJsonGeometry };
 export type ExportCanvasSize = {
   width: number;
@@ -59,6 +59,7 @@ export interface RealmMapRenderer {
   onSelect(listener: (featureId: string | null) => void): () => void;
   onCellSelect(listener: (cellIds: readonly string[]) => void): () => void;
   onRegionMove?(listener: (input: MoveRegionCellsInput) => void): () => void;
+  onRegionShape?(listener: (input: ApplyCellAttributesInput) => void): () => void;
   onCellResize?(listener: (input: ApplyCellAttributesInput) => void): () => void;
   onModifyFeatures(listener: (changes: readonly FeatureGeometryChange[]) => void): () => void;
   onModify(listener: (featureId: string, geometry: GeoJsonGeometry) => void): () => void;

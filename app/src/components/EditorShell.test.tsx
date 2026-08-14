@@ -14,9 +14,10 @@ vi.mock("./MapCanvas", () => ({
     showCellGrid?: boolean;
     zoom?: number;
     onCellSelect?: (ids: readonly string[]) => void;
-    onToolChange?: (tool: "terrain" | "region" | "erase" | "grab") => void;
+    onToolChange?: (tool: "terrain" | "region" | "erase" | "grab" | "shape") => void;
     onEraseTargetChange?: (target: "terrain" | "region") => void;
     onRegionMove?: (input: { sourceCellIds: string[]; targetCellIds: string[] }) => void;
+    onRegionShape?: (input: { cellIds: string[]; attribute: "region"; value: null }) => void;
     onCellResize?: (input: { cellIds: string[]; attribute: "terrain" | "region"; value: string | null; regionId?: string }) => void;
     onRegionColorChange?: (color: string) => void;
     onError?: (code: "drawing_self_intersection") => void;
@@ -35,7 +36,9 @@ vi.mock("./MapCanvas", () => ({
       <button type="button" onClick={() => props.onToolChange?.("terrain")}>テスト地形描画</button>
       <button type="button" onClick={() => props.onToolChange?.("region")}>テスト領域</button>
       <button type="button" onClick={() => props.onToolChange?.("grab")}>テストグラブ</button>
+      <button type="button" onClick={() => props.onToolChange?.("shape")}>テストシェイピング</button>
       <button type="button" onClick={() => props.onRegionMove?.({ sourceCellIds: ["1:1", "2:1"], targetCellIds: ["4:2", "5:2"] })}>テスト領域移動</button>
+      <button type="button" onClick={() => props.onRegionShape?.({ cellIds: ["3:1", "20:20"], attribute: "region", value: null })}>テスト領域シェイピング</button>
       <button type="button" onClick={() => props.onCellResize?.({ cellIds: ["1:2"], attribute: "terrain", value: "terrain" })}>テスト地形境界拡張</button>
       <button type="button" onClick={() => props.onRegionColorChange?.("#2468AC")}>テスト領域色</button>
     </div>;
@@ -195,6 +198,38 @@ it("saves a colored region without changing terrain cells and supports undo", as
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([
     { cellId: "1:1", attribute: "terrain", value: "terrain" },
   ]));
+});
+
+it("shapes a clicked region to terrain and supports undo", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://shape-region.realmmap", name: "Shape region" });
+  const regionId = "33333333-3333-4333-8333-333333333333";
+  await backend.applyCellAttributes({ cellIds: ["1:1", "2:1"], attribute: "terrain", value: "terrain" });
+  await backend.applyCellAttributes({ cellIds: ["1:1", "2:1", "3:1", "20:20"], attribute: "region", value: "#2468AC", regionId });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テストシェイピング" }));
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "shape");
+  fireEvent.click(screen.getByRole("button", { name: "テスト領域シェイピング" }));
+
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    { cellId: "1:1", attribute: "terrain", value: "terrain" },
+    { cellId: "2:1", attribute: "terrain", value: "terrain" },
+    expect.objectContaining({ cellId: "1:1", attribute: "region", value: "#2468AC", regionId }),
+    expect.objectContaining({ cellId: "2:1", attribute: "region", value: "#2468AC", regionId }),
+  ])));
+  expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([
+    expect.objectContaining({ cellId: "3:1", attribute: "region" }),
+    expect.objectContaining({ cellId: "20:20", attribute: "region" }),
+  ]));
+
+  fireEvent.click(screen.getByRole("button", { name: "戻す" }));
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    expect.objectContaining({ cellId: "3:1", attribute: "region", value: "#2468AC", regionId }),
+    expect.objectContaining({ cellId: "20:20", attribute: "region", value: "#2468AC", regionId }),
+  ])));
 });
 
 it("keeps a grabbed region's hidden overhang at the destination", async () => {

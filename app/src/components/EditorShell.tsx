@@ -6,7 +6,7 @@ import { ObjectManager } from "./editor/ObjectManager";
 import { deriveRegionObjects, type RegionComponent, type RegionObject } from "./editor/regionObjects";
 import { mapErrorMessage } from "../locales/ja";
 
-type Tool = "terrain" | "region" | "erase" | "grab";
+type Tool = "terrain" | "region" | "erase" | "grab" | "shape";
 
 type EditorShellProps = {
   snapshot: RealmSnapshot;
@@ -262,6 +262,78 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     );
   };
 
+  const shapeRegion = (input: ApplyCellAttributesInput): void => {
+    if (locked || input.attribute !== "region" || input.value !== null) return;
+    const cellIds = [...new Set(input.cellIds)];
+    if (cellIds.length === 0) return;
+    const mutation = ++cellMutation.current;
+    updateOptimisticCellAttributes(cellIds, "region", null);
+    setSelectedCellIds([]);
+    void run(
+      () => backend.applyCellAttributes({ cellIds, attribute: "region", value: null }),
+      "領域をシェイピングできませんでした。",
+      {
+        recover: async (identity) => {
+          if (cellMutation.current === mutation) await refreshCellAttributes(identity);
+        },
+        refreshOnSuccess: false,
+        isCurrent: () => cellMutation.current === mutation,
+      },
+    );
+  };
+
+  const mergeRegions = (): void => {
+    const regions = selectedRegionIds.map((id) => regionObjects.find((region) => region.id === id)).filter((region): region is RegionObject => region !== undefined);
+    if (regions.length < 2) return;
+    const target = regions[0];
+    if (!target) return;
+    if (!target.persistentId || regions.some((region) => region.persistentId === null)) {
+      setError("旧形式の領域は、先に新しい領域として描き直してください。");
+      return;
+    }
+    const cellIds = [...new Set(regions.flatMap((region) => region.cellIds))];
+    const mutation = ++cellMutation.current;
+    updateOptimisticCellAttributes(cellIds, "region", target.color, target.persistentId);
+    setSelectedRegionIds([target.id]);
+    setSelectedComponentId(null);
+    setRegionPaintTargetId(target.id);
+    setRegionColor(target.color);
+    setSelectedCellIds([]);
+    void run(
+      () => backend.applyCellAttributes({ cellIds, attribute: "region", value: target.color, regionId: target.persistentId! }),
+      "領域を統合できませんでした。",
+      {
+        recover: async (identity) => {
+          if (cellMutation.current === mutation) await refreshCellAttributes(identity);
+        },
+        refreshOnSuccess: false,
+        isCurrent: () => cellMutation.current === mutation,
+      },
+    );
+  };
+
+  const splitRegionComponent = (region: RegionObject, component: RegionComponent): void => {
+    if (!region.persistentId || region.components.length < 2) return;
+    const newRegionId = crypto.randomUUID();
+    const mutation = ++cellMutation.current;
+    updateOptimisticCellAttributes(component.cellIds, "region", region.color, newRegionId);
+    setSelectedRegionIds([]);
+    setSelectedComponentId(null);
+    setRegionPaintTargetId(null);
+    setSelectedCellIds([]);
+    void run(
+      () => backend.applyCellAttributes({ cellIds: component.cellIds, attribute: "region", value: region.color, regionId: newRegionId }),
+      "領域の塊を分離できませんでした。",
+      {
+        recover: async (identity) => {
+          if (cellMutation.current === mutation) await refreshCellAttributes(identity);
+        },
+        refreshOnSuccess: false,
+        isCurrent: () => cellMutation.current === mutation,
+      },
+    );
+  };
+
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       const target = event.target;
@@ -285,6 +357,9 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       } else if (key === "g") {
         event.preventDefault();
         selectTool("grab");
+      } else if (key === "s") {
+        event.preventDefault();
+        selectTool("shape");
       }
     };
     window.addEventListener("keydown", handleShortcut);
@@ -306,7 +381,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             // Compatibility region objects remain in snapshots but are not
             // rendered or created by the cell-region editor.
             features={[]}
-            mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "cell-region" : activeTool === "grab" ? "grab" : "cell-select"}
+            mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "cell-region" : activeTool === "grab" ? "grab" : activeTool === "shape" ? "shape" : "cell-select"}
             disabled={busy}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}
@@ -318,6 +393,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             gridOptions={gridOptions}
             onCellSelect={applyCellSelection}
             onRegionMove={moveRegion}
+            onRegionShape={shapeRegion}
             onCellResize={resizeCells}
             regionColor={regionColor}
             onToolChange={selectTool}

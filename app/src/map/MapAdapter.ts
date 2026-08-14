@@ -39,6 +39,7 @@ import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTION
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
 import { exportMapRaster } from "./mapRasterExporter";
 import { RegionGrabController } from "./RegionGrabController";
+import { RegionShapeController } from "./RegionShapeController";
 import { GrabHoverController } from "./GrabHoverController";
 import { connectedCellComponents } from "./regionGrab";
 import { nudgeGeometry, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
@@ -126,6 +127,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private paint: CancelablePointerInteraction | null = null;
   private eraser: PointerInteraction | null = null;
   private grab: RegionGrabController | null = null;
+  private regionShape: RegionShapeController | null = null;
   private readonly grabHover: GrabHoverController;
   private paintLastPoint: [number, number] | null = null;
   private paintStrokeSelection = new Set<string>();
@@ -141,6 +143,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly selectListeners = new Set<(featureId: string | null) => void>();
   private readonly cellSelectListeners = new Set<(cellIds: readonly string[]) => void>();
   private readonly regionMoveListeners = new Set<(input: MoveRegionCellsInput) => void>();
+  private readonly regionShapeListeners = new Set<(input: ApplyCellAttributesInput) => void>();
   private readonly cellResizeListeners = new Set<(input: ApplyCellAttributesInput) => void>();
   private readonly modifyFeaturesListeners = new Set<(changes: readonly FeatureGeometryChange[]) => void>();
   private readonly modifyListeners = new Set<(featureId: string, geometry: GeoJsonGeometry) => void>();
@@ -156,6 +159,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private disposed = false;
 
   private readonly handleSelection = (): void => { this.emitSelection(); };
+  private disposePointerInteraction<T extends PointerInteraction>(interaction: T | null): null {
+    if (interaction) { this.map.removeInteraction(interaction); interaction.dispose(); }
+    return null;
+  }
+
   private selectedFeatureIds(): string[] {
     return this.selection.getFeatures().getArray()
       .map((feature) => feature.getId())
@@ -470,35 +478,20 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   private drawTypeUsesFreehand(mode: RealmMapMode): boolean {
-    return mode !== "pan" && mode !== "cell-select" && mode !== "cell-region" && mode !== "cell-erase" && mode !== "erase"
+    return mode !== "pan" && mode !== "cell-select" && mode !== "cell-region" && mode !== "shape" && mode !== "cell-erase" && mode !== "erase"
       && drawTypeForMode(mode) !== "Point" && this.drawingGesture === "freehand";
   }
 
   setMode(mode: RealmMapMode): void {
     this.temporaryPan = false;
-    if (this.draw) {
-      this.map.removeInteraction(this.draw);
-      this.draw.dispose();
-      this.draw = null;
-    }
-    if (this.paint) {
-      this.map.removeInteraction(this.paint);
-      this.paint.dispose();
-      this.paint = null;
-      this.paintLastPoint = null;
-      this.paintStrokeSelection.clear();
-      this.paintSelectionBeforeStroke = [];
-    }
-    if (this.eraser) {
-      this.map.removeInteraction(this.eraser);
-      this.eraser.dispose();
-      this.eraser = null;
-    }
+    this.draw = this.disposePointerInteraction(this.draw); this.paint = this.disposePointerInteraction(this.paint);
+    this.paintLastPoint = null; this.paintStrokeSelection.clear(); this.paintSelectionBeforeStroke = []; this.eraser = this.disposePointerInteraction(this.eraser);
     if (this.grab) {
       this.map.removeInteraction(this.grab.interaction);
       this.grab.dispose();
       this.grab = null;
     }
+    if (this.regionShape) { this.map.removeInteraction(this.regionShape.interaction); this.regionShape.dispose(); this.regionShape = null; }
     this.lassoPoints = [];
     const isCellMode = mode === "cell-select" || mode === "cell-erase";
     const wasCellMode = this.activeMode === "cell-select" || this.activeMode === "cell-erase";
@@ -586,6 +579,16 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.map.addInteraction(this.grab!.interaction);
       return;
     }
+    if (mode === "shape") {
+      this.setSelected(null);
+      this.regionShape = new RegionShapeController({
+        cellAt: (position) => this.cellAtCoordinate(position),
+        attributes: () => this.cellAttributesById,
+        emit: (input) => { for (const listener of this.regionShapeListeners) listener(input); },
+      });
+      this.map.addInteraction(this.regionShape.interaction);
+      return;
+    }
     const drawType = drawTypeForMode(mode);
     const drawingFeatureType = mode === "polygon-hole" ? "terrain" : mode === "label-path" ? "boundary" : mode;
     this.draw = new Draw({ type: drawType, style: this.featureStyle(new Feature({ featureType: drawingFeatureType, name: "", properties: {} })) });
@@ -662,6 +665,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.draw?.setActive(false);
       this.paint?.setActive(false);
       this.grab?.interaction.setActive(false);
+      this.regionShape?.interaction.setActive(false);
       this.setNavigationActive(true);
       this.refreshGrabHover();
       event.preventDefault();
@@ -699,6 +703,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
       event.preventDefault();
       return;
     }
+    if (this.activeMode === "shape") {
+      this.regionShape?.cancel();
+      event.preventDefault();
+      return;
+    }
     if (this.activeMode === "pan") {
       this.lassoPoints = [];
       this.lassoAdditive = false;
@@ -723,6 +732,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.draw?.setActive(true);
     this.paint?.setActive(true);
     this.grab?.interaction.setActive(true);
+    this.regionShape?.interaction.setActive(true);
     this.refreshHoveredCells();
     this.refreshGrabHover();
     event.preventDefault();
@@ -734,6 +744,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.lassoAdditive = false;
     this.cancelPaintStroke();
     this.grab?.cancel();
+    this.regionShape?.cancel();
   };
 
   private readonly handleExternalPointerUp = (event: PointerEvent): void => {
@@ -1035,6 +1046,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.regionMoveListeners.add(listener);
     return () => this.regionMoveListeners.delete(listener);
   }
+  onRegionShape(listener: (input: ApplyCellAttributesInput) => void): () => void {
+    this.regionShapeListeners.add(listener);
+    return () => this.regionShapeListeners.delete(listener);
+  }
   onCellResize(listener: (input: ApplyCellAttributesInput) => void): () => void { this.cellResizeListeners.add(listener); return () => this.cellResizeListeners.delete(listener); }
   onModifyFeatures(listener: (changes: readonly FeatureGeometryChange[]) => void): () => void {
     this.modifyFeaturesListeners.add(listener);
@@ -1116,26 +1131,15 @@ export class RealmMapAdapter implements RealmMapRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true; this.cellRegion.dispose();
-    if (this.draw) {
-      this.map.removeInteraction(this.draw);
-      this.draw.dispose();
-      this.draw = null;
-    }
-    if (this.paint) {
-      this.map.removeInteraction(this.paint);
-      this.paint.dispose();
-      this.paint = null;
-    }
-    if (this.eraser) {
-      this.map.removeInteraction(this.eraser);
-      this.eraser.dispose();
-      this.eraser = null;
-    }
+    this.draw = this.disposePointerInteraction(this.draw);
+    this.paint = this.disposePointerInteraction(this.paint);
+    this.eraser = this.disposePointerInteraction(this.eraser);
     if (this.grab) {
       this.map.removeInteraction(this.grab.interaction);
       this.grab.dispose();
       this.grab = null;
     }
+    if (this.regionShape) { this.map.removeInteraction(this.regionShape.interaction); this.regionShape.dispose(); this.regionShape = null; }
     this.map.removeInteraction(this.lasso);
     this.lasso.dispose();
     this.lassoPoints = [];
@@ -1147,6 +1151,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.selectListeners.clear();
     this.cellSelectListeners.clear();
     this.regionMoveListeners.clear();
+    this.regionShapeListeners.clear();
     this.cellResizeListeners.clear();
     this.modifyFeaturesListeners.clear();
     this.target.removeEventListener("keydown", this.handleKeyDown);

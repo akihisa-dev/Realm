@@ -18,7 +18,7 @@ import { usePaletteFlyouts } from "./editor/usePaletteFlyouts";
 import { useRendererSync } from "./editor/useRendererSync";
 import type { EraseTarget } from "./editor/eraseTargets";
 
-export type TerrainMapMode = "pan" | "cell-select" | "cell-region" | "grab" | "cell-erase" | "region";
+export type TerrainMapMode = "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "region";
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;
@@ -43,8 +43,9 @@ type MapCanvasProps = {
   onSelectFeatures?: (featureIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
   onRegionMove?: (input: MoveRegionCellsInput) => void;
+  onRegionShape?: (input: ApplyCellAttributesInput) => void;
   onCellResize?: (input: ApplyCellAttributesInput) => void;
-  onToolChange?: (tool: "terrain" | "region" | "erase" | "grab") => void;
+  onToolChange?: (tool: "terrain" | "region" | "erase" | "grab" | "shape") => void;
   onEraseTargetChange?: (target: EraseTarget) => void;
   onRegionColorChange?: (color: string) => void;
   regionColor?: string;
@@ -80,6 +81,7 @@ export function MapCanvas({
   onSelectFeatures,
   onCellSelect,
   onRegionMove,
+  onRegionShape,
   onCellResize,
   onToolChange,
   onEraseTargetChange,
@@ -118,6 +120,8 @@ export function MapCanvas({
       ? "六角セルを押したままなぞって地形または領域を消去します。消しゴムの調整で削除対象を切り替えられます。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。"
       : mode === "cell-region"
         ? "自由線で囲んだ内側の六角セルを領域として塗ります。既存の地形または領域の境界セルは、押したまま外側へ引いて広げたり内側へ引いて狭めたりできます。色を選んで描き、Escapeで取り消せます。"
+      : mode === "shape"
+        ? "領域をクリックすると、地形の外にはみ出した部分だけを削り、地形の形に合わせます。ホイールを押したままドラッグすると地図を移動できます。"
       : mode === "grab"
         ? "地形または領域の外周セルをつまみ、外側へ引いて広げたり内側へ引いて狭めたりできます。領域は同じIDを保ったまま、内部をつまむと六角グリッドに沿って移動します。移動先が範囲外なら移動できず、別の領域との重なりは移動側だけが削れます。Escapeで取り消せます。"
       : mode === "region"
@@ -170,6 +174,7 @@ export function MapCanvas({
     onSelectFeatures,
     onCellSelect,
     onRegionMove,
+    onRegionShape,
     onCellResize,
     onModify,
     onModifyFeatures,
@@ -184,7 +189,7 @@ export function MapCanvas({
     ? "map-canvas-mode-pan"
     : mode === "cell-erase"
       ? "map-canvas-mode-cell-erase"
-      : mode === "cell-region" ? "map-canvas-mode-cell-region" : mode === "grab" ? "map-canvas-mode-grab" : mode === "region" ? "map-canvas-mode-region" : "map-canvas-mode-cell-select";
+      : mode === "cell-region" ? "map-canvas-mode-cell-region" : mode === "grab" ? "map-canvas-mode-grab" : mode === "shape" ? "map-canvas-mode-shape" : mode === "region" ? "map-canvas-mode-region" : "map-canvas-mode-cell-select";
   return (
     <div
       ref={shellRef}

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactM
 import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
 import { SlidersHorizontal } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { HandGrabbing } from "@phosphor-icons/react/dist/csr/HandGrabbing";
+import { Magnet } from "@phosphor-icons/react/dist/csr/Magnet";
 import { createPortal } from "react-dom";
 import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
 import { positionPaletteFlyout, type PaletteRect } from "../paletteFlyout";
@@ -69,7 +70,9 @@ const equalFlyoutPosition = (left: FlyoutPosition, right: FlyoutPosition): boole
 export type PaletteFlyoutOptions = {
   shellRef: RefObject<HTMLDivElement | null>;
   hostRef: RefObject<HTMLDivElement | null>;
+  mode: "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "region";
   regionColor?: string | undefined;
+  onToolChange: ((tool: "terrain" | "region" | "erase" | "grab" | "shape") => void) | undefined;
   onEraseTargetChange: ((target: EraseTarget) => void) | undefined;
   onRegionColorChange: ((color: string) => void) | undefined;
 };
@@ -349,6 +352,11 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, regionColor, onTool
       <div className="radial-palette-slot radial-palette-grab-tool" style={{ "--slot": 3 } as CSSProperties}>
         <button className="radial-palette-range-button" type="button" aria-label="グラブ" aria-pressed={mode === "grab"} onClick={(event) => { onToolChange?.("grab"); setRegionFlyoutOpen(false); setPaintRangeFlyoutOpen(false); setEraseFlyoutOpen(false); setRadialPaletteState(null); event.stopPropagation(); }}>
           <HandGrabbing aria-hidden="true" size={16} weight="bold" />
+        </button>
+      </div>
+      <div className="radial-palette-slot radial-palette-shape-tool" style={{ "--slot": 4 } as CSSProperties}>
+        <button className="radial-palette-range-button" type="button" aria-label="シェイピング" aria-pressed={mode === "shape"} onClick={(event) => { onToolChange?.("shape"); setRegionFlyoutOpen(false); setPaintRangeFlyoutOpen(false); setEraseFlyoutOpen(false); setRadialPaletteState(null); event.stopPropagation(); }}>
+          <Magnet aria-hidden="true" size={16} weight="bold" />
         </button>
       </div>
     </div>

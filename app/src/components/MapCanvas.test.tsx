@@ -261,7 +261,7 @@ describe("MapCanvas", () => {
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).toHaveStyle({ left: "120px", top: "80px" });
     expect(document.querySelector(".radial-palette")).toHaveClass("radial-palette-opening");
-    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(4);
+    expect(document.querySelectorAll(".radial-palette-slot")).toHaveLength(5);
     expect(document.querySelectorAll(".radial-palette-slot[aria-hidden='true']")).toHaveLength(0);
     expect(document.querySelector(".radial-palette")?.textContent).not.toContain("描画範囲");
     expect(document.querySelector(".radial-palette-range-tool .radial-palette-range-button")?.textContent).toBe("");
@@ -530,5 +530,18 @@ describe("MapCanvas", () => {
       vi.unstubAllGlobals();
       vi.stubGlobal("ResizeObserver", originalResizeObserver);
     }
+  });
+
+  it("exposes shaping as an accessible palette tool", () => {
+    const renderer = createPaletteRenderer();
+    const onToolChange = vi.fn();
+    render(<MapCanvas onZoomChange={vi.fn()} onToolChange={onToolChange} createRenderer={() => renderer} />);
+    const map = screen.getByRole("region", { name: "世界地図" });
+    fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
+    const shapeButton = screen.getByRole("button", { name: "シェイピング" });
+    expect(shapeButton).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(shapeButton);
+    expect(onToolChange).toHaveBeenCalledWith("shape");
+    expect(screen.queryByRole("toolbar", { name: "地図ツールパレット" })).not.toBeInTheDocument();
   });
 });

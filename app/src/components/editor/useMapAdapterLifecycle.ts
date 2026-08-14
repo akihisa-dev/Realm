@@ -41,6 +41,7 @@ export type MapAdapterLifecycleOptions = {
   onSelectFeatures: ((featureIds: readonly string[]) => void) | undefined;
   onCellSelect: ((cellIds: readonly string[]) => void) | undefined;
   onRegionMove: ((input: MoveRegionCellsInput) => void) | undefined;
+  onRegionShape: ((input: ApplyCellAttributesInput) => void) | undefined;
   onCellResize: ((input: ApplyCellAttributesInput) => void) | undefined;
   onModify: ((featureId: string, geometry: GeoJsonGeometry) => void) | undefined;
   onModifyFeatures: ((changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void) | undefined;
@@ -82,6 +83,7 @@ export function useMapAdapterLifecycle({
   onSelectFeatures,
   onCellSelect,
   onRegionMove,
+  onRegionShape,
   onCellResize,
   onModify,
   onModifyFeatures,
@@ -97,6 +99,7 @@ export function useMapAdapterLifecycle({
   const onSelectFeaturesRef = useRef(onSelectFeatures);
   const onCellSelectRef = useRef(onCellSelect);
   const onRegionMoveRef = useRef(onRegionMove);
+  const onRegionShapeRef = useRef(onRegionShape);
   const onCellResizeRef = useRef(onCellResize);
   const onModifyRef = useRef(onModify);
   const onModifyFeaturesRef = useRef(onModifyFeatures);
@@ -112,6 +115,7 @@ export function useMapAdapterLifecycle({
   useEffect(() => { onSelectFeaturesRef.current = onSelectFeatures; }, [onSelectFeatures]);
   useEffect(() => { onCellSelectRef.current = onCellSelect; }, [onCellSelect]);
   useEffect(() => { onRegionMoveRef.current = onRegionMove; }, [onRegionMove]);
+  useEffect(() => { onRegionShapeRef.current = onRegionShape; }, [onRegionShape]);
   useEffect(() => { onCellResizeRef.current = onCellResize; }, [onCellResize]);
   useEffect(() => { onModifyRef.current = onModify; }, [onModify]);
   useEffect(() => { onModifyFeaturesRef.current = onModifyFeatures; }, [onModifyFeatures]);
@@ -136,6 +140,7 @@ export function useMapAdapterLifecycle({
     });
     const stopCellSelectListener = adapter.onCellSelect((cellIds) => onCellSelectRef.current?.(cellIds));
     const stopRegionMoveListener = adapter.onRegionMove?.((input) => onRegionMoveRef.current?.(input)) ?? (() => undefined);
+    const stopRegionShapeListener = adapter.onRegionShape?.((input) => onRegionShapeRef.current?.(input)) ?? (() => undefined);
     const stopCellResizeListener = adapter.onCellResize?.((input) => onCellResizeRef.current?.(input)) ?? (() => undefined);
     const stopModifyListener = adapter.onModifyFeatures((changes) => {
       onModifyFeaturesRef.current?.(changes);
@@ -175,6 +180,7 @@ export function useMapAdapterLifecycle({
       stopSelectListener();
       stopCellSelectListener();
       stopRegionMoveListener();
+      stopRegionShapeListener();
       stopCellResizeListener();
       stopModifyListener();
       stopEraseListener();
