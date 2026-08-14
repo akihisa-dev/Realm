@@ -49,9 +49,9 @@ export { selectFeatureIdsWithinLasso } from "./lassoSelection";
 export { resolutionForFittingExtent } from "./mapAdapterGeometry";
 const MAX_LASSO_POINTS = 4096;
 const DEFAULT_CELL_GRID_OPTIONS: CellGridOptions = { color: "#d1d7dc", width: 0.65 };
-const OUTSIDE_GRID_OPACITY = 0.58;
-const INSIDE_GRID_OPACITY = 0.28;
-const INSIDE_GRID_LINE_DASH = [1, 3];
+const TERRAIN_GRID_OPACITY = 0.58;
+const OUTSIDE_GRID_OPACITY = 0.28;
+const OUTSIDE_GRID_LINE_DASH = [1, 3];
 const colorWithOpacity = (color: string, opacity: number): string => {
   const red = Number.parseInt(color.slice(1, 3), 16);
   const green = Number.parseInt(color.slice(3, 5), 16);
@@ -87,10 +87,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly cellRegion: CellRegionController;
   private readonly cellGridSource = new VectorSource({ wrapX: false });
   private readonly fixedCellGridLines = fixedCellGridLines();
-  private readonly cellGridStroke = new Stroke({ color: colorWithOpacity(DEFAULT_CELL_GRID_OPTIONS.color, OUTSIDE_GRID_OPACITY), width: DEFAULT_CELL_GRID_OPTIONS.width });
+  private readonly cellGridStroke = new Stroke({ color: colorWithOpacity(DEFAULT_CELL_GRID_OPTIONS.color, OUTSIDE_GRID_OPACITY), width: DEFAULT_CELL_GRID_OPTIONS.width, lineDash: OUTSIDE_GRID_LINE_DASH, lineCap: "round" });
   private readonly cellGridLayer: VectorLayer;
   private readonly terrainCellGridSource = new VectorSource({ wrapX: false });
-  private readonly terrainCellGridStroke = new Stroke({ color: colorWithOpacity(DEFAULT_CELL_GRID_OPTIONS.color, INSIDE_GRID_OPACITY), width: DEFAULT_CELL_GRID_OPTIONS.width, lineDash: INSIDE_GRID_LINE_DASH, lineCap: "round" });
+  private readonly terrainCellGridStroke = new Stroke({ color: colorWithOpacity(DEFAULT_CELL_GRID_OPTIONS.color, TERRAIN_GRID_OPACITY), width: DEFAULT_CELL_GRID_OPTIONS.width });
   private readonly terrainCellGridLayer: VectorLayer;
   private readonly gridSource = new VectorSource({ wrapX: false });
   private readonly gridStroke = new Stroke({ color: DEFAULT_GRID_OPTIONS.color, width: DEFAULT_GRID_OPTIONS.width });
@@ -432,7 +432,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (!Number.isFinite(options.width) || options.width < 0.25 || options.width > 4) throw new Error("Cell grid width must be between 0.25 and 4.");
     this.cellGridStroke.setColor(colorWithOpacity(options.color, OUTSIDE_GRID_OPACITY));
     this.cellGridStroke.setWidth(options.width);
-    this.terrainCellGridStroke.setColor(colorWithOpacity(options.color, INSIDE_GRID_OPACITY));
+    this.terrainCellGridStroke.setColor(colorWithOpacity(options.color, TERRAIN_GRID_OPACITY));
     this.terrainCellGridStroke.setWidth(options.width);
     this.cellGridLayer.changed();
     this.terrainCellGridLayer.changed();
