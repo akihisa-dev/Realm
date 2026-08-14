@@ -69,6 +69,11 @@ const pointKey = ([x, y]: Position): string => `${x.toFixed(9)},${y.toFixed(9)}`
 const samePoint = (a: Position, b: Position): boolean => Math.abs(a[0] - b[0]) <= RING_EPSILON && Math.abs(a[1] - b[1]) <= RING_EPSILON;
 const ringArea = (ring: readonly Position[]): number => { let area = 0; for (let index = 1; index < ring.length; index += 1) area += ring[index - 1]![0] * ring[index]![1] - ring[index]![0] * ring[index - 1]![1]; return area / 2; };
 const pointInRing = (point: Position, ring: readonly Position[]): boolean => { let inside = false; for (let index = 1; index < ring.length; index += 1) { const a = ring[index - 1]!; const b = ring[index]!; if ((a[1] > point[1]) !== (b[1] > point[1]) && point[0] < (b[0] - a[0]) * (point[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; };
+const polygonsFromRings = (rings: readonly CellBoundaryRing[]): CellBoundaryPolygon[] => {
+  const shells = rings.filter((ring) => ringArea(ring) > 0); const holes = rings.filter((ring) => ringArea(ring) < 0); const polygons = shells.map((ring) => [ring]);
+  for (const hole of holes) { const owner = polygons.find(([shell]) => shell && pointInRing(hole[0]!, shell)); if (owner) owner.push(hole); }
+  return polygons;
+};
 
 /** Joins exposed cell edges into deterministic closed rings. */
 export const exactCellBoundaryRings = (cellIds: Iterable<string>): CellBoundaryRing[] => {
@@ -115,8 +120,5 @@ export const smoothCellBoundaryRings = (cellIds: Iterable<string>): CellBoundary
   return valid ? smooth : exact;
 };
 
-export const smoothCellBoundaryPolygons = (cellIds: Iterable<string>): CellBoundaryPolygon[] => {
-  const rings = smoothCellBoundaryRings(cellIds); const shells = rings.filter((ring) => ringArea(ring) > 0); const holes = rings.filter((ring) => ringArea(ring) < 0); const polygons = shells.map((ring) => [ring]);
-  for (const hole of holes) { const owner = polygons.find(([shell]) => shell && pointInRing(hole[0]!, shell)); if (owner) owner.push(hole); }
-  return polygons;
-};
+export const exactCellBoundaryPolygons = (cellIds: Iterable<string>): CellBoundaryPolygon[] => polygonsFromRings(exactCellBoundaryRings(cellIds));
+export const smoothCellBoundaryPolygons = (cellIds: Iterable<string>): CellBoundaryPolygon[] => polygonsFromRings(smoothCellBoundaryRings(cellIds));

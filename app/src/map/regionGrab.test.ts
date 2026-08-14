@@ -1,7 +1,7 @@
 import Feature from "ol/Feature";
 import { describe, expect, it, vi } from "vitest";
 import { RegionGrabController } from "./RegionGrabController";
-import { clipRegionCellsToTerrain, connectedRegionCells, sameCellSet, translateRegionCells } from "./regionGrab";
+import { clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, sameCellSet, translateRegionCells } from "./regionGrab";
 
 const region = (cellId: string, value: string) => ({ cellId, attribute: "region" as const, value });
 const terrain = (cellId: string) => ({ cellId, attribute: "terrain" as const, value: "terrain" });
@@ -16,6 +16,7 @@ describe("region grab geometry", () => {
       ["20:20", [region("20:20", "#AA0000")]],
     ]);
     expect(connectedRegionCells("2:2", cells)).toEqual(["2:2", "3:2", "2:3"]);
+    expect(connectedRegionCells("20:20", cells)).toEqual(["20:20"]);
   });
 
   it("translates a mass using axial hex coordinates and rejects world overflow", () => {
@@ -24,6 +25,13 @@ describe("region grab geometry", () => {
     expect(target).toEqual(["5:3", "6:3", "6:4"]);
     expect(sameCellSet(source, target ?? [])).toBe(false);
     expect(translateRegionCells(["127:72"], "127:72", "128:72")).toBeNull();
+  });
+
+  it("splits a cell set into independent six-neighbor components", () => {
+    expect(connectedCellComponents(["10:10", "11:10", "20:20", "20:21", "invalid"])).toEqual([
+      ["10:10", "11:10"],
+      ["20:20", "20:21"],
+    ]);
   });
 
   it("keeps only translated cells that have terrain", () => {
@@ -43,6 +51,7 @@ describe("region grab geometry", () => {
     ]);
     const features = new Map<string, Feature>();
     const emitted: Array<{ sourceCellIds: string[]; targetCellIds: string[] }> = [];
+    const setRegionSmoothVisible = vi.fn();
     const controller = new RegionGrabController({
       cellAt: (position) => position[0] === 0 ? "2:2" : position[0] === 1 ? "5:3" : null,
       attributes: () => attributes,
@@ -50,15 +59,18 @@ describe("region grab geometry", () => {
       ensureFeatures: (ids) => { for (const id of ids) if (!features.has(id)) { const feature = new Feature(); feature.setId(id); features.set(id, feature); } },
       removeUnused: (id) => { if (!attributes.has(id)) features.delete(id); },
       changed: vi.fn(),
+      setRegionSmoothVisible,
       emit: (input) => emitted.push(input),
     });
     const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean; handleDragEvent: (event: unknown) => void; handleUpEvent: (event: unknown) => boolean };
     const pointer = { isPrimary: true, button: 0 };
     expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: [0, 0] })).toBe(true);
+    expect(setRegionSmoothVisible).toHaveBeenLastCalledWith(false);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: [1, 0] });
     expect(features.get("5:3")?.get("grabPreview")).toBe(true);
     expect(features.get("6:3")).toBeUndefined();
     expect(interaction.handleUpEvent({ originalEvent: pointer, coordinate: [1, 0] })).toBe(false);
+    expect(setRegionSmoothVisible).toHaveBeenLastCalledWith(true);
     expect(emitted).toEqual([{ sourceCellIds: ["2:2", "3:2", "2:3"], targetCellIds: ["5:3", "6:3", "6:4"] }]);
 
     expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: [0, 0] })).toBe(true);

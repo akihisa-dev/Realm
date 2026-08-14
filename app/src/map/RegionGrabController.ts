@@ -10,6 +10,7 @@ type Options = {
   ensureFeatures: (ids: Iterable<string>) => void;
   removeUnused: (id: string) => void;
   changed: () => void;
+  setRegionSmoothVisible: (visible: boolean) => void;
   emit: (input: MoveRegionCellsInput) => void;
 };
 
@@ -51,7 +52,8 @@ export class RegionGrabController {
   dispose(): void { this.cancel(); this.interaction.dispose(); }
 
   private update(targetIds: readonly string[] | null, clipToTerrain = true): void {
-    this.clearPreview();
+    this.clearPreview(false);
+    this.options.setRegionSmoothVisible(false);
     if (targetIds === null || targetIds.length !== this.sourceIds.length || new Set(targetIds).size !== targetIds.length) { this.targetIds = []; this.previewValid = false; return; }
     const attributes = this.options.attributes(); const sourceSet = new Set(this.sourceIds);
     const previewTargetIds = clipToTerrain ? clipRegionCellsToTerrain(targetIds, attributes) : [...targetIds];
@@ -66,10 +68,10 @@ export class RegionGrabController {
     this.options.changed();
   }
 
-  private clearPreview(): void {
-    if (this.previewIds.size === 0) return;
+  private clearPreview(restoreSmooth = true): void {
     const attributes = this.options.attributes();
     for (const id of this.previewIds) { const feature = this.options.getFeature(id); if (!feature) continue; feature.unset("grabPreview", true); feature.unset("grabSourceHidden", true); feature.set("attributes", attributes.get(id) ?? [], true); feature.changed(); this.options.removeUnused(id); }
     this.previewIds.clear(); this.options.changed();
+    if (restoreSmooth) this.options.setRegionSmoothVisible(true);
   }
 }

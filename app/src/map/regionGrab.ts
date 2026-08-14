@@ -16,13 +16,33 @@ const adjacentIds = (id: string): string[] => {
     .map(([dq, dr]) => idForAxial([axial[0] + dq, axial[1] + dr]))
     .filter((next): next is string => next !== null);
 };
+export const adjacentCellIds = (id: string): string[] => adjacentIds(id);
+const compareCellIds = (left: string, right: string): number => {
+  const a = parseCellId(left)!; const b = parseCellId(right)!;
+  return a[0] - b[0] || a[1] - b[1];
+};
+/** Splits a cell set into deterministic six-neighbor connected components. */
+export const connectedCellComponents = (cellIds: Iterable<string>): string[][] => {
+  const candidates = new Set<string>();
+  for (const id of cellIds) if (parseCellId(id)) candidates.add(id);
+  const visited = new Set<string>(); const components: string[][] = [];
+  for (const seed of [...candidates].sort(compareCellIds)) {
+    if (visited.has(seed)) continue;
+    const component: string[] = []; const queue = [seed]; visited.add(seed);
+    for (let index = 0; index < queue.length; index += 1) {
+      const current = queue[index]!; component.push(current);
+      for (const next of adjacentIds(current)) if (candidates.has(next) && !visited.has(next)) { visited.add(next); queue.push(next); }
+    }
+    components.push(component.sort(compareCellIds));
+  }
+  return components;
+};
 export const connectedRegionCells = (startId: string, attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>): string[] => {
   const values = new Map<string, string>();
   for (const [id, items] of attributes) { const value = items.find((item) => item.attribute === "region")?.value; if (value !== undefined) values.set(id, value); }
   const color = values.get(startId); if (color === undefined) return [];
-  const visited = new Set<string>([startId]); const queue = [startId];
-  for (let index = 0; index < queue.length; index += 1) for (const next of adjacentIds(queue[index]!)) if (!visited.has(next) && values.get(next) === color) { visited.add(next); queue.push(next); }
-  return [...visited].sort((left, right) => { const a = parseCellId(left)!; const b = parseCellId(right)!; return a[0] - b[0] || a[1] - b[1]; });
+  return connectedCellComponents([...values.entries()].filter(([, value]) => value === color).map(([id]) => id)
+  ).find((component) => component.includes(startId)) ?? [];
 };
 export const translateRegionCells = (sourceIds: readonly string[], sourceAnchor: string, targetAnchor: string): string[] | null => {
   const source = axialFor(sourceAnchor); const target = axialFor(targetAnchor); if (!source || !target || sourceIds.length === 0) return null;

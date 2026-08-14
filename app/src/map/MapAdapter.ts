@@ -31,12 +31,13 @@ import { createCellStyle, createFeatureStyle } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
 import { paintMapTexture } from "./mapTexture";
 import { assertGeometryWithinWorld } from "./geometryGuard";
-import { smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments } from "./terrainOutline";
+import { exactCellBoundaryPolygons, smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments } from "./terrainOutline";
 import { TerrainOutlineAnimator } from "./terrainOutlineAnimator";
 import { CellRegionController } from "./CellRegionController";
 import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
 import { RegionGrabController } from "./RegionGrabController";
+import { adjacentCellIds, connectedCellComponents } from "./regionGrab";
 import { nudgeGeometry, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
 import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 
@@ -571,7 +572,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.grab = new RegionGrabController({
         cellAt: (position) => this.cellAtCoordinate(position), attributes: () => this.cellAttributesById,
         getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id),
-        changed: () => this.cellLayer.changed(), emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); },
+        changed: () => this.cellLayer.changed(), setRegionSmoothVisible: (visible) => this.regionSmoothLayer.setVisible(visible),
+        emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); },
       });
       this.map.addInteraction(this.grab.interaction);
       return;
@@ -950,10 +952,16 @@ export class RealmMapAdapter implements RealmMapRenderer {
       current.push(attribute);
       byCell.set(attribute.cellId, current);
     }
+    const terrainCellIds = [...byCell.entries()]
+      .filter(([, values]) => values.some(({ attribute }) => attribute === "terrain"))
+      .map(([id]) => id);
+    const terrainSet = new Set(terrainCellIds);
+    const renderedByCell = new globalThis.Map<string, CellAttributeSnapshot[]>();
+    for (const [id, values] of byCell) renderedByCell.set(id, terrainSet.has(id) ? values : values.filter(({ attribute }) => attribute !== "region"));
     this.ensureCells(byCell.keys());
     const changedIds = new Set([...this.cellAttributesById.keys(), ...byCell.keys()]);
     for (const id of changedIds) {
-      const next = byCell.get(id) ?? [];
+      const next = renderedByCell.get(id) ?? [];
       const feature = this.getCellFeature(id);
       if (feature) feature.set("attributes", next, true);
     }
@@ -963,9 +971,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
     // renderer flags at this boundary so stale selection state cannot turn a
     // persisted terrain update back into a filled cell.
     this.syncSelectedCellFlags();
-    const terrainCellIds = [...byCell.entries()]
-      .filter(([, values]) => values.some(({ attribute }) => attribute === "terrain"))
-      .map(([id]) => id);
     const grid = splitTerrainGridSegments(this.fixedCellGridLines, terrainCellIds);
     this.cellGridSource.clear();
     if (grid.outside.length > 0) this.cellGridSource.addFeature(new Feature({ geometry: new MultiLineString(grid.outside) }));
@@ -979,11 +984,22 @@ export class RealmMapAdapter implements RealmMapRenderer {
     const regionIdsByColor = new globalThis.Map<string, string[]>();
     for (const [id, values] of byCell) {
       const region = values.find(({ attribute }) => attribute === "region"); if (!region) continue;
+      // Active regions are clipped to the terrain mask at the renderer
+      // boundary as well. This prevents a stale/legacy region cell from
+      // reappearing outside terrain while the persisted state is refreshed.
+      if (!terrainSet.has(id)) continue;
       const color = /^#[\da-f]{6}$/i.test(region.value) ? region.value.toUpperCase() : mapTheme(this.activeThemeId, this.themeOverrides).region;
       const ids = regionIdsByColor.get(color) ?? []; ids.push(id); regionIdsByColor.set(color, ids);
     }
-    for (const [color, ids] of regionIdsByColor) for (const polygon of smoothCellBoundaryPolygons(ids)) this.regionSmoothSource.addFeature(new Feature({ geometry: new Polygon(polygon), regionColor: color }));
-    this.cellRegion.animateChanges(previous, byCell, (id) => this.getCellFeature(id));
+    for (const [color, ids] of regionIdsByColor) for (const component of connectedCellComponents(ids)) {
+      // Smoothing a concave boundary can round a corner into the cell just
+      // outside terrain. Keep components touching that mask boundary exact;
+      // interior components retain the softer presentation curve.
+      const touchesTerrainBoundary = component.some((id) => adjacentCellIds(id).length < 6 || adjacentCellIds(id).some((next) => !terrainSet.has(next)));
+      const polygons = touchesTerrainBoundary ? exactCellBoundaryPolygons(component) : smoothCellBoundaryPolygons(component);
+      for (const polygon of polygons) this.regionSmoothSource.addFeature(new Feature({ geometry: new Polygon(polygon), regionColor: color }));
+    }
+    this.cellRegion.animateChanges(previous, renderedByCell, (id) => this.getCellFeature(id));
     this.cellLayer.changed();
   }
 
