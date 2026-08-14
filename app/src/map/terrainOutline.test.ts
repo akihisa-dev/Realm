@@ -85,4 +85,19 @@ describe("terrainOutlineSegments", () => {
     expect(rings.flat(2).every(Number.isFinite)).toBe(true);
     expect(rings.flat().length).toBeLessThanOrEqual(65_536);
   });
+
+  it("collapses long grid waves while retaining the macro boundary", () => {
+    const ids: string[] = [];
+    for (let row = 20; row <= 22; row += 1) {
+      for (let column = 10; column <= 80; column += 1) ids.push(cellId(row, column));
+    }
+    const exact = exactCellBoundaryRings(ids);
+    const smooth = smoothCellBoundaryRings(ids);
+    expect(exact).toHaveLength(1);
+    expect(smooth).toHaveLength(1);
+    expect(exact[0]!.length).toBeGreaterThan(200);
+    expect(smooth[0]!.length).toBeLessThanOrEqual(64);
+    expect(smooth[0]![0]).toEqual(smooth[0]!.at(-1));
+    expect(smooth.flat(2).every(Number.isFinite)).toBe(true);
+  });
 });
