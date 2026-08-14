@@ -21,7 +21,7 @@ import Style from "ol/style/Style";
 import { singleClick } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
-import type { CellAttributeSnapshot, GeoJsonGeometry, MoveRegionCellsInput, Position, RealmFeature } from "../backend";
+import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MoveRegionCellsInput, Position, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import { CELL_PAINT_RADII, WORLD_EXTENT, availableViewportSize, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
@@ -132,6 +132,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly selectListeners = new Set<(featureId: string | null) => void>();
   private readonly cellSelectListeners = new Set<(cellIds: readonly string[]) => void>();
   private readonly regionMoveListeners = new Set<(input: MoveRegionCellsInput) => void>();
+  private readonly regionResizeListeners = new Set<(input: ApplyCellAttributesInput) => void>();
   private readonly modifyFeaturesListeners = new Set<(changes: readonly FeatureGeometryChange[]) => void>();
   private readonly modifyListeners = new Set<(featureId: string, geometry: GeoJsonGeometry) => void>();
   private readonly eraseFeaturesListeners = new Set<(featureIds: readonly string[]) => void>();
@@ -576,6 +577,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
         getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id),
         changed: () => this.cellLayer.changed(), setRegionSmoothVisible: (visible) => this.regionSmoothLayer.setVisible(visible),
         emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); },
+        emitResize: (input) => { for (const listener of this.regionResizeListeners) listener(input); },
       });
       this.map.addInteraction(this.grab.interaction);
       return;
@@ -983,17 +985,19 @@ export class RealmMapAdapter implements RealmMapRenderer {
     const terrainRings = smoothCellBoundaryRings(terrainCellIds);
     if (terrainRings.length > 0) this.terrainSmoothSource.addFeature(new Feature({ geometry: new MultiLineString(terrainRings) }));
     this.regionSmoothSource.clear();
-    const regionIdsByColor = new globalThis.Map<string, string[]>();
+    const regionIdsByIdentity = new globalThis.Map<string, { color: string; ids: string[] }>();
     for (const [id, values] of byCell) {
       const region = values.find(({ attribute }) => attribute === "region"); if (!region) continue;
-      // Active regions are clipped to the terrain mask at the renderer
-      // boundary as well. This prevents a stale/legacy region cell from
-      // reappearing outside terrain while the persisted state is refreshed.
+      // Persisted region rows may extend beyond terrain. Keep those rows in
+      // the adapter state for future moves, but mask them from the rendered
+      // region layer until terrain exists at the same cell.
       if (!terrainSet.has(id)) continue;
       const color = /^#[\da-f]{6}$/i.test(region.value) ? region.value.toUpperCase() : mapTheme(this.activeThemeId, this.themeOverrides).region;
-      const ids = regionIdsByColor.get(color) ?? []; ids.push(id); regionIdsByColor.set(color, ids);
+      const identity = region.regionId ?? region.value;
+      const key = `${identity}\u0000${color}`;
+      const entry = regionIdsByIdentity.get(key) ?? { color, ids: [] }; entry.ids.push(id); regionIdsByIdentity.set(key, entry);
     }
-    for (const [color, ids] of regionIdsByColor) for (const component of connectedCellComponents(ids)) {
+    for (const { color, ids } of regionIdsByIdentity.values()) for (const component of connectedCellComponents(ids)) {
       // Smoothing a concave boundary can round a corner into the cell just
       // outside terrain. Keep components touching that mask boundary exact;
       // interior components retain the softer presentation curve.
@@ -1024,6 +1028,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
   onRegionMove(listener: (input: MoveRegionCellsInput) => void): () => void {
     this.regionMoveListeners.add(listener);
     return () => this.regionMoveListeners.delete(listener);
+  }
+  onRegionResize(listener: (input: ApplyCellAttributesInput) => void): () => void {
+    this.regionResizeListeners.add(listener);
+    return () => this.regionResizeListeners.delete(listener);
   }
   onModifyFeatures(listener: (changes: readonly FeatureGeometryChange[]) => void): () => void {
     this.modifyFeaturesListeners.add(listener);
@@ -1189,6 +1197,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.selectListeners.clear();
     this.cellSelectListeners.clear();
     this.regionMoveListeners.clear();
+    this.regionResizeListeners.clear();
     this.modifyFeaturesListeners.clear();
     this.target.removeEventListener("keydown", this.handleKeyDown);
     this.target.removeEventListener("keyup", this.handleKeyUp);

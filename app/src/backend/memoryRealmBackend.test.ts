@@ -184,27 +184,65 @@ it("persists project view settings without accepting unknown state", async () =>
   await expect(backend.updateProjectSettings({ settings: { viewport: true } as never })).rejects.toThrow("不正");
 });
 
-it("clips one contiguous region mass to terrain atomically and keeps terrain attributes", async () => {
+it("keeps a moved region's hidden overhang and terrain attributes", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://grab.realmmap", name: "Grab" });
-  await backend.applyCellAttributes({ cellIds: ["2:2", "3:2"], attribute: "region", value: "#AA0000" });
+  const regionId = "11111111-1111-4111-8111-111111111111";
+  await backend.applyCellAttributes({ cellIds: ["2:2", "3:2"], attribute: "region", value: "#AA0000", regionId });
   await backend.applyCellAttributes({ cellIds: ["2:2", "5:3"], attribute: "terrain", value: "terrain" });
   const before = await backend.getOpenProject();
   await backend.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] });
   expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
     { cellId: "2:2", attribute: "terrain", value: "terrain" },
-    { cellId: "5:3", attribute: "region", value: "#AA0000" },
+    { cellId: "5:3", attribute: "region", value: "#AA0000", regionId },
     { cellId: "5:3", attribute: "terrain", value: "terrain" },
   ]));
-  expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([{ cellId: "6:3", attribute: "region", value: "#AA0000" }]));
+  expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    { cellId: "6:3", attribute: "region", value: "#AA0000", regionId },
+  ]));
+  await backend.moveRegionCells({ sourceCellIds: ["5:3", "6:3"], targetCellIds: ["2:2", "3:2"] });
+  expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    { cellId: "2:2", attribute: "region", value: "#AA0000", regionId },
+    { cellId: "3:2", attribute: "region", value: "#AA0000", regionId },
+  ]));
+  expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([
+    { cellId: "5:3", attribute: "region", value: "#AA0000", regionId },
+    { cellId: "6:3", attribute: "region", value: "#AA0000", regionId },
+  ]));
   expect((await backend.undoProject()).canRedo).toBe(true);
   expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
-    { cellId: "2:2", attribute: "region", value: "#AA0000" },
+    { cellId: "5:3", attribute: "region", value: "#AA0000", regionId },
+    { cellId: "6:3", attribute: "region", value: "#AA0000", regionId },
+  ]));
+  await backend.undoProject();
+  expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    { cellId: "2:2", attribute: "region", value: "#AA0000", regionId },
     { cellId: "2:2", attribute: "terrain", value: "terrain" },
-    { cellId: "3:2", attribute: "region", value: "#AA0000" },
+    { cellId: "3:2", attribute: "region", value: "#AA0000", regionId },
   ]));
   await expect(backend.moveRegionCells({ sourceCellIds: ["9:9"], targetCellIds: ["4:2"] })).rejects.toThrow();
   expect(before?.features).toEqual([]);
+});
+
+it("moves every cell with one region ID, including a visually separated component", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://grab-region-id.realmmap", name: "Grab region ID" });
+  const regionId = "22222222-2222-4222-8222-222222222222";
+  await backend.applyCellAttributes({ cellIds: ["2:2", "3:2", "20:20"], attribute: "region", value: "#AA0000", regionId });
+  await backend.applyCellAttributes({ cellIds: ["2:2", "3:2", "20:20", "5:3", "23:21"], attribute: "terrain", value: "terrain" });
+
+  await expect(backend.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] })).rejects.toThrow("領域全体");
+  await backend.moveRegionCells({ sourceCellIds: ["2:2", "3:2", "20:20"], targetCellIds: ["5:3", "6:3", "23:21"] });
+
+  const moved = await backend.viewCellAttributes({});
+  expect(moved).toEqual(expect.arrayContaining([
+    { cellId: "5:3", attribute: "region", value: "#AA0000", regionId },
+    { cellId: "23:21", attribute: "region", value: "#AA0000", regionId },
+  ]));
+  expect(moved).not.toEqual(expect.arrayContaining([
+    { cellId: "2:2", attribute: "region", value: "#AA0000", regionId },
+    { cellId: "20:20", attribute: "region", value: "#AA0000", regionId },
+  ]));
 });
 
 it("matches strict native geometry write validation and keeps failed mutations atomic", async () => {

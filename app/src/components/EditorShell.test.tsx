@@ -106,8 +106,8 @@ it("saves a colored region without changing terrain cells and supports undo", as
 
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([
     { cellId: "1:1", attribute: "terrain", value: "terrain" },
-    { cellId: "1:1", attribute: "region", value: "#2468AC" },
-    { cellId: "1:2", attribute: "region", value: "#2468AC" },
+    expect.objectContaining({ cellId: "1:1", attribute: "region", value: "#2468AC" }),
+    expect.objectContaining({ cellId: "1:2", attribute: "region", value: "#2468AC" }),
   ]));
   expect((await backend.getOpenProject())?.features).toEqual([]);
   expect(screen.getByRole("status", { name: "描画対象" })).toHaveTextContent("");
@@ -118,7 +118,7 @@ it("saves a colored region without changing terrain cells and supports undo", as
   ]));
 });
 
-it("clips a grabbed region to the terrain cells at the destination", async () => {
+it("keeps a grabbed region's hidden overhang at the destination", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://grab-editor.realmmap", name: "Grab editor" });
   await backend.applyCellAttributes({ cellIds: ["1:1", "4:2"], attribute: "terrain", value: "terrain" });
@@ -133,13 +133,13 @@ it("clips a grabbed region to the terrain cells at the destination", async () =>
 
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
     { cellId: "1:1", attribute: "terrain", value: "terrain" },
-    { cellId: "4:2", attribute: "region", value: "#2468AC" },
+    expect.objectContaining({ cellId: "4:2", attribute: "region", value: "#2468AC" }),
     { cellId: "4:2", attribute: "terrain", value: "terrain" },
   ])));
-  expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([{ cellId: "5:2", attribute: "region", value: "#2468AC" }]));
+  expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([expect.objectContaining({ cellId: "5:2", attribute: "region", value: "#2468AC" })]));
   expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([
-    { cellId: "1:1", attribute: "region", value: "#2468AC" },
-    { cellId: "2:1", attribute: "region", value: "#2468AC" },
+    expect.objectContaining({ cellId: "1:1", attribute: "region", value: "#2468AC" }),
+    expect.objectContaining({ cellId: "2:1", attribute: "region", value: "#2468AC" }),
   ]));
 });
 
@@ -157,8 +157,8 @@ it("restores persisted region cells after a grab save fails", async () => {
 
   await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("領域を移動できませんでした。"));
   expect(await backend.viewCellAttributes({})).toEqual([
-    { cellId: "1:1", attribute: "region", value: "#2468AC" },
-    { cellId: "2:1", attribute: "region", value: "#2468AC" },
+    expect.objectContaining({ cellId: "1:1", attribute: "region", value: "#2468AC" }),
+    expect.objectContaining({ cellId: "2:1", attribute: "region", value: "#2468AC" }),
   ]);
 });
 
@@ -269,7 +269,7 @@ it("deletes only region cells after switching the eraser target", async () => {
   await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual([
     { cellId: "1:1", attribute: "terrain", value: "terrain" },
     { cellId: "1:2", attribute: "terrain", value: "terrain" },
-    { cellId: "1:2", attribute: "region", value: "#2468AC" },
+    expect.objectContaining({ cellId: "1:2", attribute: "region", value: "#2468AC" }),
   ]));
 });
 

@@ -6,7 +6,7 @@ function passingReport() {
   const baseline = readBaseline();
   return {
     reportVersion: 1,
-    schemaVersion: 9,
+    schemaVersion: baseline.schemaVersion,
     fixture: baseline.fixture,
     samples: baseline.samples,
     operations: Object.fromEntries(REQUIRED_OPERATIONS.map((name) => [name, { status: "measured", medianMs: 0, rowOperations: baseline.rowOperations[name] }])),

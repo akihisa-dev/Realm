@@ -1,6 +1,6 @@
 {
   "reportVersion": 1,
-  "schemaVersion": 9,
+  "schemaVersion": 10,
   "fixture": {
     "features": 96,
     "cells": 192

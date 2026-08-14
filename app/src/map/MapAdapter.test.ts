@@ -78,7 +78,7 @@ describe("RealmMapAdapter", () => {
     const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
     adapter.setCellAttributes([
       { cellId: "10:10", attribute: "terrain", value: "terrain" },
-      { cellId: "10:10", attribute: "region", value: "#2468AC" },
+      { cellId: "10:10", attribute: "region", value: "#2468AC", regionId: "region-a" },
     ]);
     expect(cellLayer.getSource()?.getFeatureById("10:10")?.get("regionAnimationOpacity")).toBeUndefined();
     expect(callbacks.size).toBe(0);
@@ -112,16 +112,26 @@ describe("RealmMapAdapter", () => {
     const regionLayer = adapter.getMap().getLayers().item(7) as VectorLayer;
     adapter.setCellAttributes([
       { cellId: "10:10", attribute: "terrain", value: "terrain" },
-      { cellId: "10:10", attribute: "region", value: "#2468AC" },
+      { cellId: "10:10", attribute: "region", value: "#2468AC", regionId: "region-a" },
       { cellId: "20:20", attribute: "terrain", value: "terrain" },
-      { cellId: "20:20", attribute: "region", value: "#2468AC" },
-      { cellId: "30:30", attribute: "region", value: "#2468AC" },
+      { cellId: "20:20", attribute: "region", value: "#2468AC", regionId: "region-a" },
+      { cellId: "30:30", attribute: "region", value: "#2468AC", regionId: "region-a" },
     ]);
 
     const features = regionLayer.getSource()?.getFeatures() ?? [];
     expect(features).toHaveLength(2);
     expect(features.every((feature) => (feature.getGeometry() as Polygon).getCoordinates()[0]?.length === 7)).toBe(true);
     expect(regionLayer.getVisible()).toBe(true);
+
+    adapter.setCellAttributes([
+      { cellId: "10:10", attribute: "terrain", value: "terrain" },
+      { cellId: "10:10", attribute: "region", value: "#2468AC", regionId: "region-a" },
+      { cellId: "20:20", attribute: "terrain", value: "terrain" },
+      { cellId: "20:20", attribute: "region", value: "#2468AC", regionId: "region-a" },
+      { cellId: "30:30", attribute: "terrain", value: "terrain" },
+      { cellId: "30:30", attribute: "region", value: "#2468AC", regionId: "region-a" },
+    ]);
+    expect(regionLayer.getSource()?.getFeatures()).toHaveLength(3);
 
     adapter.setMode("grab");
     const pointer = new MouseEvent("pointerdown", { button: 0, bubbles: true });

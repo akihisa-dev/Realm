@@ -22,7 +22,7 @@ const handlers: Partial<Record<RealmIpcChannel, keyof RealmCommands>> = {
 const DEFAULT_MAX_PAYLOAD_BYTES = 80 * 1024 * 1024;
 const NO_INPUT_CHANNELS = new Set<RealmIpcChannel>(["realm:listProjects", "realm:undoProject", "realm:redoProject", "realm:closeProject", "realm:getOpenProject"]);
 const PATH_FIELDS = new Set(["path", "libraryId"]);
-const ID_FIELDS = new Set(["id", "ids", "cellIds", "sourceCellIds", "targetCellIds"]);
+const ID_FIELDS = new Set(["id", "ids", "cellIds", "sourceCellIds", "targetCellIds", "regionId"]);
 const DIALOG_NAME_FIELDS = new Set(["suggestedName"]);
 
 function validateInputBoundary(channel: RealmIpcChannel, input: unknown): void {

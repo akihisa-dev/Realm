@@ -8,7 +8,7 @@ import {
   type RealmMapRenderer,
   type RealmMapRendererFactory,
 } from "../map/MapAdapter";
-import type { CellAttributeSnapshot, GeoJsonGeometry, MoveRegionCellsInput, RealmFeature } from "../backend";
+import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MoveRegionCellsInput, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { ExportCanvasSize } from "../map/contracts";
 import type { MapErrorCode } from "../map/errors";
@@ -43,6 +43,7 @@ type MapCanvasProps = {
   onSelectFeatures?: (featureIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
   onRegionMove?: (input: MoveRegionCellsInput) => void;
+  onRegionResize?: (input: ApplyCellAttributesInput) => void;
   onToolChange?: (tool: "terrain" | "region" | "erase" | "grab") => void;
   onEraseTargetChange?: (target: EraseTarget) => void;
   onRegionColorChange?: (color: string) => void;
@@ -79,6 +80,7 @@ export function MapCanvas({
   onSelectFeatures,
   onCellSelect,
   onRegionMove,
+  onRegionResize,
   onToolChange,
   onEraseTargetChange,
   onRegionColorChange,
@@ -117,7 +119,7 @@ export function MapCanvas({
       : mode === "cell-region"
         ? "自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。"
       : mode === "grab"
-        ? "同じ色でつながった領域セルを掴んで、六角グリッドに沿って移動します。移動先が範囲外または別の領域と重なる場合は移動できません。Escapeで取り消せます。"
+        ? "同じ領域IDのセルを掴んで、六角グリッドに沿って移動します。海峡などで表示上分かれていても一体として移動します。領域の端を掴んで外側へ広げたり、内側へなぞって狭めたりできます。移動先が範囲外または別の領域と重なる場合は移動できません。Escapeで取り消せます。"
       : mode === "region"
         ? "領域の輪郭をドラッグして描きます。色を選んで保存できます。Escapeで取り消せます。"
       : "六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。";
@@ -168,6 +170,7 @@ export function MapCanvas({
     onSelectFeatures,
     onCellSelect,
     onRegionMove,
+    onRegionResize,
     onModify,
     onModifyFeatures,
     onErase,

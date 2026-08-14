@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { errorMessage, type CellAttributeSnapshot, type MoveRegionCellsInput, type RealmBackend, type RealmSnapshot } from "../backend";
+import { errorMessage, type ApplyCellAttributesInput, type CellAttributeSnapshot, type MoveRegionCellsInput, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { DEFAULT_ERASE_TARGET, eraseTargetDefinition, type EraseTarget } from "./editor/eraseTargets";
 import { mapErrorMessage } from "../locales/ja";
@@ -118,7 +118,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     });
   };
 
-  const updateOptimisticCellAttributes = (cellIds: readonly string[], attribute: "terrain" | "region", value: string | null): void => {
+  const updateOptimisticCellAttributes = (cellIds: readonly string[], attribute: "terrain" | "region", value: string | null, regionId?: string): void => {
     // Invalidate an in-flight read before publishing the optimistic state. Its
     // old read result must not overwrite a newer paint operation.
     ++cellRequest.current;
@@ -128,11 +128,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       if (value === null) {
         for (const cellId of selected) byCell.delete(`${cellId}:${attribute}`);
       } else {
-        for (const cellId of selected) byCell.set(`${cellId}:${attribute}`, {
-          cellId,
-          attribute,
-          value,
-        });
+        for (const cellId of selected) byCell.set(`${cellId}:${attribute}`, { cellId, attribute, value, ...(attribute === "region" && regionId ? { regionId } : {}) });
       }
       return [...byCell.values()];
     });
@@ -155,14 +151,15 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         ? eraseTargetDefinition(eraseTargetRef.current).attribute
         : "terrain";
     const value = tool === "terrain" ? "terrain" : tool === "region" ? regionColor : null;
+    const regionId = tool === "region" ? crypto.randomUUID() : undefined;
     const mutation = ++cellMutation.current;
-    updateOptimisticCellAttributes(nextIds, attribute, value);
+    updateOptimisticCellAttributes(nextIds, attribute, value, regionId);
     // Completed strokes are represented immediately by the optimistic terrain
     // outline. Keep controlled selection empty so only pointer hover can show
     // a transient fill after commit.
     setSelectedCellIds([]);
     void run(
-      () => backend.applyCellAttributes({ cellIds: nextIds, attribute, value }),
+      () => backend.applyCellAttributes({ cellIds: nextIds, attribute, value, ...(regionId ? { regionId } : {}) }),
       attribute === "region" ? "セルの領域属性を更新できませんでした。" : "セルの地形属性を更新できませんでした。",
       {
         recover: async (identity) => {
@@ -176,6 +173,22 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const moveRegion = (input: MoveRegionCellsInput): void => {
     if (locked) return;
     void run(() => backend.moveRegionCells(input), "領域を移動できませんでした。", { recover: async (identity) => refreshCellAttributes(identity) });
+  };
+  const resizeRegion = (input: ApplyCellAttributesInput): void => {
+    if (locked || input.attribute !== "region") return;
+    const mutation = ++cellMutation.current;
+    updateOptimisticCellAttributes(input.cellIds, input.attribute, input.value, input.regionId);
+    void run(
+      () => backend.applyCellAttributes(input),
+      "領域の端を変更できませんでした。",
+      {
+        recover: async (identity) => {
+          if (cellMutation.current === mutation) await refreshCellAttributes(identity);
+        },
+        refreshOnSuccess: false,
+        isCurrent: () => cellMutation.current === mutation,
+      },
+    );
   };
 
   useEffect(() => {
@@ -233,6 +246,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             gridOptions={gridOptions}
             onCellSelect={applyCellSelection}
             onRegionMove={moveRegion}
+            onRegionResize={resizeRegion}
             regionColor={regionColor}
             onToolChange={selectTool}
             onEraseTargetChange={selectEraseTarget}

@@ -80,27 +80,65 @@ describe("RealmCommands user-visible operations", () => {
 
   it("writes validated artifacts and applies/removes cell attributes", async () => {
     const dir = directory(); const commands = new RealmCommands({ libraryDirectory: dir }); await commands.createProject({ name: "Cells" });
+    const regionId = "33333333-3333-4333-8333-333333333333";
     await commands.applyCellAttributes({ cellIds: ["0:0", "1:0", "1:0"], attribute: "terrain", value: "land" });
     expect(await commands.viewCellAttributes({ minX: 0, maxX: 1, minY: 0, maxY: 0 })).toHaveLength(2);
     await commands.applyCellAttributes({ cellIds: ["0:0"], attribute: "terrain", value: null }); expect(await commands.viewCellAttributes({})).toHaveLength(1);
-    await commands.applyCellAttributes({ cellIds: ["2:2", "3:2"], attribute: "region", value: "#AA0000" });
+    await commands.applyCellAttributes({ cellIds: ["2:2", "3:2"], attribute: "region", value: "#AA0000", regionId });
     await commands.applyCellAttributes({ cellIds: ["5:3"], attribute: "terrain", value: "land" });
     await commands.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] });
     const moved = await commands.viewCellAttributes({ minX: 2, maxX: 6, minY: 2, maxY: 3 });
     expect(moved).toEqual(expect.arrayContaining([
-      { cellId: "5:3", attribute: "region", value: "#AA0000" },
+      { cellId: "5:3", attribute: "region", value: "#AA0000", regionId },
       { cellId: "5:3", attribute: "terrain", value: "land" },
     ]));
-    expect(moved).not.toEqual(expect.arrayContaining([{ cellId: "6:3", attribute: "region", value: "#AA0000" }]));
+    expect(moved).toEqual(expect.arrayContaining([
+      { cellId: "6:3", attribute: "region", value: "#AA0000", regionId },
+    ]));
+    await commands.moveRegionCells({ sourceCellIds: ["5:3", "6:3"], targetCellIds: ["2:2", "3:2"] });
+    const movedBack = await commands.viewCellAttributes({});
+    expect(movedBack).toEqual(expect.arrayContaining([
+      { cellId: "2:2", attribute: "region", value: "#AA0000", regionId },
+      { cellId: "3:2", attribute: "region", value: "#AA0000", regionId },
+    ]));
+    expect(movedBack).not.toEqual(expect.arrayContaining([
+      { cellId: "5:3", attribute: "region", value: "#AA0000", regionId },
+      { cellId: "6:3", attribute: "region", value: "#AA0000", regionId },
+    ]));
     await expect(commands.moveRegionCells({ sourceCellIds: ["2:2"], targetCellIds: ["7:3"] })).rejects.toThrow();
     await commands.undoProject();
+    expect(await commands.viewCellAttributes({})).toEqual(expect.arrayContaining([
+      { cellId: "5:3", attribute: "region", value: "#AA0000", regionId },
+      { cellId: "6:3", attribute: "region", value: "#AA0000", regionId },
+    ]));
+    await commands.undoProject();
     expect(await commands.viewCellAttributes({ minX: 2, maxX: 3, minY: 2, maxY: 2 })).toEqual([
-      { cellId: "2:2", attribute: "region", value: "#AA0000" },
-      { cellId: "3:2", attribute: "region", value: "#AA0000" },
+      { cellId: "2:2", attribute: "region", value: "#AA0000", regionId },
+      { cellId: "3:2", attribute: "region", value: "#AA0000", regionId },
     ]);
     await expect(commands.viewCellAttributes({ minX: 3, maxX: 2 })).rejects.toThrow("viewport");
     const pngPath = join(dir, "artifact.png"); await commands.writeArtifact({ path: pngPath, bytes: png });
     await expect(commands.writeArtifact({ path: join(dir, "bad.png"), bytes: [1, 2] })).rejects.toThrow("content");
     await expect(commands.writeArtifact({ path: join(dir, "bad.txt"), bytes: png })).rejects.toThrow("extension");
+  });
+
+  it("moves every cell with one region ID, including a visually separated component", async () => {
+    const dir = directory(); const commands = new RealmCommands({ libraryDirectory: dir }); await commands.createProject({ name: "Region ID" });
+    const regionId = "44444444-4444-4444-8444-444444444444";
+    await commands.applyCellAttributes({ cellIds: ["2:2", "3:2", "20:20"], attribute: "region", value: "#AA0000", regionId });
+    await commands.applyCellAttributes({ cellIds: ["2:2", "3:2", "20:20", "5:3", "23:21"], attribute: "terrain", value: "land" });
+
+    await expect(commands.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] })).rejects.toThrow("entire region");
+    await commands.moveRegionCells({ sourceCellIds: ["2:2", "3:2", "20:20"], targetCellIds: ["5:3", "6:3", "23:21"] });
+
+    const moved = await commands.viewCellAttributes({});
+    expect(moved).toEqual(expect.arrayContaining([
+      { cellId: "5:3", attribute: "region", value: "#AA0000", regionId },
+      { cellId: "23:21", attribute: "region", value: "#AA0000", regionId },
+    ]));
+    expect(moved).not.toEqual(expect.arrayContaining([
+      { cellId: "2:2", attribute: "region", value: "#AA0000", regionId },
+      { cellId: "20:20", attribute: "region", value: "#AA0000", regionId },
+    ]));
   });
 });

@@ -63,12 +63,14 @@ export type CellAttributeSnapshot = {
   cellId: string;
   attribute: CellAttribute;
   value: string;
+  regionId?: string;
 };
 
 export type ApplyCellAttributesInput = {
   cellIds: string[];
   attribute: CellAttribute;
   value: string | null;
+  regionId?: string;
 };
 export type MoveRegionCellsInput = { sourceCellIds: string[]; targetCellIds: string[] };
 
