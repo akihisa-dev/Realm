@@ -399,6 +399,34 @@ describe("RealmMapAdapter", () => {
     host.remove();
   });
 
+  it("applies one relative zoom level in both wheel directions", async () => {
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const map = adapter.getMap();
+    adapter.setZoom(3);
+    const wheelZoom = map.getInteractions().getArray().find((item) => item instanceof MouseWheelZoom) as MouseWheelZoom;
+    const sendWheel = (deltaY: number): void => {
+      const wheelEvent = new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true });
+      expect(wheelZoom.handleEvent({ type: "wheel", map, pixel: [320, 240], originalEvent: wheelEvent } as never)).toBe(false);
+    };
+
+    try {
+      sendWheel(-100);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(adapter.getZoom()).toBe(4);
+
+      sendWheel(100);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(adapter.getZoom()).toBe(3);
+    } finally {
+      adapter.dispose();
+      host.remove();
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps middle-button drag pan available in every tool mode", () => {
     const host = document.createElement("div");
     host.style.width = "640px";

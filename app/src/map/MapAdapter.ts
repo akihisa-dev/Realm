@@ -297,7 +297,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
       }),
       controls: defaultControls({ zoom: false, rotate: false, attribution: false }),
       interactions: defaultInteractions({ altShiftDragRotate: false, pinchRotate: false, mouseWheelZoom: false }).extend([
-        new MouseWheelZoom(),
+        // Settle each wheel gesture on one relative zoom level instead of
+        // stopping between the renderer's 1–8 levels.
+        new MouseWheelZoom({ constrainResolution: true }),
         this.middleDragPan,
       ]),
     });
