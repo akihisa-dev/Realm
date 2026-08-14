@@ -43,7 +43,7 @@ type MapCanvasProps = {
   onSelectFeatures?: (featureIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
   onRegionMove?: (input: MoveRegionCellsInput) => void;
-  onRegionResize?: (input: ApplyCellAttributesInput) => void;
+  onCellResize?: (input: ApplyCellAttributesInput) => void;
   onToolChange?: (tool: "terrain" | "region" | "erase" | "grab") => void;
   onEraseTargetChange?: (target: EraseTarget) => void;
   onRegionColorChange?: (color: string) => void;
@@ -80,7 +80,7 @@ export function MapCanvas({
   onSelectFeatures,
   onCellSelect,
   onRegionMove,
-  onRegionResize,
+  onCellResize,
   onToolChange,
   onEraseTargetChange,
   onRegionColorChange,
@@ -119,7 +119,7 @@ export function MapCanvas({
       : mode === "cell-region"
         ? "自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。"
       : mode === "grab"
-        ? "同じ領域IDのセルを掴んで、六角グリッドに沿って移動します。海峡などで表示上分かれていても一体として移動します。領域の端を掴んで外側へ広げたり、内側へなぞって狭めたりできます。移動先が範囲外なら移動できず、別の領域と重なる部分は掴んだ領域側だけが削れます。Escapeで取り消せます。"
+        ? "地形または領域の外周セルをつまみ、外側へ引いて広げたり内側へ引いて狭めたりできます。領域は同じIDを保ったまま、内部をつまむと六角グリッドに沿って移動します。移動先が範囲外なら移動できず、別の領域との重なりは移動側だけが削れます。Escapeで取り消せます。"
       : mode === "region"
         ? "領域の輪郭をドラッグして描きます。色を選んで保存できます。Escapeで取り消せます。"
       : "六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。";
@@ -170,7 +170,7 @@ export function MapCanvas({
     onSelectFeatures,
     onCellSelect,
     onRegionMove,
-    onRegionResize,
+    onCellResize,
     onModify,
     onModifyFeatures,
     onErase,

@@ -133,7 +133,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly selectListeners = new Set<(featureId: string | null) => void>();
   private readonly cellSelectListeners = new Set<(cellIds: readonly string[]) => void>();
   private readonly regionMoveListeners = new Set<(input: MoveRegionCellsInput) => void>();
-  private readonly regionResizeListeners = new Set<(input: ApplyCellAttributesInput) => void>();
+  private readonly cellResizeListeners = new Set<(input: ApplyCellAttributesInput) => void>();
   private readonly modifyFeaturesListeners = new Set<(changes: readonly FeatureGeometryChange[]) => void>();
   private readonly modifyListeners = new Set<(featureId: string, geometry: GeoJsonGeometry) => void>();
   private readonly eraseFeaturesListeners = new Set<(featureIds: readonly string[]) => void>();
@@ -584,8 +584,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
           this.regionSmoothHiddenIdentity = visible ? null : regionIdentity ?? null;
           this.regionSmoothLayer.changed();
         },
+        setTerrainSmoothVisible: (visible, hiddenCellIds = []) => { if (!visible) this.terrainOutlineLayer.setVisible(false); this.setTerrainSmoothPreview(hiddenCellIds); this.terrainSmoothLayer.setVisible(true); },
         emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); },
-        emitResize: (input) => { for (const listener of this.regionResizeListeners) listener(input); },
+        emitResize: (input) => { for (const listener of this.cellResizeListeners) listener(input); },
       });
       this.map.addInteraction(this.grab.interaction);
       return;
@@ -955,6 +956,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellLayer.changed();
   }
 
+  private setTerrainSmoothPreview(hiddenCellIds: readonly string[] = []): void { const hidden = new Set(hiddenCellIds); const visibleTerrainIds = [...this.cellAttributesById.entries()].filter(([id, values]) => !hidden.has(id) && values.some(({ attribute }) => attribute === "terrain")).map(([id]) => id); this.terrainSmoothSource.clear(); const rings = smoothCellBoundaryRings(visibleTerrainIds); if (rings.length > 0) this.terrainSmoothSource.addFeature(new Feature({ geometry: new MultiLineString(rings) })); }
+
   setCellAttributes(attributes: readonly CellAttributeSnapshot[]): void {
     const previous = this.cellAttributesById;
     const byCell = new globalThis.Map<string, CellAttributeSnapshot[]>();
@@ -1037,10 +1040,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.regionMoveListeners.add(listener);
     return () => this.regionMoveListeners.delete(listener);
   }
-  onRegionResize(listener: (input: ApplyCellAttributesInput) => void): () => void {
-    this.regionResizeListeners.add(listener);
-    return () => this.regionResizeListeners.delete(listener);
-  }
+  onCellResize(listener: (input: ApplyCellAttributesInput) => void): () => void { this.cellResizeListeners.add(listener); return () => this.cellResizeListeners.delete(listener); }
   onModifyFeatures(listener: (changes: readonly FeatureGeometryChange[]) => void): () => void {
     this.modifyFeaturesListeners.add(listener);
     return () => this.modifyFeaturesListeners.delete(listener);
@@ -1152,7 +1152,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.selectListeners.clear();
     this.cellSelectListeners.clear();
     this.regionMoveListeners.clear();
-    this.regionResizeListeners.clear();
+    this.cellResizeListeners.clear();
     this.modifyFeaturesListeners.clear();
     this.target.removeEventListener("keydown", this.handleKeyDown);
     this.target.removeEventListener("keyup", this.handleKeyUp);

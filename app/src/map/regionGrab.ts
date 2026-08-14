@@ -44,6 +44,13 @@ export const connectedRegionCells = (startId: string, attributes: ReadonlyMap<st
   return connectedCellComponents([...values.entries()].filter(([, value]) => value === identity).map(([id]) => id)
   ).find((component) => component.includes(startId)) ?? [];
 };
+/** Returns the six-connected terrain mass containing the start cell. */
+export const connectedTerrainCells = (startId: string, attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>): string[] => {
+  const terrainIds = [...attributes.entries()]
+    .filter(([, items]) => items.some((item) => item.attribute === "terrain"))
+    .map(([id]) => id);
+  return connectedCellComponents(terrainIds).find((component) => component.includes(startId)) ?? [];
+};
 /** Returns every persisted cell with the same region identity, including visually separated components. */
 export const sameRegionCells = (startId: string, attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>): string[] => {
   let identity: string | undefined;

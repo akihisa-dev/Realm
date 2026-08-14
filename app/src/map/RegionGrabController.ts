@@ -1,7 +1,9 @@
 import Feature from "ol/Feature";
 import PointerInteraction from "ol/interaction/Pointer";
 import type { ApplyCellAttributesInput, CellAttributeSnapshot, MoveRegionCellsInput, Position } from "../backend";
-import { clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedRegionCells, isRegionBoundaryCell, regionResizeStroke, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
+import { clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedRegionCells, connectedTerrainCells, isRegionBoundaryCell, regionResizeStroke, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
+
+type ResizableAttribute = "terrain" | "region";
 
 type Options = {
   cellAt: (position: Position) => string | null;
@@ -11,12 +13,13 @@ type Options = {
   removeUnused: (id: string) => void;
   changed: () => void;
   setRegionSmoothVisible: (visible: boolean, regionIdentity?: string | null) => void;
+  setTerrainSmoothVisible?: (visible: boolean, hiddenCellIds?: readonly string[]) => void;
   emit: (input: MoveRegionCellsInput) => void;
-  /** Persists a cell-attribute update; it does not create a separate region entity. */
+  /** Persists a boundary update without creating a separate map entity. */
   emitResize: (input: ApplyCellAttributesInput) => void;
 };
 
-/** Owns the transient exact-hex preview used while moving one region mass. */
+/** Owns the transient exact-hex preview used while moving or resizing a cell mass. */
 export class RegionGrabController {
   readonly interaction: PointerInteraction;
   private sourceIds: string[] = [];
@@ -25,9 +28,10 @@ export class RegionGrabController {
   private previewIds = new Set<string>();
   private previewValid = false;
   private resizeMode: "expand" | "shrink" | null = null;
-  private resizeColor: string | null = null;
+  private resizeAttribute: ResizableAttribute | null = null;
+  private resizeValue: string | null = null;
   private resizeRegionId: string | null = null;
-  private resizeLastPosition: Position | null = null;
+  private resizeStartPosition: Position | null = null;
   private resizeAddedIds = new Set<string>();
   private resizeRemovedIds = new Set<string>();
   private resizeComponentIds: string[] = [];
@@ -40,23 +44,24 @@ export class RegionGrabController {
         const position = event.coordinate as Position;
         const anchor = options.cellAt(position); if (!anchor) return false;
         const attributes = options.attributes();
-        const source = sameRegionCells(anchor, attributes); if (source.length === 0) return false;
-        const localComponent = connectedRegionCells(anchor, attributes);
         const region = attributes.get(anchor)?.find((item) => item.attribute === "region");
-        this.sourceIds = source; this.sourceAnchor = anchor;
-        if (region && isRegionBoundaryCell(anchor, localComponent)) {
-          this.resizeMode = null;
-          this.resizeColor = region.value;
-          this.resizeRegionId = region.regionId ?? null;
-          this.resizeLastPosition = position;
-          this.resizeComponentIds = localComponent;
-          this.updateResizePreview();
+        const regionSource = region ? sameRegionCells(anchor, attributes) : [];
+        const regionComponent = regionSource.length > 0 ? connectedRegionCells(anchor, attributes) : [];
+        if (region && isRegionBoundaryCell(anchor, regionComponent)) {
+          this.beginResize("region", region.value, region.regionId ?? null, regionSource, regionComponent, anchor, position);
           return true;
         }
-        this.sourceAnchor = anchor; this.update(source, false); return true;
+        const terrain = attributes.get(anchor)?.find((item) => item.attribute === "terrain");
+        const terrainComponent = terrain ? connectedTerrainCells(anchor, attributes) : [];
+        if (terrain && isRegionBoundaryCell(anchor, terrainComponent)) {
+          this.beginResize("terrain", terrain.value, null, terrainComponent, terrainComponent, anchor, position);
+          return true;
+        }
+        if (regionSource.length === 0) return false;
+        this.sourceIds = regionSource; this.sourceAnchor = anchor; this.update(regionSource, false); return true;
       },
       handleDragEvent: (event) => {
-        if (this.resizeColor !== null) {
+        if (this.resizeAttribute !== null) {
           this.resizeTo(event.coordinate as Position);
           return;
         }
@@ -65,14 +70,15 @@ export class RegionGrabController {
         this.update(target ? translateRegionCells(this.sourceIds, this.sourceAnchor, target) : null);
       },
       handleUpEvent: (event) => {
-        if (this.resizeColor !== null) {
+        if (this.resizeAttribute !== null) {
           this.resizeTo(event.coordinate as Position);
           const cellIds = this.resizeMode === "shrink" ? [...this.resizeRemovedIds] : [...this.resizeAddedIds];
-          const value = this.resizeMode === "shrink" ? null : this.resizeColor;
+          const attribute = this.resizeAttribute;
+          const value = this.resizeMode === "shrink" ? null : this.resizeValue;
           const regionId = this.resizeRegionId;
-          const valid = this.previewValid && cellIds.length > 0;
+          const valid = this.previewValid && cellIds.length > 0 && this.resizeValue !== null;
           this.cancel();
-          if (valid) options.emitResize({ cellIds, attribute: "region", value, ...(value !== null && regionId ? { regionId } : {}) });
+          if (valid) options.emitResize({ cellIds, attribute, value, ...(value !== null && attribute === "region" && regionId ? { regionId } : {}) });
           return false;
         }
         if (!this.sourceAnchor) return false;
@@ -88,25 +94,45 @@ export class RegionGrabController {
   cancel(): void {
     this.clearPreview();
     this.sourceIds = []; this.targetIds = []; this.sourceAnchor = null; this.previewValid = false;
-    this.resizeMode = null; this.resizeColor = null; this.resizeRegionId = null; this.resizeLastPosition = null;
+    this.resizeMode = null; this.resizeAttribute = null; this.resizeValue = null; this.resizeRegionId = null; this.resizeStartPosition = null;
     this.resizeAddedIds.clear(); this.resizeRemovedIds.clear(); this.resizeComponentIds = [];
     this.interaction.setActive(false); this.interaction.setActive(true);
   }
   dispose(): void { this.cancel(); this.interaction.dispose(); }
 
+  private beginResize(
+    attribute: ResizableAttribute,
+    value: string,
+    regionId: string | null,
+    sourceIds: readonly string[],
+    componentIds: readonly string[],
+    anchor: string,
+    position: Position,
+  ): void {
+    this.sourceIds = [...sourceIds];
+    this.sourceAnchor = anchor;
+    this.resizeAttribute = attribute;
+    this.resizeValue = value;
+    this.resizeRegionId = regionId;
+    this.resizeStartPosition = position;
+    this.resizeComponentIds = [...componentIds];
+    this.resizeMode = null;
+    this.updateResizePreview();
+  }
+
   private resizeTo(position: Position): void {
-    const lastPosition = this.resizeLastPosition;
-    this.resizeLastPosition = position;
     const target = this.options.cellAt(position);
     if (!this.resizeMode && target) this.resizeMode = new Set(this.sourceIds).has(target) ? "shrink" : "expand";
-    if (!this.resizeMode || !this.resizeColor) return;
-    const stroke = regionResizeStroke(lastPosition ? [lastPosition, position] : [position]);
+    if (!this.resizeMode || !this.resizeAttribute || this.resizeValue === null) return;
+    const stroke = regionResizeStroke(this.resizeStartPosition ? [this.resizeStartPosition, position] : [position]);
     const attributes = this.options.attributes();
     const sourceSet = new Set(this.resizeComponentIds);
+    this.resizeAddedIds.clear();
+    this.resizeRemovedIds.clear();
     if (this.resizeMode === "expand") {
       for (const id of stroke) {
         if (sourceSet.has(id) || this.resizeAddedIds.has(id)) continue;
-        const current = attributes.get(id)?.find((item) => item.attribute === "region");
+        const current = attributes.get(id)?.find((item) => item.attribute === this.resizeAttribute);
         if (current) continue;
         this.resizeAddedIds.add(id);
       }
@@ -121,23 +147,29 @@ export class RegionGrabController {
 
   private updateResizePreview(): void {
     this.clearPreview(false);
+    const resizeAttribute = this.resizeAttribute;
+    if (!resizeAttribute || this.resizeValue === null) return;
     const attributes = this.options.attributes();
     const sourceRegion = attributes.get(this.sourceIds[0] ?? "")?.find((item) => item.attribute === "region");
     const sourceIdentity = sourceRegion ? sourceRegion.regionId ?? sourceRegion.value : null;
-    this.options.setRegionSmoothVisible(false, sourceIdentity);
-    this.previewValid = this.resizeColor !== null;
+    if (resizeAttribute === "region") this.options.setRegionSmoothVisible(false, sourceIdentity);
+    else this.options.setTerrainSmoothVisible?.(false, this.resizeComponentIds);
+    this.previewValid = true;
     for (const id of this.sourceIds) {
       const feature = this.options.getFeature(id);
       if (this.resizeRemovedIds.has(id)) feature?.set("grabSourceHidden", true, true);
       else feature?.set("grabPreview", true, true);
       this.previewIds.add(id);
     }
-    const visibleAddedIds = [...this.resizeAddedIds].filter((id) => attributes.get(id)?.some((item) => item.attribute === "terrain") === true);
+    const visibleAddedIds = [...this.resizeAddedIds].filter((id) => resizeAttribute === "terrain" || attributes.get(id)?.some((item) => item.attribute === "terrain") === true);
     this.options.ensureFeatures(visibleAddedIds);
     for (const id of visibleAddedIds) {
       const existing = attributes.get(id) ?? [];
       const feature = this.options.getFeature(id);
-      feature?.set("attributes", [...existing.filter((item) => item.attribute !== "region"), { cellId: id, attribute: "region", value: this.resizeColor!, ...(this.resizeRegionId ? { regionId: this.resizeRegionId } : {}) }], true);
+      feature?.set("attributes", [
+        ...existing.filter((item) => item.attribute !== resizeAttribute),
+        { cellId: id, attribute: resizeAttribute, value: this.resizeValue, ...(resizeAttribute === "region" && this.resizeRegionId ? { regionId: this.resizeRegionId } : {}) },
+      ], true);
       feature?.set("grabPreview", true, true);
       this.previewIds.add(id);
     }
@@ -173,6 +205,9 @@ export class RegionGrabController {
       feature.unset("grabPreview", true); feature.unset("grabSourceHidden", true); feature.set("attributes", visibleValues, true); feature.changed(); this.options.removeUnused(id);
     }
     this.previewIds.clear(); this.options.changed();
-    if (restoreSmooth) this.options.setRegionSmoothVisible(true);
+    if (restoreSmooth) {
+      if (this.resizeAttribute === "terrain") this.options.setTerrainSmoothVisible?.(true);
+      else this.options.setRegionSmoothVisible(true);
+    }
   }
 }

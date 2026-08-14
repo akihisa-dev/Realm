@@ -17,6 +17,7 @@ vi.mock("./MapCanvas", () => ({
     onToolChange?: (tool: "terrain" | "region" | "erase" | "grab") => void;
     onEraseTargetChange?: (target: "terrain" | "region") => void;
     onRegionMove?: (input: { sourceCellIds: string[]; targetCellIds: string[] }) => void;
+    onCellResize?: (input: { cellIds: string[]; attribute: "terrain" | "region"; value: string | null; regionId?: string }) => void;
     onRegionColorChange?: (color: string) => void;
     onError?: (code: "drawing_self_intersection") => void;
   }) => {
@@ -35,6 +36,7 @@ vi.mock("./MapCanvas", () => ({
       <button type="button" onClick={() => props.onToolChange?.("region")}>テスト領域</button>
       <button type="button" onClick={() => props.onToolChange?.("grab")}>テストグラブ</button>
       <button type="button" onClick={() => props.onRegionMove?.({ sourceCellIds: ["1:1", "2:1"], targetCellIds: ["4:2", "5:2"] })}>テスト領域移動</button>
+      <button type="button" onClick={() => props.onCellResize?.({ cellIds: ["1:2"], attribute: "terrain", value: "terrain" })}>テスト地形境界拡張</button>
       <button type="button" onClick={() => props.onRegionColorChange?.("#2468AC")}>テスト領域色</button>
     </div>;
   },
@@ -141,6 +143,23 @@ it("keeps a grabbed region's hidden overhang at the destination", async () => {
     expect.objectContaining({ cellId: "1:1", attribute: "region", value: "#2468AC" }),
     expect.objectContaining({ cellId: "2:1", attribute: "region", value: "#2468AC" }),
   ]));
+});
+
+it("saves a terrain boundary expansion through the grab callback", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://terrain-grab.realmmap", name: "Terrain grab" });
+  await backend.applyCellAttributes({ cellIds: ["1:1"], attribute: "terrain", value: "terrain" });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テストグラブ" }));
+  fireEvent.click(screen.getByRole("button", { name: "テスト地形境界拡張" }));
+
+  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
+    { cellId: "1:1", attribute: "terrain", value: "terrain" },
+    { cellId: "1:2", attribute: "terrain", value: "terrain" },
+  ])));
 });
 
 it("keeps the stationary region when a grabbed region overlaps it", async () => {

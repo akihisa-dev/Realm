@@ -59,7 +59,7 @@ export interface RealmMapRenderer {
   onSelect(listener: (featureId: string | null) => void): () => void;
   onCellSelect(listener: (cellIds: readonly string[]) => void): () => void;
   onRegionMove?(listener: (input: MoveRegionCellsInput) => void): () => void;
-  onRegionResize?(listener: (input: ApplyCellAttributesInput) => void): () => void;
+  onCellResize?(listener: (input: ApplyCellAttributesInput) => void): () => void;
   onModifyFeatures(listener: (changes: readonly FeatureGeometryChange[]) => void): () => void;
   onModify(listener: (featureId: string, geometry: GeoJsonGeometry) => void): () => void;
   onEraseFeatures(listener: (featureIds: readonly string[]) => void): () => void;

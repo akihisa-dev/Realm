@@ -174,13 +174,13 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     if (locked) return;
     void run(() => backend.moveRegionCells(input), "領域を移動できませんでした。", { recover: async (identity) => refreshCellAttributes(identity) });
   };
-  const resizeRegion = (input: ApplyCellAttributesInput): void => {
-    if (locked || input.attribute !== "region") return;
+  const resizeCells = (input: ApplyCellAttributesInput): void => {
+    if (locked || (input.attribute !== "terrain" && input.attribute !== "region")) return;
     const mutation = ++cellMutation.current;
     updateOptimisticCellAttributes(input.cellIds, input.attribute, input.value, input.regionId);
     void run(
       () => backend.applyCellAttributes(input),
-      "領域の端を変更できませんでした。",
+      input.attribute === "terrain" ? "地形の端を変更できませんでした。" : "領域の端を変更できませんでした。",
       {
         recover: async (identity) => {
           if (cellMutation.current === mutation) await refreshCellAttributes(identity);
@@ -246,7 +246,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             gridOptions={gridOptions}
             onCellSelect={applyCellSelection}
             onRegionMove={moveRegion}
-            onRegionResize={resizeRegion}
+            onCellResize={resizeCells}
             regionColor={regionColor}
             onToolChange={selectTool}
             onEraseTargetChange={selectEraseTarget}

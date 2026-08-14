@@ -1,7 +1,7 @@
 import Feature from "ol/Feature";
 import { describe, expect, it, vi } from "vitest";
 import { RegionGrabController } from "./RegionGrabController";
-import { clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
+import { clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, connectedTerrainCells, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
 import { cellCenter, cellIdsWithinPaintPosition } from "./gridGeometry";
 
 const region = (cellId: string, value: string, regionId = "region-a") => ({ cellId, attribute: "region" as const, value, regionId });
@@ -21,6 +21,17 @@ describe("region grab geometry", () => {
     expect(sameRegionCells("2:2", cells)).toEqual(["2:2", "3:2", "2:3", "20:20"]);
     cells.set("21:20", [region("21:20", "#AA0000", "region-b")]);
     expect(sameRegionCells("2:2", cells)).not.toContain("21:20");
+  });
+
+  it("collects the six-connected terrain mass for boundary editing", () => {
+    const cells = new Map([
+      ["10:10", [terrain("10:10")]],
+      ["11:10", [terrain("11:10")]],
+      ["10:11", [terrain("10:11")]],
+      ["20:20", [terrain("20:20")]],
+    ]);
+    expect(connectedTerrainCells("10:10", cells)).toEqual(["10:10", "11:10", "10:11"]);
+    expect(connectedTerrainCells("20:20", cells)).toEqual(["20:20"]);
   });
 
   it("translates a mass using axial hex coordinates and rejects world overflow", () => {
@@ -140,6 +151,56 @@ describe("region grab geometry", () => {
       { cellIds: ["9:10"], attribute: "region", value: "#AA0000", regionId },
       { cellIds: ["11:10"], attribute: "region", value: null },
     ]);
+    controller.dispose();
+  });
+
+  it("expands and retracts a terrain boundary as one cell-layer update", () => {
+    const attributes = new Map([
+      ["10:10", [terrain("10:10")]],
+      ["11:10", [terrain("11:10")]],
+      ["10:11", [terrain("10:11")]],
+    ]);
+    const features = new Map<string, Feature>();
+    const resized: Array<{ cellIds: string[]; attribute: "terrain"; value: string | null }> = [];
+    const setTerrainSmoothVisible = vi.fn();
+    const controller = new RegionGrabController({
+      cellAt: (position) => cellIdsWithinPaintPosition(position, 0)[0] ?? null,
+      attributes: () => attributes,
+      getFeature: (id) => features.get(id),
+      ensureFeatures: (ids) => { for (const id of ids) if (!features.has(id)) { const feature = new Feature(); feature.setId(id); features.set(id, feature); } },
+      removeUnused: () => undefined,
+      changed: vi.fn(),
+      setRegionSmoothVisible: vi.fn(),
+      setTerrainSmoothVisible,
+      emit: vi.fn(),
+      emitResize: (input) => resized.push(input as typeof resized[number]),
+    });
+    const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean; handleDragEvent: (event: unknown) => void; handleUpEvent: (event: unknown) => boolean };
+    const pointer = { isPrimary: true, button: 0 };
+    const start = cellCenter(10, 10); const outside = cellCenter(10, 9); const inside = cellCenter(10, 11);
+
+    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
+    interaction.handleDragEvent({ originalEvent: pointer, coordinate: outside });
+    expect(features.get("9:10")?.get("grabPreview")).toBe(true);
+    interaction.handleDragEvent({ originalEvent: pointer, coordinate: start });
+    expect(features.get("9:10")?.get("grabPreview")).toBeUndefined();
+    interaction.handleUpEvent({ originalEvent: pointer, coordinate: start });
+    expect(resized).toHaveLength(0);
+
+    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
+    interaction.handleDragEvent({ originalEvent: pointer, coordinate: outside });
+    interaction.handleUpEvent({ originalEvent: pointer, coordinate: outside });
+    expect(resized).toEqual([{ cellIds: ["9:10"], attribute: "terrain", value: "terrain" }]);
+
+    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
+    interaction.handleDragEvent({ originalEvent: pointer, coordinate: inside });
+    interaction.handleUpEvent({ originalEvent: pointer, coordinate: inside });
+    expect(resized).toEqual([
+      { cellIds: ["9:10"], attribute: "terrain", value: "terrain" },
+      { cellIds: ["11:10"], attribute: "terrain", value: null },
+    ]);
+    expect(setTerrainSmoothVisible).toHaveBeenCalledWith(false, expect.arrayContaining(["10:10"]));
+    expect(setTerrainSmoothVisible).toHaveBeenCalledWith(true);
     controller.dispose();
   });
 });
