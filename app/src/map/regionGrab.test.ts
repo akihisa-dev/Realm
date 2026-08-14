@@ -1,7 +1,7 @@
 import Feature from "ol/Feature";
 import { describe, expect, it, vi } from "vitest";
 import { RegionGrabController } from "./RegionGrabController";
-import { clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, connectedTerrainCells, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
+import { clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, connectedTerrainCells, resizableCellIdsAt, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
 import { cellCenter, cellIdsWithinPaintPosition } from "./gridGeometry";
 
 const region = (cellId: string, value: string, regionId = "region-a") => ({ cellId, attribute: "region" as const, value, regionId });
@@ -47,6 +47,12 @@ describe("region grab geometry", () => {
       ["10:10", "11:10"],
       ["20:20", "20:21"],
     ]);
+  });
+
+  it("marks the inner edge of a hex gap as pullable", () => {
+    const ring = cellIdsWithinPaintPosition(cellCenter(10, 10), 1).filter((id) => id !== "10:10");
+    const attributes = new Map(ring.map((id) => [id, [region(id, "#AA0000")]]));
+    expect(resizableCellIdsAt(cellCenter(10, 10), attributes)).toHaveLength(ring.length);
   });
 
   it("keeps only translated cells that have terrain", () => {
@@ -124,7 +130,7 @@ describe("region grab geometry", () => {
       ["10:10", [terrain("10:10"), region("10:10", "#AA0000", regionId)]],
       ["11:10", [terrain("11:10"), region("11:10", "#AA0000", regionId)]],
       ["10:11", [terrain("10:11"), region("10:11", "#AA0000", regionId)]],
-      ["9:10", [terrain("9:10")]],
+      ["9:10", []],
     ]);
     const features = new Map<string, Feature>();
     const resized: Array<{ cellIds: string[]; attribute: "region"; value: string | null; regionId?: string }> = [];
@@ -146,6 +152,7 @@ describe("region grab geometry", () => {
     expect(cellIdsWithinPaintPosition(outside, 0)).toContain("9:10");
     expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: outside });
+    expect(features.get("9:10")?.get("grabPreview")).toBe(true);
     interaction.handleUpEvent({ originalEvent: pointer, coordinate: outside });
     expect(resized).toEqual([{ cellIds: ["9:10"], attribute: "region", value: "#AA0000", regionId }]);
 
@@ -156,6 +163,28 @@ describe("region grab geometry", () => {
       { cellIds: ["9:10"], attribute: "region", value: "#AA0000", regionId },
       { cellIds: ["11:10"], attribute: "region", value: null },
     ]);
+    controller.dispose();
+  });
+
+  it("does not move an interior region cell when boundary-only mode is active", () => {
+    const ring = cellIdsWithinPaintPosition(cellCenter(10, 10), 1);
+    const attributes = new Map(ring.map((id) => [id, [region(id, "#AA0000")]]));
+    const emitted: unknown[] = [];
+    const controller = new RegionGrabController({
+      cellAt: () => "10:10",
+      allowMove: false,
+      attributes: () => attributes,
+      getFeature: () => undefined,
+      ensureFeatures: () => undefined,
+      removeUnused: () => undefined,
+      changed: vi.fn(),
+      setRegionSmoothVisible: vi.fn(),
+      emit: (input) => emitted.push(input),
+      emitResize: vi.fn(),
+    });
+    const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean };
+    expect(interaction.handleDownEvent({ originalEvent: { isPrimary: true, button: 0 }, coordinate: cellCenter(10, 10) })).toBe(false);
+    expect(emitted).toHaveLength(0);
     controller.dispose();
   });
 

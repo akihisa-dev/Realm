@@ -565,11 +565,12 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     const erasePreview = feature.get("erasePreview") === true;
     const grabPreview = feature.get("grabPreview") === true;
     const grabSourceHidden = feature.get("grabSourceHidden") === true;
+    const grabHover = feature.get("grabHover") === true;
     const hasTerrain = has("terrain");
     const hasPhysical = has("forest");
     const hasCountry = has("country");
     const hasRegion = has("region");
-    if (!hasTerrain && !hasPhysical && !hasCountry && !hasRegion && !selected && !preview && !paintPreview && !erasePreview && !grabPreview) return undefined;
+    if (!hasTerrain && !hasPhysical && !hasCountry && !hasRegion && !selected && !preview && !paintPreview && !erasePreview && !grabPreview && !grabHover) return undefined;
     const themeId = getThemeId();
     const overrides = getThemeOverrides();
     const theme = mapTheme(themeId, overrides);
@@ -578,7 +579,7 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     const persistedRegionColor = typeof regionValue === "string" && /^#[\da-f]{6}$/i.test(regionValue) ? regionValue : theme.region;
     const regionAnimationOpacity = typeof feature.get("regionAnimationOpacity") === "number" && Number.isFinite(feature.get("regionAnimationOpacity"))
       ? Math.max(0, Math.min(1, feature.get("regionAnimationOpacity"))) : 1;
-    const flags = (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0) | (preview ? 64 : 0) | (paintPreview ? 128 : 0) | (erasePreview ? 256 : 0) | (grabPreview ? 512 : 0) | (grabSourceHidden ? 1024 : 0);
+    const flags = (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0) | (preview ? 64 : 0) | (paintPreview ? 128 : 0) | (erasePreview ? 256 : 0) | (grabPreview ? 512 : 0) | (grabSourceHidden ? 1024 : 0) | (grabHover ? 2048 : 0);
     const key = canonicalValueSignature({
       themeId,
       overrides,
@@ -597,6 +598,7 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     if (!grabSourceHidden && hasRegion && (regionAnimationOpacity < 1 || grabPreview)) styles.push(new Style({ fill: new Fill({ color: colorWithOpacity(persistedRegionColor, 0.2 * regionAnimationOpacity) }), stroke: new Stroke({ color: colorWithOpacity(persistedRegionColor, 0.78 * regionAnimationOpacity), width: 1.1 }), zIndex: 10 }));
     if (grabPreview && hasRegion) styles.push(new Style({ fill: new Fill({ color: colorWithOpacity(persistedRegionColor, 0.28) }), stroke: new Stroke({ color: colorWithOpacity(persistedRegionColor, 0.95), width: 1.5, lineDash: [4, 2] }), zIndex: 88 }));
     if (grabPreview && hasTerrain && !hasRegion) styles.push(new Style({ fill: new Fill({ color: colorWithOpacity(theme.land, 0.2) }), stroke: new Stroke({ color: colorWithOpacity(theme.landInk, 0.95), width: 1.5, lineDash: [4, 2] }), zIndex: 88 }));
+    if (grabHover) styles.push(new Style({ fill: new Fill({ color: "rgba(7, 140, 152, 0.08)" }), stroke: new Stroke({ color: "#078c98", width: 2, lineDash: [5, 3] }), zIndex: 87 }));
     if (selected) styles.push(new Style({ fill: new Fill({ color: paintPreview ? theme.land : "rgba(7, 140, 152, 0.16)" }), stroke: new Stroke({ color: paintPreview ? theme.landInk : "#078c98", width: 1.4 }), zIndex: 85 }));
     if (preview) styles.push(new Style({ fill: new Fill({ color: "rgba(7, 140, 152, 0.08)" }), stroke: new Stroke({ color: "#078c98", width: 1.2, lineDash: [3, 2] }), zIndex: 84 }));
     if (erasePreview) styles.push(new Style({ fill: new Fill({ color: "rgba(190, 66, 66, 0.14)" }), stroke: new Stroke({ color: "#be4242", width: 1.4, lineDash: [3, 2] }), zIndex: 86 }));

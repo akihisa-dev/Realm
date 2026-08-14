@@ -75,7 +75,7 @@ describe("MapCanvas", () => {
 
     const map = screen.getByRole("region", { name: "世界地図" });
     expect(map).toHaveClass("map-canvas-mode-cell-region", "map-canvas-draw");
-    expect(screen.getByText("自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("自由線で囲んだ内側の六角セルを領域として塗ります。既存の地形または領域の境界セルは、押したまま外側へ引いて広げたり内側へ引いて狭めたりできます。色を選んで描き、Escapeで取り消せます。")).toBeInTheDocument();
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     const regionButton = screen.getByRole("button", { name: "領域" });
     expect(regionButton).toHaveAttribute("aria-pressed", "true");
@@ -88,6 +88,23 @@ describe("MapCanvas", () => {
     expect(color.nextElementSibling).toHaveClass("region-color-swatch");
     fireEvent.click(color);
     expect(onRegionColorChange).toHaveBeenCalledWith("#2468AC");
+  });
+
+  it("closes the palette before the first map gesture after selecting grab", () => {
+    const renderer = createPaletteRenderer();
+    const onToolChange = vi.fn();
+    const onMapPointerDown = vi.fn();
+    render(<MapCanvas onZoomChange={vi.fn()} onToolChange={onToolChange} createRenderer={() => renderer} />);
+
+    const map = screen.getByRole("region", { name: "世界地図" });
+    map.addEventListener("pointerdown", onMapPointerDown);
+    fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
+    fireEvent.click(screen.getByRole("button", { name: "グラブ" }));
+
+    expect(onToolChange).toHaveBeenCalledWith("grab");
+    expect(screen.queryByRole("toolbar", { name: "地図ツールパレット" })).not.toBeInTheDocument();
+    fireEvent.pointerDown(map, { button: 0 });
+    expect(onMapPointerDown).toHaveBeenCalledOnce();
   });
 
   it("cleans each adapter instance exactly once across StrictMode effect replay", () => {
@@ -325,7 +342,7 @@ describe("MapCanvas", () => {
     expect(renderer.setThemeOverrides).toHaveBeenLastCalledWith({ land: "#aabbcc" });
 
     rerender(<MapCanvas mode="cell-select" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("六角セルを押したままなぞって選択します。既存の地形または領域の境界セルは破線で示され、押したまま外側へ引いて広げたり内側へ引いて狭めたりできます。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-mode-cell-select");
     expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
@@ -345,7 +362,7 @@ describe("MapCanvas", () => {
 
     rerender(<MapCanvas mode="cell-select" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setDrawingOptions).toHaveBeenLastCalledWith({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
-    expect(screen.getByText("六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("六角セルを押したままなぞって選択します。既存の地形または領域の境界セルは破線で示され、押したまま外側へ引いて広げたり内側へ引いて狭めたりできます。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
 
     rerender(<MapCanvas mode="pan" disabled zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。")).toBeInTheDocument();

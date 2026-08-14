@@ -1,5 +1,5 @@
 import type { CellAttributeSnapshot, Position } from "../backend";
-import { CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellId, cellIdsWithinPaintPath, parseCellId } from "./gridGeometry";
+import { CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, parseCellId } from "./gridGeometry";
 
 type Axial = [number, number];
 const axialFor = (id: string): Axial | null => {
@@ -66,6 +66,20 @@ export const sameRegionCells = (startId: string, attributes: ReadonlyMap<string,
 export const isRegionBoundaryCell = (cellId: string, component: readonly string[]): boolean => {
   const componentSet = new Set(component);
   return componentSet.has(cellId) && adjacentIds(cellId).some((next) => !componentSet.has(next));
+};
+/** Returns persisted terrain/region cells whose boundary is under a pointer. */
+export const resizableCellIdsAt = (position: Position, attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>): string[] => {
+  const result = new Set<string>();
+  for (const id of cellIdsWithinPaintPosition(position, 1)) {
+    const values = attributes.get(id) ?? [];
+    const region = values.find((item) => item.attribute === "region");
+    if (region && adjacentIds(id).some((next) => {
+      const neighbor = attributes.get(next)?.find((item) => item.attribute === "region");
+      return !neighbor || (neighbor.regionId ?? neighbor.value) !== (region.regionId ?? region.value);
+    })) result.add(id);
+    if (values.some((item) => item.attribute === "terrain") && adjacentIds(id).some((next) => !attributes.get(next)?.some((item) => item.attribute === "terrain"))) result.add(id);
+  }
+  return [...result];
 };
 /** Returns the one-cell-wide stroke cells crossed by a pointer segment. */
 export const regionResizeStroke = (path: readonly Position[], radiusCells = 0): string[] => cellIdsWithinPaintPath(path, Math.max(1e-6, radiusCells));

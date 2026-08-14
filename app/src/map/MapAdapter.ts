@@ -39,6 +39,7 @@ import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTION
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
 import { exportMapRaster } from "./mapRasterExporter";
 import { RegionGrabController } from "./RegionGrabController";
+import { GrabHoverController } from "./GrabHoverController";
 import { connectedCellComponents } from "./regionGrab";
 import { nudgeGeometry, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
 import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
@@ -125,6 +126,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private paint: CancelablePointerInteraction | null = null;
   private eraser: PointerInteraction | null = null;
   private grab: RegionGrabController | null = null;
+  private readonly grabHover: GrabHoverController;
   private paintLastPoint: [number, number] | null = null;
   private paintStrokeSelection = new Set<string>();
   private paintSelectionBeforeStroke: string[] = [];
@@ -209,8 +211,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.terrainOutlineAnimator = new TerrainOutlineAnimator(target.ownerDocument.defaultView, (segments, phase) => {
       this.terrainOutlineSource.clear();
       if (segments.length > 0) this.terrainOutlineSource.addFeature(new Feature({ geometry: new MultiLineString(segments) }));
-      // Keep transition and completed boundaries mutually exclusive so the
-      // visible layer cannot lag behind the optimistic cell state.
       this.terrainOutlineLayer.setVisible(phase === "transition");
       this.terrainSmoothLayer.setVisible(phase === "complete");
     });
@@ -220,6 +220,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
     this.featureLayer = new VectorLayer({ source: this.featureSource, style: this.featureStyle });
     this.cellLayer = new VectorLayer({ source: this.cellSource, style: this.cellStyle, visible: true });
+    this.grabHover = new GrabHoverController({ attributes: () => this.cellAttributesById, getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id), changed: () => this.cellLayer.changed(), setTargetState: (active) => this.target.classList.toggle("map-canvas-grab-target", active) });
     this.terrainOutlineLayer = new VectorLayer({
       source: this.terrainOutlineSource,
       style: () => new Style({ stroke: new Stroke({ color: mapTheme(this.activeThemeId, this.themeOverrides).landInk, width: 1.6 }) }),
@@ -288,9 +289,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
         if (completedLasso) this.suppressSelectionUntil = Date.now() + 350;
         return false;
       },
-      // Consume the pointer-down so Translate/Modify cannot treat a lasso
-      // starting on a selected feature as a move. The selection interaction receives the later
-      // singleclick event independently, so Shift-click still toggles.
       stopDown: () => true,
     });
 
@@ -309,8 +307,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
       }),
       controls: defaultControls({ zoom: false, rotate: false, attribution: false }),
       interactions: defaultInteractions({ altShiftDragRotate: false, pinchRotate: false, mouseWheelZoom: false }).extend([
-        // Settle each wheel gesture on one relative zoom level instead of
-        // stopping between the renderer's 1–8 levels.
         new MouseWheelZoom({ constrainResolution: true }),
         this.middleDragPan,
       ]),
@@ -318,8 +314,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.map.addInteraction(this.selection);
     this.map.addInteraction(this.modify);
     this.map.addInteraction(this.translate);
-    // Added last so reverse interaction dispatch lets lasso consume modified
-    // pointer sequences before Select/Modify/Translate see the same gesture.
     this.map.addInteraction(this.lasso);
     this.target.addEventListener("keydown", this.handleKeyDown);
     this.target.addEventListener("keyup", this.handleKeyUp);
@@ -399,8 +393,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellLayer.changed();
     this.terrainOutlineLayer.changed();
     this.terrainSmoothLayer.changed();
-    // GridOptions.color is an independent explicit setting and is intentionally
-    // not replaced by a theme override.
     this.graticule.changed();
     this.gridLayer.changed();
   }
@@ -512,6 +504,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     const wasCellMode = this.activeMode === "cell-select" || this.activeMode === "cell-erase";
     if ((!isCellMode || mode !== this.activeMode) && wasCellMode) this.setSelectedCells([]);
     this.setHoveredCells([]);
+    this.grabHover.clear();
     this.activeMode = mode;
     this.modify.setActive(mode === "pan");
     this.translate.setActive(mode === "pan");
@@ -520,6 +513,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellLayer.setVisible(true);
     this.setNavigationActive(mode === "pan");
     this.refreshHoveredCells();
+    this.refreshGrabHover();
+    if (mode === "grab" || mode === "cell-select" || mode === "cell-region") this.grab = new RegionGrabController({
+      cellAt: (position) => this.cellAtCoordinate(position), cellCandidatesAt: (position) => gridCellIdsWithinPaintPosition(position, 1), allowMove: mode === "grab", attributes: () => this.cellAttributesById, getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id), changed: () => this.cellLayer.changed(),
+      setRegionSmoothVisible: (visible, regionIdentity) => { this.regionSmoothHiddenIdentity = visible ? null : regionIdentity ?? null; this.regionSmoothLayer.changed(); }, setTerrainSmoothVisible: (visible, hiddenCellIds = []) => { if (!visible) this.terrainOutlineLayer.setVisible(false); this.setTerrainSmoothPreview(hiddenCellIds); this.terrainSmoothLayer.setVisible(true); }, emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); }, emitResize: (input) => { for (const listener of this.cellResizeListeners) listener(input); },
+    });
     if (mode === "erase") {
       this.setSelected(null);
       this.eraser = new PointerInteraction({
@@ -570,6 +568,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
         },
       });
       this.map.addInteraction(this.paint);
+      if (mode === "cell-select") this.map.addInteraction(this.grab!.interaction);
       return;
     }
     if (mode === "pan") return;
@@ -579,22 +578,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
         (code) => { for (const listener of this.errorListeners) listener(code); },
       );
       this.map.addInteraction(this.draw);
+      this.map.addInteraction(this.grab!.interaction);
       return;
     }
     if (mode === "grab") {
       this.setSelected(null);
-      this.grab = new RegionGrabController({
-        cellAt: (position) => this.cellAtCoordinate(position), cellCandidatesAt: (position) => gridCellIdsWithinPaintPosition(position, 1), attributes: () => this.cellAttributesById,
-        getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id),
-        changed: () => this.cellLayer.changed(), setRegionSmoothVisible: (visible, regionIdentity) => {
-          this.regionSmoothHiddenIdentity = visible ? null : regionIdentity ?? null;
-          this.regionSmoothLayer.changed();
-        },
-        setTerrainSmoothVisible: (visible, hiddenCellIds = []) => { if (!visible) this.terrainOutlineLayer.setVisible(false); this.setTerrainSmoothPreview(hiddenCellIds); this.terrainSmoothLayer.setVisible(true); },
-        emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); },
-        emitResize: (input) => { for (const listener of this.cellResizeListeners) listener(input); },
-      });
-      this.map.addInteraction(this.grab.interaction);
+      this.map.addInteraction(this.grab!.interaction);
       return;
     }
     const drawType = drawTypeForMode(mode);
@@ -674,6 +663,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.paint?.setActive(false);
       this.grab?.interaction.setActive(false);
       this.setNavigationActive(true);
+      this.refreshGrabHover();
       event.preventDefault();
       return;
     }
@@ -734,6 +724,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.paint?.setActive(true);
     this.grab?.interaction.setActive(true);
     this.refreshHoveredCells();
+    this.refreshGrabHover();
     event.preventDefault();
   };
 
@@ -765,6 +756,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.paintLastPoint = null;
     this.paintStrokeSelection.clear();
     this.paintSelectionBeforeStroke = [];
+    this.refreshGrabHover();
     // Clear the in-stroke fill before publishing the completed outline. Reset
     // the gesture state first so a re-entrant React update cannot restore it.
     this.setSelectedCells([]);
@@ -778,13 +770,17 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.paintStrokeSelection.clear();
     if (hadStroke && restoreSelection) this.setSelectedCells(this.paintSelectionBeforeStroke);
     this.paintSelectionBeforeStroke = [];
+    this.refreshGrabHover();
   }
+
+  private refreshGrabHover(): void { const enabled = this.activeMode === "grab" || this.activeMode === "cell-select" || this.activeMode === "cell-region"; this.grabHover.refresh(enabled && this.pointerInside && !this.temporaryPan && this.paintLastPoint === null, this.lastPointerCoordinate); }
 
   private readonly handlePointerMove = (event: Event | BaseEvent): void => {
     if (!("coordinate" in event) || !Array.isArray(event.coordinate)) {
       this.lastPointerCoordinate = null;
       this.pointerInside = false;
       this.setHoveredCells([]);
+      this.grabHover.clear();
       return;
     }
     const [longitude, latitude] = event.coordinate;
@@ -792,10 +788,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.lastPointerCoordinate = null;
       this.pointerInside = false;
       this.setHoveredCells([]);
+      this.grabHover.clear();
       return;
     }
     this.lastPointerCoordinate = [longitude, latitude];
     this.pointerInside = true;
+    this.refreshGrabHover();
     if ((this.activeMode !== "cell-select" && this.activeMode !== "cell-erase") || this.temporaryPan || this.paintLastPoint) {
       this.setHoveredCells([]);
       return;
@@ -804,11 +802,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
   };
 
   private readonly handlePointerLeave = (): void => {
-    // Keep an active paint stroke alive while the pointer crosses the canvas
-    // boundary. The external pointerup handler commits the visited cells.
     this.lastPointerCoordinate = null;
     this.pointerInside = false;
     this.setHoveredCells([]);
+    this.grabHover.clear();
   };
 
   private readonly handleContextMenu = (event: MouseEvent): void => {
@@ -989,9 +986,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
     this.cellAttributesById = byCell;
     for (const id of changedIds) this.removeUnusedCell(id);
-    // Attribute reads can arrive after a completed gesture. Normalize the
-    // renderer flags at this boundary so stale selection state cannot turn a
-    // persisted terrain update back into a filled cell.
     this.syncSelectedCellFlags();
     const grid = splitTerrainGridSegments(this.fixedCellGridLines, terrainCellIds);
     this.cellGridSource.clear();
@@ -1018,6 +1012,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
     this.cellRegion.animateChanges(previous, renderedByCell, (id) => this.getCellFeature(id));
     this.cellLayer.changed();
+    this.refreshGrabHover();
   }
 
   onDraw(listener: (geometry: GeoJsonGeometry) => void): () => void {
@@ -1188,6 +1183,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellAttributesById.clear();
     this.selectedCellIds.clear();
     this.hoveredCellIds.clear();
+    this.grabHover.dispose();
     this.lastPointerCoordinate = null;
     this.pointerInside = false;
     this.map.setTarget(undefined);

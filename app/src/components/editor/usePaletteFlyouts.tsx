@@ -347,7 +347,7 @@ export function usePaletteFlyouts({ shellRef, hostRef, mode, regionColor, onTool
         </button>
       </div>
       <div className="radial-palette-slot radial-palette-grab-tool" style={{ "--slot": 3 } as CSSProperties}>
-        <button className="radial-palette-range-button" type="button" aria-label="グラブ" aria-pressed={mode === "grab"} onClick={(event) => { onToolChange?.("grab"); setRegionFlyoutOpen(false); setPaintRangeFlyoutOpen(false); setEraseFlyoutOpen(false); event.stopPropagation(); }}>
+        <button className="radial-palette-range-button" type="button" aria-label="グラブ" aria-pressed={mode === "grab"} onClick={(event) => { onToolChange?.("grab"); setRegionFlyoutOpen(false); setPaintRangeFlyoutOpen(false); setEraseFlyoutOpen(false); setRadialPaletteState(null); event.stopPropagation(); }}>
           <HandGrabbing aria-hidden="true" size={16} weight="bold" />
         </button>
       </div>

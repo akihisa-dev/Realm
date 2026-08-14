@@ -8,6 +8,7 @@ type ResizableAttribute = "terrain" | "region";
 type Options = {
   cellAt: (position: Position) => string | null;
   cellCandidatesAt?: (position: Position) => readonly string[];
+  allowMove?: boolean;
   attributes: () => ReadonlyMap<string, readonly CellAttributeSnapshot[]>;
   getFeature: (id: string) => Feature | undefined;
   ensureFeatures: (ids: Iterable<string>) => void;
@@ -75,7 +76,7 @@ export class RegionGrabController {
             }
           }
         }
-        if (regionSource.length === 0) return false;
+        if (regionSource.length === 0 || options.allowMove === false) return false;
         this.sourceIds = regionSource; this.sourceAnchor = anchor; this.update(regionSource); return true;
       },
       handleDragEvent: (event) => {
@@ -179,7 +180,7 @@ export class RegionGrabController {
       else feature?.set("grabPreview", true, true);
       this.previewIds.add(id);
     }
-    const visibleAddedIds = [...this.resizeAddedIds].filter((id) => resizeAttribute === "terrain" || attributes.get(id)?.some((item) => item.attribute === "terrain") === true);
+    const visibleAddedIds = [...this.resizeAddedIds];
     this.options.ensureFeatures(visibleAddedIds);
     for (const id of visibleAddedIds) {
       const existing = attributes.get(id) ?? [];

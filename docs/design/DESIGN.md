@@ -30,6 +30,8 @@ The move tool pans the viewpoint with a primary-button drag. A middle-button dra
 
 The canvas cursor reflects the active operation: `grab` for move/navigation and terrain or region boundary grabbing, a crosshair for terrain or region drawing, and a small eraser cursor for layer removal. An explicitly disabled canvas uses `not-allowed`; OpenLayers' `grab`/`grabbing` feedback remains the highest-priority state while a pan drag is active.
 
+Terrain drawing and region enclosure modes prioritize a visible terrain or region boundary over painting, show a dashed boundary affordance on hover, and let the user pull that edge outward or inward. The same boundary behavior remains available from the explicit `グラブ` tool; only that tool moves a region from its interior.
+
 ## Allowed editor copy
 
 The editor uses `戻す`, `進む`, and the object-manager toggle in the top row; `地形を描く（太さ調整）`, `領域`, and `消しゴム` with their transient settings are available from the map palette. The right-side object manager lists logical regions and their disconnected six-connected components. It can select a region, set an existing region as the destination for a new chunk, merge selected regions, and separate one component into a new region; each mutation remains a cell-attribute operation and one undo step. Startup, library, import, file actions, export controls, world-name editing, zoom buttons, terrain lists, creation metadata, persistent drawing configuration, presentation settings, unavailable layers, and asset management are not shown. There is no separate move button; natural map pan gestures remain available.
