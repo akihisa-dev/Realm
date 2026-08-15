@@ -20,7 +20,7 @@ import CircleStyle from "ol/style/Circle";
 import Fill from "ol/style/Fill";
 import Stroke from "ol/style/Stroke";
 import Style from "ol/style/Style";
-import { singleClick } from "ol/events/condition";
+import { primaryAction, singleClick } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MoveRegionCellsInput, Position, RealmFeature } from "../backend";
@@ -43,6 +43,7 @@ import { RegionShapeController } from "./RegionShapeController";
 import { GrabHoverController } from "./GrabHoverController";
 import { connectedCellComponents } from "./regionGrab";
 import { nudgeGeometry, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
+import { MiddleButtonDragPan, MiddleButtonSafeDraw } from "./middleButtonPan";
 import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 
 export type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
@@ -109,9 +110,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly modify: Modify;
   private readonly translate: Translate;
   private readonly lasso: PointerInteraction;
-  private readonly middleDragPan = new DragPan({
-    condition: ({ originalEvent }) => originalEvent instanceof MouseEvent && originalEvent.button === 1,
-  });
+  private readonly middleDragPan = new MiddleButtonDragPan();
   private readonly target: HTMLElement;
   private draw: Draw | null = null;
   private activeMode: RealmMapMode = "pan";
@@ -261,7 +260,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       filter: (feature) => this.selectableFeature(feature),
     });
     this.modify = new Modify({ features: this.selection.getFeatures() });
-    this.translate = new Translate({ features: this.selection.getFeatures() });
+    this.translate = new Translate({ features: this.selection.getFeatures(), condition: primaryAction });
     this.lasso = new PointerInteraction({
       handleDownEvent: (event) => {
         const pointer = event.originalEvent as PointerEvent;
@@ -297,7 +296,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
         if (completedLasso) this.suppressSelectionUntil = Date.now() + 350;
         return false;
       },
-      stopDown: () => true,
+      stopDown: (handled) => handled,
     });
 
     this.map = new Map({
@@ -591,7 +590,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
     const drawType = drawTypeForMode(mode);
     const drawingFeatureType = mode === "polygon-hole" ? "terrain" : mode === "label-path" ? "boundary" : mode;
-    this.draw = new Draw({ type: drawType, style: this.featureStyle(new Feature({ featureType: drawingFeatureType, name: "", properties: {} })) });
+    this.draw = new MiddleButtonSafeDraw({ type: drawType, style: this.featureStyle(new Feature({ featureType: drawingFeatureType, name: "", properties: {} })) });
     // Lines and areas follow the pointer continuously from press to release.
     // Point features remain a single click because they have no path to trace.
     this.draw.setFreehand(this.drawTypeUsesFreehand(mode));

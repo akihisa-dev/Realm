@@ -1,10 +1,11 @@
-import Draw from "ol/interaction/Draw";
+import type Draw from "ol/interaction/Draw";
 import type { StyleLike } from "ol/style/Style";
 import type { Position, RealmFeature } from "../backend";
 import { CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellCenter } from "./gridGeometry";
 import { geometryToGeoJson } from "./geoJsonGeometry";
 import { mapErrorCode, type MapErrorCode } from "./errors";
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
+import { MiddleButtonSafeDraw } from "./middleButtonPan";
 
 const cellCenters = (): Pick<RealmFeature, "id" | "geometry">[] => {
   const candidates: Pick<RealmFeature, "id" | "geometry">[] = [];
@@ -26,7 +27,7 @@ export const createCellRegionDraw = (options: {
   onSelect: (cellIds: readonly string[]) => void;
   onError: (code: MapErrorCode) => void;
 }): Draw => {
-  const draw = new Draw({ type: "Polygon", style: options.style });
+  const draw = new MiddleButtonSafeDraw({ type: "Polygon", style: options.style });
   draw.setFreehand(true);
   draw.on("drawend", (event) => {
     const geometry = event.feature.getGeometry();
