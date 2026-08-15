@@ -17,8 +17,10 @@ export class GrabHoverController {
 
   constructor(private readonly options: Options) {}
 
-  refresh(enabled: boolean, position: Position | null): void {
-    const next = enabled && position ? new Set(resizableCellIdsAt(position, this.options.attributes())) : new Set<string>();
+  refresh(enabled: boolean, position: Position | null, interiorCellId: string | null = null): void {
+    const next = enabled && position
+      ? new Set(resizableCellIdsAt(position, this.options.attributes(), undefined, { interiorCellId }))
+      : new Set<string>();
     if (next.size === this.ids.size && [...next].every((id) => this.ids.has(id))) return;
     const previous = this.ids;
     this.ids = next;

@@ -507,7 +507,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.refreshHoveredCells();
     this.refreshGrabHover();
     if (mode === "grab" || mode === "cell-select" || mode === "cell-region") this.grab = new RegionGrabController({
-      cellAt: (position) => this.cellAtCoordinate(position), cellCandidatesAt: (position) => gridCellIdsWithinPaintPosition(position, 1), allowMove: mode === "grab", attributes: () => this.cellAttributesById, getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id), changed: () => this.cellLayer.changed(),
+      cellAt: (position) => this.cellAtCoordinate(position), cellCandidatesAt: (position) => gridCellIdsWithinPaintPosition(position, 1), allowMove: mode === "grab", allowInteriorBoundaryPress: mode === "grab", attributes: () => this.cellAttributesById, getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id), changed: () => this.cellLayer.changed(),
       setRegionSmoothVisible: (visible, regionIdentity) => { this.regionSmoothHiddenIdentity = visible ? null : regionIdentity ?? null; this.regionSmoothLayer.changed(); }, setTerrainSmoothVisible: (visible, hiddenCellIds = []) => { if (!visible) this.terrainOutlineLayer.setVisible(false); this.setTerrainSmoothPreview(hiddenCellIds); this.terrainSmoothLayer.setVisible(true); }, emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); }, emitResize: (input) => { for (const listener of this.cellResizeListeners) listener(input); },
     });
     if (mode === "erase") {
@@ -783,7 +783,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.refreshGrabHover();
   }
 
-  private refreshGrabHover(): void { const enabled = this.activeMode === "grab" || this.activeMode === "cell-select" || this.activeMode === "cell-region"; this.grabHover.refresh(enabled && this.pointerInside && !this.temporaryPan && this.paintLastPoint === null, this.lastPointerCoordinate); }
+  private refreshGrabHover(): void { const enabled = this.activeMode === "grab" || this.activeMode === "cell-select" || this.activeMode === "cell-region"; const interiorCellId = this.activeMode === "grab" && this.lastPointerCoordinate ? this.cellAtCoordinate(this.lastPointerCoordinate) : null; this.grabHover.refresh(enabled && this.pointerInside && !this.temporaryPan && this.paintLastPoint === null, this.lastPointerCoordinate, interiorCellId); }
 
   private readonly handlePointerMove = (event: Event | BaseEvent): void => {
     if (!("coordinate" in event) || !Array.isArray(event.coordinate)) {

@@ -1,7 +1,7 @@
 import Feature from "ol/Feature";
 import { describe, expect, it, vi } from "vitest";
 import { RegionGrabController } from "./RegionGrabController";
-import { clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, connectedTerrainCells, resizableCellIdsAt, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
+import { adjacentCellIds, clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, connectedTerrainCells, resizableCellIdsAt, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
 import { cellCenter, cellIdsWithinPaintPosition, parseCellId } from "./gridGeometry";
 
 const region = (cellId: string, value: string, regionId = "region-a") => ({ cellId, attribute: "region" as const, value, regionId });
@@ -67,6 +67,16 @@ describe("region grab geometry", () => {
       ["11:10", [terrain("11:10")]],
     ]);
     expect(resizableCellIdsAt(midpoint(center, neighbor), attributes)).toEqual([]);
+  });
+
+  it("resolves every exposed terrain edge around a boundary cell", () => {
+    const sourceId = "10:10";
+    const source = cellCenter(10, 10);
+    const attributes = new Map([[sourceId, [terrain(sourceId)]]]);
+    for (const neighborId of adjacentCellIds(sourceId)) {
+      const [row, column] = parseCellId(neighborId)!;
+      expect(resizableCellIdsAt(midpoint(source, cellCenter(row, column)), attributes), neighborId).toContain(sourceId);
+    }
   });
 
   it("keeps only translated cells that have terrain", () => {
@@ -199,6 +209,33 @@ describe("region grab geometry", () => {
     const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean };
     expect(interaction.handleDownEvent({ originalEvent: { isPrimary: true, button: 0 }, coordinate: cellCenter(10, 10) })).toBe(false);
     expect(emitted).toHaveLength(0);
+    controller.dispose();
+  });
+
+  it("allows explicit grab mode to resize a region from inside its boundary cell", () => {
+    const attributes = new Map([["10:10", [region("10:10", "#AA0000")]]]);
+    const resized: unknown[] = [];
+    const controller = new RegionGrabController({
+      cellAt: (position) => cellIdsWithinPaintPosition(position, 0)[0] ?? null,
+      allowMove: true,
+      allowInteriorBoundaryPress: true,
+      attributes: () => attributes,
+      getFeature: () => undefined,
+      ensureFeatures: () => undefined,
+      removeUnused: () => undefined,
+      changed: vi.fn(),
+      setRegionSmoothVisible: vi.fn(),
+      emit: vi.fn(),
+      emitResize: (input) => resized.push(input),
+    });
+    const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean; handleDragEvent: (event: unknown) => void; handleUpEvent: (event: unknown) => boolean };
+    const pointer = { isPrimary: true, button: 0 };
+    const start = cellCenter(10, 10);
+    const outside = cellCenter(10, 9);
+    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
+    interaction.handleDragEvent({ originalEvent: pointer, coordinate: outside });
+    interaction.handleUpEvent({ originalEvent: pointer, coordinate: outside });
+    expect(resized).toEqual([{ cellIds: ["9:10"], attribute: "region", value: "#AA0000", regionId: "region-a" }]);
     controller.dispose();
   });
 

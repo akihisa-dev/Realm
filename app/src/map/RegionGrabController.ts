@@ -9,6 +9,7 @@ type Options = {
   cellAt: (position: Position) => string | null;
   cellCandidatesAt?: (position: Position) => readonly string[];
   allowMove?: boolean;
+  allowInteriorBoundaryPress?: boolean;
   attributes: () => ReadonlyMap<string, readonly CellAttributeSnapshot[]>;
   getFeature: (id: string) => Feature | undefined;
   ensureFeatures: (ids: Iterable<string>) => void;
@@ -57,7 +58,9 @@ export class RegionGrabController {
         const candidateIds = configuredCandidates === undefined
           ? undefined
           : [...new Set([anchor, ...configuredCandidates])];
-        const boundaryCandidates = resizableCellIdsAt(position, attributes, candidateIds);
+        const boundaryCandidates = resizableCellIdsAt(position, attributes, candidateIds, {
+          interiorCellId: options.allowInteriorBoundaryPress ? anchor : null,
+        });
         for (const candidate of boundaryCandidates) {
           const values = attributes.get(candidate) ?? [];
           const candidateRegion = candidate === anchor ? region : !region ? values.find((item) => item.attribute === "region") : undefined;

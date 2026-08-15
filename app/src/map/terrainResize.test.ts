@@ -44,6 +44,41 @@ describe("terrain boundary resize in RealmMapAdapter", () => {
     host.remove();
   });
 
+  it("allows grab-mode resizing from inside a visible boundary cell", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const resized: unknown[] = [];
+    adapter.onCellResize((input) => resized.push(input));
+    adapter.setCellAttributes([{ cellId: "10:10", attribute: "terrain", value: "terrain" }]);
+    adapter.setMode("grab");
+    const map = adapter.getMap();
+    const start = cellCenter(10, 10);
+    const outside = cellCenter(10, 9);
+    map.dispatchEvent({ type: "pointermove", coordinate: start } as never);
+    expect(host.classList.contains("map-canvas-grab-target")).toBe(true);
+
+    const dispatch = (type: string, originalEvent: MouseEvent, coordinate: [number, number], activePointers: MouseEvent[]): void => {
+      const mapEvent = new MapBrowserEvent(type, map, originalEvent as never, type === MapBrowserEventType.POINTERDRAG, undefined, activePointers as never);
+      mapEvent.coordinate = coordinate;
+      for (const interaction of map.getInteractions().getArray().slice().reverse()) {
+        if (!interaction.getActive() || interaction.handleEvent(mapEvent) !== false) continue;
+        break;
+      }
+    };
+    const down = new MouseEvent("pointerdown", { button: 0, bubbles: true });
+    Object.defineProperty(down, "isPrimary", { value: true });
+    const drag = new MouseEvent("pointermove", { button: 0, bubbles: true });
+    const up = new MouseEvent("pointerup", { button: 0, bubbles: true });
+    dispatch(MapBrowserEventType.POINTERDOWN, down, start, [down]);
+    dispatch(MapBrowserEventType.POINTERDRAG, drag, outside, [drag]);
+    dispatch(MapBrowserEventType.POINTERUP, up, outside, []);
+
+    expect(resized).toEqual([{ cellIds: ["9:10"], attribute: "terrain", value: "terrain" }]);
+    adapter.dispose();
+    host.remove();
+  });
+
   it("prioritizes a boundary pull over terrain painting through interaction dispatch", () => {
     const host = document.createElement("div");
     document.body.append(host);
