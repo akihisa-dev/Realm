@@ -5,6 +5,7 @@ import Polygon from "ol/geom/Polygon";
 import VectorSource from "ol/source/Vector";
 import type { CellAttributeSnapshot, MapShape, Position } from "../backend";
 import { connectedCellComponents } from "./regionGrab";
+import { mapShapeCellIds } from "../shared/mapShapeGeometry";
 import { smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments, terrainCellCenters } from "./terrainOutline";
 
 export const cloneMapShapes = (shapes: readonly MapShape[]): MapShape[] => shapes.map((shape) => ({
@@ -19,6 +20,7 @@ export const renderCanonicalMapShapes = (
   shapes: readonly MapShape[],
   terrainSource: VectorSource,
   regionSource: VectorSource,
+  renderSmoothShapes = true,
 ): { terrainCount: number; regionCount: number } => {
   terrainSource.clear();
   regionSource.clear();
@@ -27,10 +29,28 @@ export const renderCanonicalMapShapes = (
   for (const shape of shapes) {
     if (shape.layer === "terrain") {
       terrainCount += 1;
-      terrainSource.addFeature(new Feature({ geometry: new Polygon(shape.geometry.coordinates) }));
+      if (!renderSmoothShapes) {
+        terrainSource.addFeature(new Feature({ geometry: new Polygon(shape.geometry.coordinates) }));
+        continue;
+      }
+      let cellIds: Set<string>;
+      try { cellIds = mapShapeCellIds(shape); } catch { cellIds = new Set(); }
+      const rings = cellIds.size > 0 ? smoothCellBoundaryRings(cellIds) : [];
+      terrainSource.addFeature(new Feature({ geometry: rings.length > 0 ? new MultiLineString(rings) : new Polygon(shape.geometry.coordinates) }));
     } else {
       regionCount += 1;
-      regionSource.addFeature(new Feature({ geometry: new Polygon(shape.geometry.coordinates), regionColor: shape.value, regionIdentity: shape.regionId }));
+      if (!renderSmoothShapes) {
+        regionSource.addFeature(new Feature({ geometry: new Polygon(shape.geometry.coordinates), regionColor: shape.value, regionIdentity: shape.regionId }));
+        continue;
+      }
+      let cellIds: Set<string>;
+      try { cellIds = mapShapeCellIds(shape); } catch { cellIds = new Set(); }
+      const polygons = cellIds.size > 0 ? smoothCellBoundaryPolygons(cellIds) : [];
+      if (polygons.length === 0) {
+        regionSource.addFeature(new Feature({ geometry: new Polygon(shape.geometry.coordinates), regionColor: shape.value, regionIdentity: shape.regionId }));
+      } else {
+        for (const polygon of polygons) regionSource.addFeature(new Feature({ geometry: new Polygon(polygon), regionColor: shape.value, regionIdentity: shape.regionId }));
+      }
     }
   }
   return { terrainCount, regionCount };

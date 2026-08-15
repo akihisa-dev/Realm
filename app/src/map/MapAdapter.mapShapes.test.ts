@@ -1,10 +1,12 @@
 import { RealmMapAdapter } from "./MapAdapter";
 import Polygon from "ol/geom/Polygon";
+import MultiLineString from "ol/geom/MultiLineString";
 import VectorLayer from "ol/layer/Vector";
 import { cellIdsToPolygonGeometries } from "../shared/mapShapeGeometry";
+import type { MapShapeGeometry } from "../backend";
 
 describe("RealmMapAdapter canonical map shapes", () => {
-  it("renders saved Polygon geometry directly while keeping cell geometry transient", () => {
+  it("renders saved terrain with a smooth outline and regions as smooth polygons", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
@@ -19,11 +21,72 @@ describe("RealmMapAdapter canonical map shapes", () => {
     ]);
 
     expect(terrainLayer.getSource()?.getFeatures()).toHaveLength(1);
-    expect(terrainLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(Polygon);
+    expect(terrainLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(MultiLineString);
     expect(regionLayer.getSource()?.getFeatures()).toHaveLength(1);
     expect(regionLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(Polygon);
+    expect((regionLayer.getSource()?.getFeatures()[0]?.getGeometry() as Polygon).getCoordinates()[0]!.length).toBeGreaterThan(regionGeometry.coordinates[0]!.length);
     expect((adapter.getMap().getLayers().item(2) as VectorLayer).getSource()?.getFeatures()).toHaveLength(0);
 
+    adapter.dispose();
+    host.remove();
+  });
+
+  it("keeps holes and disconnected region parts when smoothing canonical shapes", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const terrainGeometry = cellIdsToPolygonGeometries([
+      "30:30", "31:30", "32:30",
+      "30:31", "32:31",
+      "30:32", "31:32", "32:32",
+    ])[0]!;
+    const regionGeometries = cellIdsToPolygonGeometries(["40:40", "50:50"]);
+    adapter.setMapShapes?.([
+      { id: "11111111-1111-4111-8111-111111111111", layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: terrainGeometry },
+      ...regionGeometries.map((geometry, index) => ({
+        id: `${index === 0 ? "22222222-2222-4222-8222-222222222222" : "33333333-3333-4333-8333-333333333333"}`,
+        layer: "region" as const,
+        regionId: "44444444-4444-4444-8444-444444444444",
+        value: "#2468AC",
+        geometryVersion: 1,
+        snapGridVersion: 2,
+        geometry,
+      })),
+    ]);
+
+    const terrainFeature = ((adapter.getMap().getLayers().item(8) as VectorLayer).getSource()?.getFeatures() ?? [])[0];
+    expect(terrainFeature?.getGeometry()).toBeInstanceOf(MultiLineString);
+    expect((terrainFeature?.getGeometry() as MultiLineString).getCoordinates()).toHaveLength(2);
+    const regionFeatures = (adapter.getMap().getLayers().item(7) as VectorLayer).getSource()?.getFeatures() ?? [];
+    expect(regionFeatures).toHaveLength(2);
+    expect(regionFeatures.every((feature) => feature.getGeometry() instanceof Polygon)).toBe(true);
+    expect(regionFeatures.every((feature) => ((feature.getGeometry() as Polygon).getCoordinates()[0]?.length ?? 0) > 7)).toBe(true);
+    expect(terrainGeometry.coordinates).toHaveLength(2);
+
+    adapter.dispose();
+    host.remove();
+  });
+
+  it("keeps a non-null grab preview as the raw continuous Polygon", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const rawGeometry: MapShapeGeometry = { type: "Polygon", coordinates: [[[0, 0], [12, 0], [12, 12], [0, 0]]] };
+    const shape = {
+      id: "11111111-1111-4111-8111-111111111111",
+      layer: "terrain" as const,
+      value: "terrain",
+      geometryVersion: 1,
+      snapGridVersion: 2,
+      geometry: rawGeometry,
+    };
+    adapter.setMapShapes?.([shape]);
+    const setPreview = (adapter as unknown as { setMapShapePreview: (shapes: Array<typeof shape> | null) => void }).setMapShapePreview.bind(adapter);
+    setPreview([shape]);
+    const preview = (adapter.getMap().getLayers().item(8) as VectorLayer).getSource()?.getFeatures()[0]?.getGeometry();
+    expect(preview).toBeInstanceOf(Polygon);
+    expect((preview as Polygon).getCoordinates()).toEqual(rawGeometry.coordinates);
+    expect(shape.geometry).toEqual(rawGeometry);
     adapter.dispose();
     host.remove();
   });

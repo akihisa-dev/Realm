@@ -3,7 +3,7 @@
   "bomFormat": "CycloneDX",
   "components": [
     {
-      "bom-ref": "pkg:generic/realm-atomic-publish-helper@0.38.1",
+      "bom-ref": "pkg:generic/realm-atomic-publish-helper@0.38.2",
       "description": "Bundled macOS arm64 no-replace atomic publication helper.",
       "licenses": [
         {
@@ -11,12 +11,12 @@
         }
       ],
       "name": "realm-atomic-publish-helper",
-      "purl": "pkg:generic/realm-atomic-publish-helper@0.38.1",
+      "purl": "pkg:generic/realm-atomic-publish-helper@0.38.2",
       "type": "application",
-      "version": "0.38.1"
+      "version": "0.38.2"
     },
     {
-      "bom-ref": "pkg:generic/realm-has-moved-extension@0.38.1",
+      "bom-ref": "pkg:generic/realm-has-moved-extension@0.38.2",
       "description": "Bundled SQLite HAS_MOVED verification and host online-backup extension.",
       "licenses": [
         {
@@ -24,12 +24,12 @@
         }
       ],
       "name": "realm-has-moved-extension",
-      "purl": "pkg:generic/realm-has-moved-extension@0.38.1",
+      "purl": "pkg:generic/realm-has-moved-extension@0.38.2",
       "type": "library",
-      "version": "0.38.1"
+      "version": "0.38.2"
     },
     {
-      "bom-ref": "pkg:generic/realm@0.38.1",
+      "bom-ref": "pkg:generic/realm@0.38.2",
       "licenses": [
         {
           "expression": "AGPL-3.0-or-later"
@@ -42,9 +42,9 @@
           "value": "aarch64-apple-darwin"
         }
       ],
-      "purl": "pkg:generic/realm@0.38.1",
+      "purl": "pkg:generic/realm@0.38.2",
       "type": "application",
-      "version": "0.38.1"
+      "version": "0.38.2"
     },
     {
       "bom-ref": "pkg:npm/%40adobe/css-tools@4.5.0",
@@ -19935,16 +19935,16 @@
   "dependencies": [
     {
       "dependsOn": [],
-      "ref": "pkg:generic/realm-atomic-publish-helper@0.38.1"
+      "ref": "pkg:generic/realm-atomic-publish-helper@0.38.2"
     },
     {
       "dependsOn": [],
-      "ref": "pkg:generic/realm-has-moved-extension@0.38.1"
+      "ref": "pkg:generic/realm-has-moved-extension@0.38.2"
     },
     {
       "dependsOn": [
-        "pkg:generic/realm-atomic-publish-helper@0.38.1",
-        "pkg:generic/realm-has-moved-extension@0.38.1",
+        "pkg:generic/realm-atomic-publish-helper@0.38.2",
+        "pkg:generic/realm-has-moved-extension@0.38.2",
         "pkg:npm/%40adobe/css-tools@4.5.0",
         "pkg:npm/%40asamuzakjp/css-color@3.2.0",
         "pkg:npm/%40babel/code-frame@7.29.7",
@@ -20589,7 +20589,7 @@
         "pkg:npm/zarrita@0.7.4",
         "pkg:npm/zstddec@0.2.0"
       ],
-      "ref": "pkg:generic/realm@0.38.1"
+      "ref": "pkg:generic/realm@0.38.2"
     },
     {
       "dependsOn": [],
@@ -23166,7 +23166,7 @@
   ],
   "metadata": {
     "component": {
-      "bom-ref": "pkg:generic/realm@0.38.1",
+      "bom-ref": "pkg:generic/realm@0.38.2",
       "licenses": [
         {
           "expression": "AGPL-3.0-or-later"
@@ -23179,9 +23179,9 @@
           "value": "aarch64-apple-darwin"
         }
       ],
-      "purl": "pkg:generic/realm@0.38.1",
+      "purl": "pkg:generic/realm@0.38.2",
       "type": "application",
-      "version": "0.38.1"
+      "version": "0.38.2"
     },
     "lifecycles": [
       {

@@ -973,7 +973,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellLayer.changed();
   }
 
-  /** Renders the canonical Polygon rows without smoothing or per-cell geometry. */
+  /** Stores canonical Polygon rows and renders their presentation-only smooth geometry. */
   setMapShapes(shapes: readonly MapShape[]): void {
     this.mapShapesControlled = true;
     this.mapShapes = cloneMapShapes(shapes);
@@ -985,7 +985,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private setMapShapePreview(shapes: readonly MapShape[] | null): void {
     const renderedShapes = shapes === null ? this.mapShapes : shapes;
     this.regionSmoothHiddenIdentity = null;
-    const { terrainCount, regionCount } = renderCanonicalMapShapes(renderedShapes, this.terrainSmoothSource, this.regionSmoothSource);
+    const { terrainCount, regionCount } = renderCanonicalMapShapes(renderedShapes, this.terrainSmoothSource, this.regionSmoothSource, shapes === null);
     this.terrainOutlineLayer.setVisible(false);
     this.terrainSmoothLayer.setVisible(terrainCount > 0);
     this.regionSmoothLayer.setVisible(regionCount > 0);
