@@ -79,6 +79,15 @@ describe("region grab geometry", () => {
     }
   });
 
+  it("does not turn an interior cell into an explicit grab handle", () => {
+    const center = cellCenter(10, 10);
+    const ring = cellIdsWithinPaintPosition(center, 1).filter((id) => id !== "10:10");
+    const entries: Array<[string, ReturnType<typeof terrain>[]]> = [["10:10", [terrain("10:10")]]];
+    for (const id of ring) entries.push([id, [terrain(id)]]);
+    const attributes = new Map(entries);
+    expect(resizableCellIdsAt(center, attributes, undefined, { interiorCellId: "10:10" })).toEqual([]);
+  });
+
   it("keeps only translated cells that have terrain", () => {
     const attributes = new Map([
       ["5:3", [terrain("5:3")]],
@@ -235,6 +244,39 @@ describe("region grab geometry", () => {
     expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: outside });
     interaction.handleUpEvent({ originalEvent: pointer, coordinate: outside });
+    expect(resized).toEqual([{ cellIds: ["9:10"], attribute: "region", value: "#AA0000", regionId: "region-a" }]);
+    controller.dispose();
+  });
+
+  it("keeps the pointer's target cell when a real drag is off the mathematical centre line", () => {
+    const attributes = new Map([["10:10", [region("10:10", "#AA0000")]]]);
+    const features = new Map<string, Feature>();
+    const resized: unknown[] = [];
+    const controller = new RegionGrabController({
+      cellAt: (position) => cellIdsWithinPaintPosition(position, 0)[0] ?? null,
+      allowMove: true,
+      allowInteriorBoundaryPress: true,
+      attributes: () => attributes,
+      getFeature: (id) => features.get(id),
+      ensureFeatures: (ids) => { for (const id of ids) if (!features.has(id)) { const feature = new Feature(); feature.setId(id); features.set(id, feature); } },
+      removeUnused: () => undefined,
+      changed: vi.fn(),
+      setRegionSmoothVisible: vi.fn(),
+      emit: vi.fn(),
+      emitResize: (input) => resized.push(input),
+    });
+    const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean; handleDragEvent: (event: unknown) => void; handleUpEvent: (event: unknown) => boolean };
+    const pointer = { isPrimary: true, button: 0 };
+    const start = cellCenter(10, 10);
+    const outside = cellCenter(10, 9);
+    const offset: [number, number] = [0.2, 0.15];
+    const shiftedStart: [number, number] = [start[0] + offset[0], start[1] + offset[1]];
+    const shiftedOutside: [number, number] = [outside[0] + offset[0], outside[1] + offset[1]];
+
+    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: shiftedStart })).toBe(true);
+    interaction.handleDragEvent({ originalEvent: pointer, coordinate: shiftedOutside });
+    expect(features.get("9:10")?.get("grabPreview")).toBe(true);
+    interaction.handleUpEvent({ originalEvent: pointer, coordinate: shiftedOutside });
     expect(resized).toEqual([{ cellIds: ["9:10"], attribute: "region", value: "#AA0000", regionId: "region-a" }]);
     controller.dispose();
   });

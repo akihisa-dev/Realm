@@ -145,7 +145,16 @@ export class RegionGrabController {
     const target = this.options.cellAt(position);
     if (!this.resizeMode && target) this.resizeMode = new Set(this.sourceIds).has(target) ? "shrink" : "expand";
     if (!this.resizeMode || !this.resizeAttribute || this.resizeValue === null) return;
-    const stroke = regionResizeStroke(this.resizeStartPosition ? [this.resizeStartPosition, position] : [position]);
+    // A real pointer rarely lands on the mathematical centre of the target
+    // hex. Keep the geometric stroke for longer pulls, but always include the
+    // cell currently under the pointer so an ordinary one-cell drag cannot be
+    // discarded merely because the path is a few pixels off-centre.
+    // Use a narrow cell-width stroke so a hand-drawn path can cross several
+    // cells without requiring the pointer to pass through every exact center.
+    // The explicit target below keeps the final cell reliable even when the
+    // pointer stops near its edge.
+    const stroke = new Set(regionResizeStroke(this.resizeStartPosition ? [this.resizeStartPosition, position] : [position], 0.45));
+    if (target) stroke.add(target);
     const attributes = this.options.attributes();
     const sourceSet = new Set(this.resizeComponentIds);
     this.resizeAddedIds.clear();

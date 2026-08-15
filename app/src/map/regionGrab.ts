@@ -1,5 +1,5 @@
 import type { CellAttributeSnapshot, Position } from "../backend";
-import { CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
+import { CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
 
 type Axial = [number, number];
 const axialFor = (id: string): Axial | null => {
@@ -139,7 +139,7 @@ const boundaryHitToleranceSquared = (cell: string): number => {
   return longestEdgeSquared * 0.32 ** 2;
 };
 
-/** Returns persisted terrain/region cells whose boundary is under a pointer or explicit grab target. */
+/** Returns persisted terrain/region cells whose boundary is under a pointer or an explicit boundary-cell grab target. */
 type ResizableCellOptions = { interiorCellId?: string | null };
 
 export const resizableCellIdsAt = (
@@ -163,12 +163,14 @@ export const resizableCellIdsAt = (
     const parsed = parseCellId(interiorCellId);
     const values = attributes.get(interiorCellId) ?? [];
     if (parsed && values.length > 0) {
-      const center = cellCenter(parsed[0], parsed[1]);
       const region = values.find((item) => item.attribute === "region");
-      const regionDistance = region ? boundaryDistance(center, interiorCellId, "region", attributes) : Number.POSITIVE_INFINITY;
-      const terrainDistance = values.some((item) => item.attribute === "terrain") ? boundaryDistance(center, interiorCellId, "terrain", attributes) : Number.POSITIVE_INFINITY;
-      const distance = Math.min(regionDistance, terrainDistance);
-      if (Number.isFinite(distance)) result.set(interiorCellId, distance);
+      const hasRegionBoundary = region !== undefined
+        && isRegionBoundaryCell(interiorCellId, connectedRegionCells(interiorCellId, attributes));
+      const hasTerrainBoundary = values.some((item) => item.attribute === "terrain")
+        && isRegionBoundaryCell(interiorCellId, connectedTerrainCells(interiorCellId, attributes));
+      // Explicit grab mode accepts a press anywhere inside a visible boundary
+      // cell, but never turns an interior cell into a fake resize handle.
+      if (hasRegionBoundary || hasTerrainBoundary) result.set(interiorCellId, 0);
     }
   }
   return [...result.entries()].sort((left, right) => left[1] - right[1] || compareCellIds(left[0], right[0])).map(([id]) => id);

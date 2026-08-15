@@ -137,7 +137,8 @@ describe("RealmMapAdapter", () => {
     ]);
     expect(regionLayer.getSource()?.getFeatures()).toHaveLength(4);
     const hoverBoundary: [number, number] = [(cellCenter(10, 10)[0] + cellCenter(10, 9)[0]) / 2, (cellCenter(10, 10)[1] + cellCenter(10, 9)[1]) / 2];
-    adapter.setMode("cell-select"); adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: hoverBoundary } as never); expect(cellLayer.getSource()?.getFeatureById("10:10")?.get("grabHover")).toBe(true); expect(host.classList.contains("map-canvas-grab-target")).toBe(true); adapter.setMode("grab");
+    adapter.setMode("cell-select"); adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: hoverBoundary } as never); expect(cellLayer.getSource()?.getFeatureById("10:10")?.get("grabHover")).toBeUndefined(); expect(host.classList.contains("map-canvas-grab-target")).toBe(false);
+    adapter.setMode("grab"); adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: cellCenter(10, 10) } as never); expect(cellLayer.getSource()?.getFeatureById("10:10")?.get("grabHover")).toBe(true); expect(host.classList.contains("map-canvas-grab-target")).toBe(true);
     const pointer = new MouseEvent("pointerdown", { button: 0, bubbles: true });
     Object.defineProperty(pointer, "isPrimary", { value: true });
     const grab = adapter.getMap().getInteractions().getArray().at(-1) as unknown as {
@@ -262,7 +263,7 @@ describe("RealmMapAdapter", () => {
       adapter.setCellAttributes(cellIds.map((cellId) => ({ cellId, attribute: "terrain" as const, value: "terrain" })));
     });
     adapter.setMode("cell-select");
-    const cellPaint = adapter.getMap().getInteractions().getArray().at(-2);
+    const cellPaint = adapter.getMap().getInteractions().getArray().at(-1);
     const pointerDown = new MouseEvent("pointerdown", { button: 0, bubbles: true });
     Object.defineProperty(pointerDown, "isPrimary", { value: true });
     cellPaint?.handleEvent({ type: "pointerdown", originalEvent: pointerDown, coordinate: cellCenter(10, 10), activePointers: [pointerDown] } as never);
@@ -690,7 +691,7 @@ describe("RealmMapAdapter", () => {
     adapter.onCellSelect(painted);
 
     adapter.setMode("cell-select");
-    const paintInteraction = adapter.getMap().getInteractions().getArray().at(-2);
+    const paintInteraction = adapter.getMap().getInteractions().getArray().at(-1);
     paintInteraction?.handleEvent({ type: "pointerdown", originalEvent: pointer, coordinate: cellCenter(0, 0), activePointers: [pointer] } as never);
     host.dispatchEvent(new Event("pointerleave"));
     expect(painted).not.toHaveBeenCalled();
@@ -1045,7 +1046,7 @@ describe("RealmMapAdapter", () => {
     expect(host.style.background).toBe("rgb(1, 2, 3)");
     expect(() => adapter.setThemeOverrides({ canvas: "rgb(1, 2, 3)" })).toThrow(/RRGGBB/);
     expect(() => adapter.setThemeOverrides({ unknown: "#010203" } as never)).toThrow(/Unknown theme override/);
-    const cellPaint = adapter.getMap().getInteractions().getArray().at(-2);
+    const cellPaint = adapter.getMap().getInteractions().getArray().at(-1);
     expect(cellPaint).toBeInstanceOf(PointerInteraction);
     expect(interactions.find((interaction) => interaction instanceof DragPan)?.getActive()).toBe(false);
     expect(interactions.find((interaction) => interaction instanceof KeyboardPan)?.getActive()).toBe(false);

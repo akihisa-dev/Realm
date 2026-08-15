@@ -79,7 +79,7 @@ describe("terrain boundary resize in RealmMapAdapter", () => {
     host.remove();
   });
 
-  it("prioritizes a boundary pull over terrain painting through interaction dispatch", () => {
+  it("keeps terrain painting active at a boundary in the terrain tool", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
@@ -113,8 +113,9 @@ describe("terrain boundary resize in RealmMapAdapter", () => {
     dispatch(MapBrowserEventType.POINTERDRAG, drag, outside, [drag]);
     dispatch(MapBrowserEventType.POINTERUP, up, outside, []);
 
-    expect(resized).toEqual([{ cellIds: ["9:10"], attribute: "terrain", value: "terrain" }]);
-    expect(painted).toEqual([]);
+    expect(resized).toEqual([]);
+    expect(painted).toHaveLength(1);
+    expect(painted[0]).toContain("9:10");
     adapter.dispose();
     host.remove();
   });

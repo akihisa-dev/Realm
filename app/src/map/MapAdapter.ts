@@ -506,7 +506,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.setNavigationActive(mode === "pan");
     this.refreshHoveredCells();
     this.refreshGrabHover();
-    if (mode === "grab" || mode === "cell-select" || mode === "cell-region") this.grab = new RegionGrabController({
+    if (mode === "grab") this.grab = new RegionGrabController({
       cellAt: (position) => this.cellAtCoordinate(position), cellCandidatesAt: (position) => gridCellIdsWithinPaintPosition(position, 1), allowMove: mode === "grab", allowInteriorBoundaryPress: mode === "grab", attributes: () => this.cellAttributesById, getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id), changed: () => this.cellLayer.changed(),
       setRegionSmoothVisible: (visible, regionIdentity) => { this.regionSmoothHiddenIdentity = visible ? null : regionIdentity ?? null; this.regionSmoothLayer.changed(); }, setTerrainSmoothVisible: (visible, hiddenCellIds = []) => { if (!visible) this.terrainOutlineLayer.setVisible(false); this.setTerrainSmoothPreview(hiddenCellIds); this.terrainSmoothLayer.setVisible(true); }, emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); }, emitResize: (input) => { for (const listener of this.cellResizeListeners) listener(input); },
     });
@@ -560,7 +560,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
         },
       });
       this.map.addInteraction(this.paint);
-      if (mode === "cell-select") this.map.addInteraction(this.grab!.interaction);
       return;
     }
     if (mode === "pan") return;
@@ -570,7 +569,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
         (code) => { for (const listener of this.errorListeners) listener(code); },
       );
       this.map.addInteraction(this.draw);
-      this.map.addInteraction(this.grab!.interaction);
       return;
     }
     if (mode === "grab") {
@@ -783,7 +781,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.refreshGrabHover();
   }
 
-  private refreshGrabHover(): void { const enabled = this.activeMode === "grab" || this.activeMode === "cell-select" || this.activeMode === "cell-region"; const interiorCellId = this.activeMode === "grab" && this.lastPointerCoordinate ? this.cellAtCoordinate(this.lastPointerCoordinate) : null; this.grabHover.refresh(enabled && this.pointerInside && !this.temporaryPan && this.paintLastPoint === null, this.lastPointerCoordinate, interiorCellId); }
+  private refreshGrabHover(): void { const enabled = this.activeMode === "grab"; const interiorCellId = enabled && this.lastPointerCoordinate ? this.cellAtCoordinate(this.lastPointerCoordinate) : null; this.grabHover.refresh(enabled && this.pointerInside && !this.temporaryPan && this.paintLastPoint === null, this.lastPointerCoordinate, interiorCellId); }
 
   private readonly handlePointerMove = (event: Event | BaseEvent): void => {
     if (!("coordinate" in event) || !Array.isArray(event.coordinate)) {

@@ -28,9 +28,9 @@ The editor uses one native overlay title bar with `戻す`, `進む`, and an obj
 
 The move tool pans the viewpoint with a primary-button drag. A middle-button drag pans in every tool without changing the active tool, and Space plus a primary-button drag provides the same temporary navigation path. Viewpoint movement remains constrained to the fixed editing world so the grid cannot be dragged aside to expose empty canvas. Wheel rotation zooms the canvas.
 
-The canvas cursor reflects the active operation: `grab` for move/navigation and terrain or region boundary grabbing, a crosshair for terrain or region drawing, and a small eraser cursor for layer removal. An explicitly disabled canvas uses `not-allowed`; OpenLayers' `grab`/`grabbing` feedback remains the highest-priority state while a pan drag is active.
+The canvas cursor reflects the active operation: `grab` for move/navigation and the explicit terrain or region boundary-grab tool, a crosshair for terrain or region drawing, and a small eraser cursor for layer removal. An explicitly disabled canvas uses `not-allowed`; OpenLayers' `grab`/`grabbing` feedback remains the highest-priority state while a pan drag is active.
 
-Terrain drawing and region enclosure modes prioritize a visible terrain or region boundary over painting, show a dashed boundary affordance on hover, and let the user pull that edge outward or inward. The same boundary behavior remains available from the explicit `グラブ` tool; only that tool moves a region from its interior.
+Terrain drawing and region enclosure modes reserve the primary pointer for their own painting gestures, so a boundary cell can be painted like any other cell. The explicit `グラブ` tool shows dashed handles only on terrain or region boundary cells; dragging one handle outward or inward changes the edge, while pressing an interior region cell moves the whole logical region.
 
 ## Allowed editor copy
 
