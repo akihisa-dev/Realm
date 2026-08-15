@@ -1,5 +1,6 @@
 import { CELL_PAINT_RANGE_MAX, CELL_GRID_CELL_COUNT, WORLD_EXTENT, RealmMapAdapter, assertGeometryWithinWorld, availableViewportSize, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, isGeometryWithinWorld, resolutionForFittingExtent, selectFeatureIdsWithinLasso } from "./MapAdapter";
 import DragPan from "ol/interaction/DragPan";
+import DoubleClickZoom from "ol/interaction/DoubleClickZoom";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import KeyboardZoom from "ol/interaction/KeyboardZoom";
 import MouseWheelZoom from "ol/interaction/MouseWheelZoom";
@@ -981,6 +982,7 @@ describe("RealmMapAdapter", () => {
     expect(adapter.getMap().getInteractions().getArray().some((interaction) => interaction instanceof Draw)).toBe(false);
     const interactions = adapter.getMap().getInteractions().getArray();
     expect(interactions.some((interaction) => interaction instanceof DragPan)).toBe(true);
+    expect(interactions.some((interaction) => interaction instanceof DoubleClickZoom)).toBe(false);
     expect(interactions.some((interaction) => interaction instanceof MouseWheelZoom)).toBe(true);
     expect(interactions.some((interaction) => interaction instanceof KeyboardPan)).toBe(true);
     expect(interactions.some((interaction) => interaction instanceof KeyboardZoom)).toBe(true);
