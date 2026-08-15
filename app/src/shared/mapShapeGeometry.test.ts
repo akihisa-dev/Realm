@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyCellSelectionToMapShapes,
+  applyGridSelectionToMapShapes,
   cellIdsToPolygonGeometries,
+  differenceMapShapeGeometry,
+  intersectionMapShapeGeometries,
   mapShapeCellIds,
-  mapShapesToCellAttributes,
-  moveRegionMapShapes,
+  deriveMapGridCells,
+  mapShapeCellCenter,
+  normalizeMapShapes,
+  translateMapShapeGeometry,
+  unionMapShapeGeometries,
+  hitTestMapShapeGeometry,
+  resizeMapShapeGeometry,
   validateMapShapes,
 } from "./mapShapeGeometry";
 import type { MapShape } from "./realmContract";
@@ -32,7 +39,7 @@ describe("grid-snapped continuous map shapes", () => {
     const shape = terrain(["1:1", "2:1"]);
     validateMapShapes([shape]);
     expect(mapShapeCellIds(shape)).toEqual(new Set(["1:1", "2:1"]));
-    expect(mapShapesToCellAttributes([shape])).toEqual([
+    expect(deriveMapGridCells([shape])).toEqual([
       { cellId: "1:1", attribute: "terrain", value: "terrain" },
       { cellId: "2:1", attribute: "terrain", value: "terrain" },
     ]);
@@ -51,21 +58,80 @@ describe("grid-snapped continuous map shapes", () => {
 
   it("expands and retracts a shape through cell operations while retaining its id", () => {
     const original = terrain(["5:5"], "44444444-4444-4444-8444-444444444444");
-    const expanded = applyCellSelectionToMapShapes([original], { cellIds: ["6:5"], layer: "terrain", value: "terrain" });
+    const expanded = applyGridSelectionToMapShapes([original], { cellIds: ["6:5"], layer: "terrain", value: "terrain" });
     expect(expanded).toHaveLength(1);
     expect(expanded[0]?.id).toBe(original.id);
     expect(mapShapeCellIds(expanded[0]!)).toEqual(new Set(["5:5", "6:5"]));
-    const retracted = applyCellSelectionToMapShapes(expanded, { cellIds: ["6:5"], layer: "terrain", value: null });
+    const retracted = applyGridSelectionToMapShapes(expanded, { cellIds: ["6:5"], layer: "terrain", value: null });
     expect(retracted).toHaveLength(1);
     expect(retracted[0]?.id).toBe(original.id);
     expect(mapShapeCellIds(retracted[0]!)).toEqual(new Set(["5:5"]));
+  });
+
+  it("uses Polygon boolean operations for grid selection without persisting cell rows", () => {
+    const first = cellIdsToPolygonGeometries(["10:10", "11:10"])[0]!;
+    const second = cellIdsToPolygonGeometries(["11:10", "12:10"])[0]!;
+    expect(mapShapeCellIds({ geometry: unionMapShapeGeometries([first, second])[0]! })).toEqual(new Set(["10:10", "11:10", "12:10"]));
+    expect(mapShapeCellIds({ geometry: differenceMapShapeGeometry(first, [second])[0]! })).toEqual(new Set(["10:10"]));
+    expect(mapShapeCellIds({ geometry: intersectionMapShapeGeometries(first, second)[0]! })).toEqual(new Set(["11:10"]));
+  });
+
+  it("previews exact edge and vertex edits continuously, then snaps the result at commit", () => {
+    const original = terrain(["10:10", "11:10"]);
+    const ring = original.geometry.coordinates[0]!;
+    const edge = ring[0] && ring[1] ? [
+      (ring[0][0] + ring[1][0]) / 2,
+      (ring[0][1] + ring[1][1]) / 2,
+    ] as [number, number] : null;
+    expect(edge).not.toBeNull();
+    const edgeHit = hitTestMapShapeGeometry(original.geometry, edge!, 0.001);
+    expect(edgeHit?.kind).toBe("edge");
+    const preview = resizeMapShapeGeometry(original.geometry, edgeHit!, edge!, [edge![0], edge![1] + 4]);
+    expect(preview).not.toEqual(original.geometry);
+    const normalized = normalizeMapShapes([{ ...original, geometry: preview }]);
+    expect(normalized).toHaveLength(1);
+    validateMapShapes(normalized);
+
+    const vertex = ring[0]!;
+    const vertexHit = hitTestMapShapeGeometry(original.geometry, vertex, 0.001);
+    expect(vertexHit?.kind).toBe("vertex");
+    const vertexPreview = resizeMapShapeGeometry(original.geometry, vertexHit!, vertex, [vertex[0] + 2, vertex[1] + 1]);
+    expect(vertexPreview.coordinates[0]?.at(-1)).toEqual(vertexPreview.coordinates[0]?.[0]);
+  });
+
+  it("normalizes a continuous move to the target grid cell while retaining the shape id", () => {
+    const original = terrain(["5:5"], "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    const source = mapShapeCellCenter({ row: 5, column: 5 });
+    const target = mapShapeCellCenter({ row: 5, column: 6 });
+    const moved = normalizeMapShapes([{ ...original, geometry: translateMapShapeGeometry(original.geometry, [target[0] - source[0], target[1] - source[1]]) }]);
+    expect(moved).toHaveLength(1);
+    expect(moved[0]?.id).toBe(original.id);
+    expect(mapShapeCellIds(moved[0]!)).toEqual(new Set(["6:5"]));
+  });
+
+  it("merges touching shapes that share one canonical identity while retaining one existing id", () => {
+    const first = terrain(["5:5"], "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    const second = terrain(["6:5"], "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    expect(() => validateMapShapes([first, second])).toThrow();
+    const merged = normalizeMapShapes([first, second]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.id).toBe(first.id);
+    expect(mapShapeCellIds(merged[0]!)).toEqual(new Set(["5:5", "6:5"]));
+  });
+
+  it("rejects a continuous move that crosses the bounded world instead of clipping or deleting the shape", () => {
+    const original = terrain(["0:0"]);
+    expect(() => normalizeMapShapes([{ ...original, geometry: translateMapShapeGeometry(original.geometry, [-10, 0]) }])).toThrow();
   });
 
   it("translates every disconnected region part while retaining each shape id", () => {
     const regionId = "77777777-7777-4777-8777-777777777777";
     const first = region(["5:5", "6:5"], regionId, "88888888-8888-4888-8888-888888888888");
     const second = region(["20:20"], regionId, "99999999-9999-4999-8999-999999999999");
-    const moved = moveRegionMapShapes([first, second], regionId, ["5:5", "6:5", "20:20"], ["25:25", "26:25", "40:40"]);
+    const source = mapShapeCellCenter({ row: 5, column: 5 });
+    const target = mapShapeCellCenter({ row: 25, column: 25 });
+    const offset: [number, number] = [target[0] - source[0], target[1] - source[1]];
+    const moved = normalizeMapShapes([first, second].map((shape) => ({ ...shape, geometry: translateMapShapeGeometry(shape.geometry, offset) })));
     expect(moved.map(({ id }) => id)).toEqual([first.id, second.id]);
     expect(moved.map(mapShapeCellIds)).toEqual([
       new Set(["25:25", "26:25"]),

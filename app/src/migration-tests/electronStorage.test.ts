@@ -11,6 +11,7 @@ import { AtomicPublisher } from "../main/storage/atomic";
 import { assertSqlitePathNotMoved, loadHasMovedExtension } from "../main/storage/schema";
 import { CURRENT_SCHEMA_VERSION } from "../main/storage/schema";
 import { openProject as openStoredProject } from "../main/storage/project";
+import { cellIdsToPolygonGeometries } from "../shared/mapShapeGeometry";
 
 const fixtureDirectory = (): string => mkdtempSync(join(tmpdir(), "realm-electron-"));
 const legacyFeatureTypes = "'terrain','forest','river','coastline','country','region','boundary','city','town','road','lake','mountain','tree','symbol','label','overlay','frame','scale'";
@@ -35,8 +36,7 @@ describe("Electron native SQLite storage", () => {
     expect(snapshot.featureCount).toBe(2); expect(snapshot.canUndo).toBe(true);
     snapshot = await commands.undoProject(); expect(snapshot.featureCount).toBe(0); expect(snapshot.canRedo).toBe(true);
     snapshot = await commands.redoProject(); expect(snapshot.featureCount).toBe(2);
-    await commands.applyCellAttributes({ cellIds: ["0:0", "1:0"], attribute: "terrain", value: "land" });
-    expect((await commands.viewCellAttributes({}))).toHaveLength(2);
+    await commands.updateMapShapes({ shapes: [{ id: "11111111-1111-4111-8111-111111111111", layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: cellIdsToPolygonGeometries(["0:0", "1:0"])[0]! }] });
     const path = snapshot.path; const libraryId = basename(path, ".realmmap"); await commands.closeProject();
     const stored = new DatabaseSync(path, { readOnly: true });
     try {

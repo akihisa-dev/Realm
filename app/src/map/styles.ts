@@ -544,15 +544,6 @@ export const createFeatureStyle = (
 
 export const featureStyle = createFeatureStyle();
 
-const stableVariant = (value: string): number => {
-  let hash = 2_166_136_261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16_777_619);
-  }
-  return hash >>> 0;
-};
-
 export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP_THEME_ID, getThemeOverrides: () => ThemeOverrides = () => ({})): ((feature: FeatureLike) => Style | Style[] | undefined) => {
   type CachedStyle = { key: string; styles: Style | Style[] };
   const cellStyles = new WeakMap<object, CachedStyle>();
@@ -567,34 +558,28 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     const grabSourceHidden = feature.get("grabSourceHidden") === true;
     const grabHover = feature.get("grabHover") === true;
     const hasTerrain = has("terrain");
-    const hasPhysical = has("forest");
-    const hasCountry = has("country");
     const hasRegion = has("region");
-    if (!hasTerrain && !hasPhysical && !hasCountry && !hasRegion && !selected && !preview && !paintPreview && !erasePreview && !grabPreview && !grabHover) return undefined;
+    if (!hasTerrain && !hasRegion && !selected && !preview && !paintPreview && !erasePreview && !grabPreview && !grabHover) return undefined;
     const themeId = getThemeId();
     const overrides = getThemeOverrides();
     const theme = mapTheme(themeId, overrides);
-    const variant = stableVariant(String(feature.getId() ?? "")) % 7;
     const regionValue = attributes?.find((item) => item.attribute === "region")?.value;
     const persistedRegionColor = typeof regionValue === "string" && /^#[\da-f]{6}$/i.test(regionValue) ? regionValue : theme.region;
     const regionAnimationOpacity = typeof feature.get("regionAnimationOpacity") === "number" && Number.isFinite(feature.get("regionAnimationOpacity"))
       ? Math.max(0, Math.min(1, feature.get("regionAnimationOpacity"))) : 1;
-    const flags = (hasPhysical ? 2 : 0) | (hasCountry ? 4 : 0) | (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0) | (preview ? 64 : 0) | (paintPreview ? 128 : 0) | (erasePreview ? 256 : 0) | (grabPreview ? 512 : 0) | (grabSourceHidden ? 1024 : 0) | (grabHover ? 2048 : 0);
+    const flags = (hasRegion ? 8 : 0) | (selected ? 16 : 0) | (hasTerrain ? 32 : 0) | (preview ? 64 : 0) | (paintPreview ? 128 : 0) | (erasePreview ? 256 : 0) | (grabPreview ? 512 : 0) | (grabSourceHidden ? 1024 : 0) | (grabHover ? 2048 : 0);
     const key = canonicalValueSignature({
       themeId,
       overrides,
       flags,
       regionValue: persistedRegionColor,
       regionAnimationOpacity,
-      variant: hasPhysical ? variant : 0,
     });
     const cached = cellStyles.get(feature as object);
     if (cached?.key === key) return cached.styles;
     const styles: Style[] = [];
     // Persisted terrain is rendered by MapAdapter as one derived, unfilled
     // outline. Cell features remain here for transient paint/erase feedback.
-    if (hasPhysical) styles.push(new Style({ fill: new Fill({ color: theme.forest }), stroke: new Stroke({ color: theme.labelHalo, width: 0.55 + variant * 0.03 }), zIndex: 8 }));
-    if (hasCountry) styles.push(new Style({ fill: new Fill({ color: `${theme.country}14` }), stroke: new Stroke({ color: theme.country, width: 1.1 }), zIndex: 9 }));
     if (!grabSourceHidden && hasRegion && (regionAnimationOpacity < 1 || grabPreview)) styles.push(new Style({ fill: new Fill({ color: colorWithOpacity(persistedRegionColor, 0.2 * regionAnimationOpacity) }), stroke: new Stroke({ color: colorWithOpacity(persistedRegionColor, 0.78 * regionAnimationOpacity), width: 1.1 }), zIndex: 10 }));
     if (grabPreview && hasRegion) styles.push(new Style({ fill: new Fill({ color: colorWithOpacity(persistedRegionColor, 0.28) }), stroke: new Stroke({ color: colorWithOpacity(persistedRegionColor, 0.95), width: 1.5, lineDash: [4, 2] }), zIndex: 88 }));
     if (grabPreview && hasTerrain && !hasRegion) styles.push(new Style({ fill: new Fill({ color: colorWithOpacity(theme.land, 0.2) }), stroke: new Stroke({ color: colorWithOpacity(theme.landInk, 0.95), width: 1.5, lineDash: [4, 2] }), zIndex: 88 }));

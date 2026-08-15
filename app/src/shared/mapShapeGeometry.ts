@@ -158,6 +158,143 @@ const ringsToPolygons = (rings: readonly Position[][]): Position[][][] => {
 export const cellIdsToPolygonGeometries = (cellIds: Iterable<string>): MapShapeGeometry[] =>
   ringsToPolygons(cellIdsToRings(cellIds)).map((coordinates) => ({ type: "Polygon", coordinates }));
 
+export type MapShapeHit = {
+  kind: "vertex" | "edge" | "inside";
+  ringIndex: number;
+  vertexIndex?: number;
+  segmentIndex?: number;
+  distance: number;
+};
+
+const distanceToSegment = (point: Position, start: Position, end: Position): number => {
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared <= EPSILON) return Math.hypot(point[0] - start[0], point[1] - start[1]);
+  const projection = Math.max(0, Math.min(1, ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / lengthSquared));
+  return Math.hypot(point[0] - (start[0] + projection * dx), point[1] - (start[1] + projection * dy));
+};
+
+const pointInGeometry = (point: Position, geometry: MapShapeGeometry): boolean => {
+  const shell = geometry.coordinates[0];
+  return Boolean(shell && pointInRing(point, shell) && !geometry.coordinates.slice(1).some((ring) => pointInRing(point, ring)));
+};
+
+/** Exact Polygon hit testing used by the shape editor. No smoothed/cell outline is involved. */
+export const hitTestMapShapeGeometry = (geometry: MapShapeGeometry, point: Position, tolerance: number): MapShapeHit | null => {
+  if (!Number.isFinite(tolerance) || tolerance < 0) return null;
+  let nearestVertex: MapShapeHit | null = null;
+  let nearestEdge: MapShapeHit | null = null;
+  for (let ringIndex = 0; ringIndex < geometry.coordinates.length; ringIndex += 1) {
+    const ring = geometry.coordinates[ringIndex]!;
+    for (let vertexIndex = 0; vertexIndex < ring.length - 1; vertexIndex += 1) {
+      const distance = Math.hypot(point[0] - ring[vertexIndex]![0], point[1] - ring[vertexIndex]![1]);
+      if (distance <= tolerance && (!nearestVertex || distance < nearestVertex.distance)) nearestVertex = { kind: "vertex", ringIndex, vertexIndex, distance };
+    }
+    for (let segmentIndex = 0; segmentIndex < ring.length - 1; segmentIndex += 1) {
+      const distance = distanceToSegment(point, ring[segmentIndex]!, ring[segmentIndex + 1]!);
+      if (distance <= tolerance && (!nearestEdge || distance < nearestEdge.distance)) nearestEdge = { kind: "edge", ringIndex, segmentIndex, distance };
+    }
+  }
+  if (nearestVertex) return nearestVertex;
+  if (nearestEdge) return nearestEdge;
+  return pointInGeometry(point, geometry) ? { kind: "inside", ringIndex: 0, distance: 0 } : null;
+};
+
+export const mapShapeContainsPoint = (geometry: MapShapeGeometry, point: Position): boolean => pointInGeometry(point, geometry);
+
+const clampWorldPosition = ([x, y]: Position): Position => [
+  Math.max(MAP_SHAPE_WORLD_EXTENT[0], Math.min(MAP_SHAPE_WORLD_EXTENT[2], x)),
+  Math.max(MAP_SHAPE_WORLD_EXTENT[1], Math.min(MAP_SHAPE_WORLD_EXTENT[3], y)),
+];
+const geometryIsWithinWorld = (geometry: MapShapeGeometry): boolean => geometry.type === "Polygon"
+  && geometry.coordinates.every((ring) => ring.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y)
+    && x >= MAP_SHAPE_WORLD_EXTENT[0] - EPSILON && x <= MAP_SHAPE_WORLD_EXTENT[2] + EPSILON
+    && y >= MAP_SHAPE_WORLD_EXTENT[1] - EPSILON && y <= MAP_SHAPE_WORLD_EXTENT[3] + EPSILON));
+
+/** Applies a continuous pointer edit to one Polygon. The result is renderer-only until normalized. */
+export const resizeMapShapeGeometry = (
+  geometry: MapShapeGeometry,
+  hit: MapShapeHit,
+  startPosition: Position,
+  currentPosition: Position,
+): MapShapeGeometry => {
+  const coordinates = geometry.coordinates.map((ring) => ring.map(([x, y]) => [x, y] as Position));
+  const ring = coordinates[hit.ringIndex];
+  if (!ring) return geometry;
+  if (hit.kind === "inside") return geometry;
+  if (hit.kind === "vertex" && hit.vertexIndex !== undefined) {
+    const vertex = clampWorldPosition(currentPosition);
+    ring[hit.vertexIndex] = vertex;
+    if (hit.vertexIndex === 0) ring[ring.length - 1] = [...vertex] as Position;
+    else if (hit.vertexIndex === ring.length - 1) ring[0] = [...vertex] as Position;
+    return { type: "Polygon", coordinates };
+  }
+  if (hit.kind !== "edge" || hit.segmentIndex === undefined) return geometry;
+  const start = ring[hit.segmentIndex];
+  const end = ring[hit.segmentIndex + 1];
+  if (!start || !end) return geometry;
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const length = Math.hypot(dx, dy);
+  if (length <= EPSILON) return geometry;
+  const normal: Position = [-dy / length, dx / length];
+  const pointerDelta: Position = [currentPosition[0] - startPosition[0], currentPosition[1] - startPosition[1]];
+  const distance = pointerDelta[0] * normal[0] + pointerDelta[1] * normal[1];
+  const movedStart = clampWorldPosition([start[0] + normal[0] * distance, start[1] + normal[1] * distance]);
+  const movedEnd = clampWorldPosition([end[0] + normal[0] * distance, end[1] + normal[1] * distance]);
+  ring[hit.segmentIndex] = movedStart;
+  ring[hit.segmentIndex + 1] = movedEnd;
+  if (hit.segmentIndex === 0) ring[ring.length - 1] = [...movedStart] as Position;
+  return { type: "Polygon", coordinates };
+};
+
+/** Converts a renderer preview back into one or more canonical grid-snapped polygons. */
+export const normalizeMapShapeGeometry = (geometry: MapShapeGeometry): MapShapeGeometry[] => {
+  if (!geometryIsWithinWorld(geometry)) throw new Error("形状を地図の範囲外へ移動できません。");
+  const cells = geometryCellIds(geometry);
+  if (cells.size === 0) throw new Error("形状にグリッドセルがありません。");
+  return cellIdsToPolygonGeometries(cells);
+};
+
+const cellsForGeometries = (geometries: readonly MapShapeGeometry[]): Set<string> => {
+  const cells = new Set<string>();
+  for (const geometry of geometries) for (const cell of geometryCellIds(geometry)) cells.add(cell);
+  return cells;
+};
+
+/** Grid-backed boolean operations. Cells are only an internal calculation; callers receive Polygons. */
+export const unionMapShapeGeometries = (geometries: readonly MapShapeGeometry[]): MapShapeGeometry[] =>
+  cellIdsToPolygonGeometries(cellsForGeometries(geometries));
+
+export const differenceMapShapeGeometry = (subject: MapShapeGeometry, subtractors: readonly MapShapeGeometry[]): MapShapeGeometry[] => {
+  const remaining = cellsForGeometries([subject]);
+  for (const cell of cellsForGeometries(subtractors)) remaining.delete(cell);
+  return cellIdsToPolygonGeometries(remaining);
+};
+
+export const intersectionMapShapeGeometries = (first: MapShapeGeometry, second: MapShapeGeometry): MapShapeGeometry[] => {
+  const secondCells = cellsForGeometries([second]);
+  return cellIdsToPolygonGeometries([...cellsForGeometries([first])].filter((cell) => secondCells.has(cell)));
+};
+
+/** Normalizes every shape after a continuous preview, merging touching parts that share one canonical identity. */
+export const normalizeMapShapes = (shapes: readonly MapShape[]): MapShape[] => {
+  const groups = new Map<string, CellGroup>();
+  for (const shape of shapes) {
+    if (!geometryIsWithinWorld(shape.geometry)) throw new Error("形状を地図の範囲外へ移動できません。");
+    const cells = geometryCellIds(shape.geometry);
+    if (cells.size === 0) throw new Error("形状にグリッドセルがありません。");
+    const key = `${shape.layer}:${shape.regionId ?? ""}:${shape.value}`;
+    const group = groups.get(key) ?? { layer: shape.layer, value: shape.value, ...(shape.regionId ? { regionId: shape.regionId } : {}), cells: new Set<string>() };
+    for (const cell of cells) group.cells.add(cell);
+    groups.set(key, group);
+  }
+  const normalized = shapesFromGroups([...groups.values()], shapes);
+  validateMapShapes(normalized);
+  return normalized;
+};
+
 const samePoint = (a: readonly number[], b: readonly number[]): boolean => Math.abs(a[0]! - b[0]!) <= EPSILON && Math.abs(a[1]! - b[1]!) <= EPSILON;
 const orientation = (a: readonly number[], b: readonly number[], c: readonly number[]): number =>
   (b[0]! - a[0]!) * (c[1]! - a[1]!) - (b[1]! - a[1]!) * (c[0]! - a[0]!);
@@ -249,6 +386,29 @@ export const validateMapShapes = (shapes: readonly MapShape[]): void => {
     for (const cell of cells) if (layerCells.has(cell)) throw new Error("同じレイヤーの形状を重ねることはできません。");
     for (const cell of cells) layerCells.add(cell);
   }
+  const identityGroups = new Map<string, { shapeCount: number; cells: Set<string> }>();
+  for (const shape of shapes) {
+    const key = `${shape.layer}:${shape.regionId ?? ""}:${shape.value}`;
+    const group = identityGroups.get(key) ?? { shapeCount: 0, cells: new Set<string>() };
+    group.shapeCount += 1;
+    for (const cell of mapShapeCellIds(shape)) group.cells.add(cell);
+    identityGroups.set(key, group);
+  }
+  for (const { shapeCount, cells } of identityGroups.values()) {
+    if (connectedComponents(cells).length !== shapeCount) throw new Error("同じ属性の接続面は一つの形状にまとめる必要があります。");
+  }
+};
+
+export type MapShapeHitTarget = MapShapeHit & { shapeId: string };
+
+/** Finds the exact editable Polygon under a pointer, preferring vertices and edges over interiors. */
+export const hitTestMapShapes = (shapes: readonly MapShape[], point: Position, tolerance: number): MapShapeHitTarget | null => {
+  const candidates = shapes.flatMap((shape) => {
+    const hit = hitTestMapShapeGeometry(shape.geometry, point, tolerance);
+    return hit ? [{ ...hit, shapeId: shape.id }] : [];
+  });
+  const priority = (hit: MapShapeHit): number => hit.kind === "vertex" ? 0 : hit.kind === "edge" ? 1 : 2;
+  return candidates.sort((left, right) => priority(left) - priority(right) || left.distance - right.distance || left.shapeId.localeCompare(right.shapeId))[0] ?? null;
 };
 
 const newId = (): string => {
@@ -324,12 +484,12 @@ const groupsFromShapes = (shapes: readonly MapShape[]): CellGroup[] => {
   return [...groups.values()];
 };
 
-export const mapShapesToCellAttributes = (shapes: readonly MapShape[]) => groupsFromShapes(shapes)
+export const deriveMapGridCells = (shapes: readonly MapShape[]) => groupsFromShapes(shapes)
   .sort((first, second) => (first.layer === second.layer ? (first.regionId ?? "").localeCompare(second.regionId ?? "") || first.value.localeCompare(second.value) : first.layer === "terrain" ? -1 : 1))
   .flatMap((group) => [...group.cells].sort().map((cellIdValue) => ({ cellId: cellIdValue, attribute: group.layer, value: group.value, ...(group.regionId ? { regionId: group.regionId } : {}) })));
 
-export type ApplyMapShapeSelection = { cellIds: readonly string[]; layer: "terrain" | "region"; value: string | null; regionId?: string; clearRegion?: boolean };
-export const applyCellSelectionToMapShapes = (shapes: readonly MapShape[], input: ApplyMapShapeSelection): MapShape[] => {
+export type MapGridSelectionInput = { cellIds: readonly string[]; layer: "terrain" | "region"; value: string | null; regionId?: string; clearRegion?: boolean };
+export const applyGridSelectionToMapShapes = (shapes: readonly MapShape[], input: MapGridSelectionInput): MapShape[] => {
   const selected = new Set(input.cellIds.filter((id) => parseCellId(id)));
   if (selected.size === 0) throw new Error("セルを選択してください。");
   const groups = groupsFromShapes(shapes);
@@ -351,43 +511,6 @@ export const applyCellSelectionToMapShapes = (shapes: readonly MapShape[], input
     }
   }
   return shapesFromGroups(groups.filter((group) => group.cells.size > 0), shapes);
-};
-
-const axial = (id: string): [number, number] | null => {
-  const cell = parseCellId(id);
-  return cell ? [cell.column - Math.floor(cell.row / 2), cell.row] : null;
-};
-const cellFromAxial = (q: number, row: number): string | null => {
-  const column = q + Math.floor(row / 2);
-  return row >= 0 && row < MAP_SHAPE_GRID_ROWS && column >= 0 && column < MAP_SHAPE_GRID_COLUMNS ? `${column}:${row}` : null;
-};
-
-/** Moves all parts of one region by the fixed-grid offset while preserving ids. */
-export const moveRegionMapShapes = (shapes: readonly MapShape[], regionId: string, sourceCellIds: readonly string[], targetCellIds: readonly string[]): MapShape[] => {
-  if (sourceCellIds.length === 0 || sourceCellIds.length !== targetCellIds.length) throw new Error("領域の移動指定が不正です。");
-  const sourceOrigin = axial(sourceCellIds[0]!);
-  const targetOrigin = axial(targetCellIds[0]!);
-  if (!sourceOrigin || !targetOrigin) throw new Error("領域の移動指定が不正です。");
-  const delta: [number, number] = [targetOrigin[0] - sourceOrigin[0], targetOrigin[1] - sourceOrigin[1]];
-  const expected = sourceCellIds.map((id) => { const origin = axial(id); return origin ? cellFromAxial(origin[0] + delta[0], origin[1] + delta[1]) : null; });
-  if (expected.some((id, index) => id !== targetCellIds[index])) throw new Error("領域は固定グリッド上で移動してください。");
-  const regionCells = groupsFromShapes(shapes).filter((group) => group.layer === "region" && group.regionId === regionId).flatMap((group) => [...group.cells]);
-  const sourceSet = new Set(sourceCellIds);
-  if (regionCells.length !== sourceSet.size || regionCells.some((id) => !sourceSet.has(id))) throw new Error("領域全体を移動してください。");
-  const occupied = new Set(groupsFromShapes(shapes).filter((group) => group.layer === "region" && group.regionId !== regionId).flatMap((group) => [...group.cells]));
-  const moved = new Map<string, string>();
-  for (const source of regionCells) {
-    const origin = axial(source);
-    const destination = origin ? cellFromAxial(origin[0] + delta[0], origin[1] + delta[1]) : null;
-    if (!destination || (occupied.has(destination) && !sourceSet.has(destination))) throw new Error("移動先に別の領域があるため移動できません。");
-    moved.set(source, destination);
-  }
-  return shapes.map((shape) => {
-    if (shape.layer !== "region" || shape.regionId !== regionId) return shape;
-    const translatedCells = new Set([...mapShapeCellIds(shape)].map((cell) => moved.get(cell)));
-    if ([...translatedCells].some((cell): cell is undefined => cell === undefined)) throw new Error("領域の移動指定が不正です。");
-    return { ...shape, geometry: geometryForCells(translatedCells as Set<string>) };
-  });
 };
 
 export const translateMapShapeGeometry = (geometry: MapShapeGeometry, offset: Position): MapShapeGeometry => ({

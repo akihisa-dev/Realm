@@ -1,6 +1,5 @@
 export type FeatureType = "terrain" | "forest" | "river" | "coastline" | "country" | "region" | "boundary" | "city" | "town"
   | "road" | "lake" | "mountain" | "tree" | "symbol" | "label" | "overlay" | "frame" | "scale";
-export type CellAttribute = "terrain" | "forest" | "country" | "region";
 export type FeatureProperties = Record<string, unknown>;
 
 export type Position = [number, number];
@@ -25,7 +24,10 @@ export type World = {
 export type MapShapeLayer = "terrain" | "region";
 export type MapShapeGeometry = { type: "Polygon"; coordinates: Position[][] };
 export type MapShape = { id: string; layer: MapShapeLayer; regionId?: string; value: string; geometryVersion: number; snapGridVersion: number; geometry: MapShapeGeometry };
-export type ReplaceMapShapesInput = { shapes: MapShape[] };
+export type CreateMapShapesInput = { shapes: MapShape[] };
+export type UpdateMapShapesInput = { shapes: MapShape[] };
+export type DeleteMapShapesInput = { ids: string[] };
+export type MapShapeEdit = { shapes: MapShape[] };
 
 export type RealmSnapshot = {
   formatVersion: number;
@@ -65,28 +67,7 @@ export type ProjectSummary = {
   name: string;
 };
 
-export type CellAttributeSnapshot = {
-  cellId: string;
-  attribute: CellAttribute;
-  value: string;
-  regionId?: string;
-};
-
-export type ApplyCellAttributesInput = {
-  cellIds: string[];
-  attribute: CellAttribute;
-  value: string | null;
-  regionId?: string;
-  clearRegion?: boolean;
-};
-export type MoveRegionCellsInput = { sourceCellIds: string[]; targetCellIds: string[] };
-
-export type CellViewportInput = {
-  minX?: number;
-  maxX?: number;
-  minY?: number;
-  maxY?: number;
-};
+export type CellAttributeSnapshot = { cellId: string; attribute: MapShapeLayer; value: string; regionId?: string };
 
 export type SaveProjectInput = {
   name: string;
@@ -128,10 +109,9 @@ export interface RealmBackend {
   deleteFeature(input: { id: string }): Promise<RealmSnapshot>;
   undoProject(): Promise<RealmSnapshot>;
   redoProject(): Promise<RealmSnapshot>;
-  replaceMapShapes(input: ReplaceMapShapesInput): Promise<RealmSnapshot>;
-  applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot>;
-  moveRegionCells(input: MoveRegionCellsInput): Promise<RealmSnapshot>;
-  viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]>;
+  createMapShapes(input: CreateMapShapesInput): Promise<RealmSnapshot>;
+  updateMapShapes(input: UpdateMapShapesInput): Promise<RealmSnapshot>;
+  deleteMapShapes(input: DeleteMapShapesInput): Promise<RealmSnapshot>;
   closeProject(): Promise<void>;
   getOpenProject(): Promise<RealmSnapshot | null>;
 }

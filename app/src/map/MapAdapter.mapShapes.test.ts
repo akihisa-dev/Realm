@@ -27,4 +27,27 @@ describe("RealmMapAdapter canonical map shapes", () => {
     adapter.dispose();
     host.remove();
   });
+
+  it("uses the exact canonical Polygon for the grab affordance instead of cell attributes", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const geometry = cellIdsToPolygonGeometries(["10:10"])[0]!;
+    adapter.setMapShapes?.([{
+      id: "11111111-1111-4111-8111-111111111111",
+      layer: "terrain",
+      value: "terrain",
+      geometryVersion: 1,
+      snapGridVersion: 2,
+      geometry,
+    }]);
+    adapter.setMode("grab");
+    adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: geometry.coordinates[0]![0] } as never);
+    expect(host.classList.contains("map-canvas-grab-target")).toBe(true);
+    expect((adapter.getMap().getLayers().item(2) as VectorLayer).getSource()?.getFeatures()).toHaveLength(0);
+    adapter.setMode("cell-select");
+    expect(host.classList.contains("map-canvas-grab-target")).toBe(false);
+    adapter.dispose();
+    host.remove();
+  });
 });

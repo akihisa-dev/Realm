@@ -21,11 +21,9 @@ export const migrationInventory = [
     area: "storage",
     observable: "Schema versions 3 through 10 are rejected without mutation; schema 11 stores continuous grid-snapped map shapes.",
     baselineEvidence: [
-      "v3_migrates_to_v7_without_changing_existing_features",
-      "v4_migrates_to_v7_with_empty_asset_store",
-      "v5_migrates_to_v7_with_default_settings",
-      "v6_migrates_to_v7_preserving_settings_and_adding_canvas_defaults",
-      "v7_migrates_cell_layers_to_v8_and_preserves_terrain_undo_reopen",
+      "schema_11_creates_map_shapes_without_cell_attributes",
+      "schema_11_round_trips_polygon_geometry_and_shape_ids",
+      "legacy_schema_rejection_preserves_source_bytes",
     ],
     electronSuite: "migration-tests/electronStorage.test.ts :: rejects each synthetic v%d source without mutation",
   },
@@ -91,13 +89,10 @@ export const migrationInventory = [
   {
     id: "migration-rollback",
     area: "storage",
-    observable: "Legacy schema rejection preserves every source byte; current edits roll back transactionally.",
+    observable: "Legacy schema rejection preserves every source byte; current Polygon replacements roll back transactionally.",
     baselineEvidence: [
-      "failed_v3_migration_rolls_back_and_preserves_source_bytes",
-      "failed_v4_to_v7_migration_rolls_back_source",
-      "failed_v5_to_v7_migration_rolls_back_source",
-      "failed_v6_to_v8_late_stage_migration_rolls_back_source",
-      "failed_v7_to_v8_cell_migration_rolls_back_source",
+      "unsupported_schema_rejection_preserves_source_bytes",
+      "shape_replacement_rolls_back_when_sqlite_rejects_map_shapes",
     ],
     electronSuite: "migration-tests/storageParity.test.ts :: rejects a legacy v%d source and preserves source bytes",
   },
@@ -109,10 +104,10 @@ export const migrationInventory = [
       "static_feature_crud_reopen_and_undo_redo",
       "feature_batch_is_one_transaction_and_one_undo_step",
       "feature_edit_batch_rolls_back_when_storage_fails",
-      "static_cell_attributes_round_trip_and_undo",
+      "static_map_shapes_round_trip_and_undo",
       "embedded_asset_import_read_delete_and_undo_are_transactional",
     ],
-    electronSuite: "migration-tests/storageParity.test.ts :: rolls back feature, cell, and asset writes when SQLite rejects a transaction",
+    electronSuite: "migration-tests/storageParity.test.ts :: rolls back feature, Polygon-shape, and asset writes when SQLite rejects a transaction",
   },
   {
     id: "undo-redo",
@@ -120,7 +115,7 @@ export const migrationInventory = [
     observable: "Successful edits expose one undo step, restore persisted shapes, and can be redone after reopen.",
     baselineEvidence: [
       "static_feature_crud_reopen_and_undo_redo",
-      "v7_migrates_cell_layers_to_v8_and_preserves_terrain_undo_reopen",
+      "map_shape_replacement_undo_redo_and_reopen",
       "project_settings_replace_undo_redo_and_reopen",
       "save_name_is_transactional_and_undoable",
     ],
@@ -141,7 +136,7 @@ export const migrationInventory = [
   {
     id: "ui-terrain-gestures",
     area: "ui",
-    observable: "Paint/erase gestures update discrete cells, cancel safely, and do not delete legacy feature rows.",
+    observable: "Paint/erase gestures use transient cell selection, commit canonical Polygon rows, cancel safely, and do not delete legacy feature rows.",
     baselineEvidence: [
       "applies_terrain_to_selected_hex_cells",
       "edits_terrain_directly_on_the_canvas_while_hiding_legacy_objects",
@@ -153,7 +148,7 @@ export const migrationInventory = [
   {
     id: "ui-undo-selection",
     area: "ui",
-    observable: "Keyboard/click undo-redo and project selection reset the transient cell selection correctly.",
+    observable: "Keyboard/click undo-redo and project selection reset transient selections while restoring canonical shapes.",
     baselineEvidence: [
       "returns_and_reapplies_the_latest_terrain_edit",
       "keeps_terrain_and_eraser_keyboard_shortcuts_without_a_rail",

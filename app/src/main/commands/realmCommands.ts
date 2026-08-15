@@ -1,14 +1,13 @@
 import { readdirSync } from "node:fs";
 import { join, extname } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { RealmBackend, RealmSnapshot, ProjectSummary, CreateFeatureInput, CreateFeaturesBatchInput, ReviseFeaturesBatchInput, ReviseFeatureInput, DeleteFeaturesBatchInput, SetFeaturesLockedInput, ApplyCellAttributesInput, CellViewportInput, ProjectSettings, ImportAssetInput, ImportAssetsBatchInput, AssetRead, FeatureProperties, MoveRegionCellsInput, MapShape, ReplaceMapShapesInput, CellAttributeSnapshot } from "../../shared/realmContract";
+import type { RealmBackend, RealmSnapshot, ProjectSummary, CreateFeatureInput, CreateFeaturesBatchInput, ReviseFeaturesBatchInput, ReviseFeatureInput, DeleteFeaturesBatchInput, SetFeaturesLockedInput, ProjectSettings, ImportAssetInput, ImportAssetsBatchInput, AssetRead, FeatureProperties, MapShape, CreateMapShapesInput, UpdateMapShapesInput, DeleteMapShapesInput } from "../../shared/realmContract";
 import { RealmError, invalid } from "../domain/errors";
 import { validateName, validateGeometry, validateProperties } from "../domain/geometry";
 import { validateSettings } from "../domain/settings";
 import { MAX_ASSET_BYTES, sha256Hex, validateAsset } from "../domain/assets";
-import { cellAttributesSnapshot, projectSnapshot } from "../read-model/snapshot";
-import { cellId, normalizeCellIds, parseCellId, validateCellLayer, validateCellValue } from "../domain/cell";
-import { applyCellSelectionToMapShapes, mapShapeCellIds, moveRegionMapShapes, validateMapShapes } from "../../shared/mapShapeGeometry";
+import { projectSnapshot } from "../read-model/snapshot";
+import { validateMapShapes } from "../../shared/mapShapeGeometry";
 import { captureState } from "../edit/operations";
 import { transaction } from "../storage/schema";
 import { copyBytesAtomic, copySqliteSnapshot } from "../storage/atomic";
@@ -37,15 +36,11 @@ export type RealmCommandsOptions = { libraryDirectory: string };
 
 export class RealmCommands implements RealmBackend {
   readonly libraryDirectory: string; private readonly libraryIdentity: LibraryDirectoryIdentity; private session: OpenProjectSession | null = null;
-  /** Only non-canonical legacy paint layers use this renderer-local read model. */
-  private readonly transientCellAttributes = new Map<string, CellAttributeSnapshot[]>();
   constructor(options: RealmCommandsOptions) { this.libraryIdentity = validateLibraryDirectory(options.libraryDirectory); this.libraryDirectory = this.libraryIdentity.path; }
   private assertLibrary(): void { assertLibraryDirectory(this.libraryIdentity); }
   private current(): OpenProjectSession { this.assertLibrary(); if (!this.session) throw new RealmError("no_open_project", "No project is open."); return this.session; }
   private setSession(session: OpenProjectSession): RealmSnapshot {
-    const previousPath = this.session?.path;
     this.session?.close();
-    if (previousPath) this.transientCellAttributes.delete(previousPath);
     this.session = session;
     return projectSnapshot(session);
   }
@@ -126,70 +121,47 @@ export class RealmCommands implements RealmBackend {
   }
   async deleteAsset(input: { id: string }): Promise<RealmSnapshot> { return this.deleteAssetsBatch({ ids: [input.id] }); }
   async deleteAssetsBatch(input: { ids: string[] }): Promise<RealmSnapshot> { assertRecord(input); if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > MAX_ASSET_BATCH) throw invalid("The asset batch is invalid."); const ids = input.ids.map(canonicalAssetId); if (new Set(ids).size !== ids.length) throw invalid("An asset batch cannot contain duplicate identifiers."); const session = this.current(); const rows = ids.map((id) => session.database.prepare("SELECT id FROM assets WHERE id=?").get(id)); if (rows.some((row) => !row)) throw new RealmError("not_found", "The asset was not found."); const features = session.database.prepare("SELECT properties_json AS propertiesJson FROM features").all() as Record<string, unknown>[]; try { if (ids.some((id) => features.some((row) => containsAsset(JSON.parse(String(row.propertiesJson)), id)))) throw new RealmError("asset_in_use", "The asset is still referenced by a feature."); } catch (error) { if (error instanceof RealmError) throw error; throw new RealmError("corrupt_project", "A feature contains invalid properties."); } const before = captureState(session.database); transaction(session.database, () => { const statement = session.database.prepare("DELETE FROM assets WHERE id=?"); for (const id of ids) statement.run(id); }); session.checkpoint(before, "delete-assets"); return projectSnapshot(session); }
-  async replaceMapShapes(input: ReplaceMapShapesInput): Promise<RealmSnapshot> {
-    assertRecord(input);
-    if (!Array.isArray(input.shapes)) throw invalid("The map shape batch is invalid.");
-    try { validateMapShapes(input.shapes); } catch { throw invalid("The map shape geometry is invalid or overlaps another shape."); }
+  private persistMapShapes(shapes: readonly MapShape[], label: string): RealmSnapshot {
+    try { validateMapShapes(shapes); } catch { throw invalid("The map shape geometry is invalid or overlaps another shape."); }
     const session = this.current();
     const before = captureState(session.database);
     transaction(session.database, () => {
       session.database.exec("DELETE FROM map_shapes");
       const statement = session.database.prepare("INSERT INTO map_shapes(id,layer,region_id,value,geometry_version,snap_grid_version,geometry_json) VALUES (?,?,?,?,?,?,?)");
-      for (const shape of input.shapes) statement.run(shape.id, shape.layer, shape.regionId ?? null, shape.value, shape.geometryVersion, shape.snapGridVersion, JSON.stringify(shape.geometry));
+      for (const shape of shapes) statement.run(shape.id, shape.layer, shape.regionId ?? null, shape.value, shape.geometryVersion, shape.snapGridVersion, JSON.stringify(shape.geometry));
     });
-    session.checkpoint(before, "map-shapes");
+    session.checkpoint(before, label);
     return projectSnapshot(session);
   }
 
-  async applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot> {
-    assertRecord(input); validateCellLayer(input.attribute); const value = validateCellValue(input.value);
-    if (input.clearRegion !== undefined && typeof input.clearRegion !== "boolean") throw invalid("The region clearing option is invalid.");
-    if (input.clearRegion === true && (input.attribute !== "terrain" || value !== null)) throw invalid("The region clearing option is invalid.");
-    if (input.regionId !== undefined && (input.attribute !== "region" || value === null)) throw invalid("The region identifier is invalid.");
-    const cells = normalizeCellIds(input.cellIds).map(([x, y]) => cellId(x, y));
-    if (input.attribute !== "terrain" && input.attribute !== "region") {
-      const path = this.current().path;
-      const existing = this.transientCellAttributes.get(path) ?? [];
-      const selected = new Set(cells);
-      const remaining = existing.filter((item) => !(item.attribute === input.attribute && selected.has(item.cellId)));
-      if (value !== null) remaining.push(...cells.map((cell) => ({ cellId: cell, attribute: input.attribute, value })));
-      this.transientCellAttributes.set(path, remaining);
-      return projectSnapshot(this.current());
-    }
-    const regionId = input.attribute === "region" && value !== null ? canonicalUuid(input.regionId ?? randomUUID(), "region") : undefined;
-    const current = projectSnapshot(this.current()).mapShapes;
-    const next = applyCellSelectionToMapShapes(current, { cellIds: cells, layer: input.attribute, value, ...(regionId ? { regionId } : {}), ...(input.clearRegion ? { clearRegion: true } : {}) });
-    return this.replaceMapShapes({ shapes: next });
-  }
-  async moveRegionCells(input: MoveRegionCellsInput): Promise<RealmSnapshot> {
+  async createMapShapes(input: CreateMapShapesInput): Promise<RealmSnapshot> {
     assertRecord(input);
-    if (!Array.isArray(input.sourceCellIds) || !Array.isArray(input.targetCellIds) || input.sourceCellIds.length === 0 || input.sourceCellIds.length !== input.targetCellIds.length || input.sourceCellIds.length > 200_000) throw invalid("The region move is invalid.");
-    const source = input.sourceCellIds.map((id) => { if (typeof id !== "string") throw invalid("The region move is invalid."); const [x, y] = parseCellId(id); return cellId(x, y); });
-    const target = input.targetCellIds.map((id) => { if (typeof id !== "string") throw invalid("The region move is invalid."); const [x, y] = parseCellId(id); return cellId(x, y); });
-    if (new Set(source).size !== source.length || new Set(target).size !== target.length) throw invalid("The region move is invalid.");
-    const session = this.current();
-    const current = projectSnapshot(session).mapShapes;
-    const regionId = current.find((shape) => shape.layer === "region" && mapShapeCellIds(shape).has(source[0]!))?.regionId;
-    if (!regionId) throw new RealmError("not_found", "The region to move was not found.");
-    let next: MapShape[];
-    try { next = moveRegionMapShapes(current, regionId, source, target); } catch (error) { throw invalid(error instanceof Error ? error.message : "The region move is invalid."); }
-    return this.replaceMapShapes({ shapes: next });
+    if (!Array.isArray(input.shapes)) throw invalid("The map shape batch is invalid.");
+    const current = projectSnapshot(this.current()).mapShapes;
+    const ids = new Set(current.map((shape) => shape.id));
+    if (input.shapes.some((shape) => ids.has(shape.id))) throw invalid("A map shape identifier already exists.");
+    return this.persistMapShapes([...current, ...input.shapes], "map-shapes-create");
   }
-  async viewCellAttributes(input: CellViewportInput): Promise<ReturnType<typeof cellAttributesSnapshot>> {
-    const path = this.current().path;
-    const transient = this.transientCellAttributes.get(path) ?? [];
-    const derived = cellAttributesSnapshot(this.current(), input);
-    return [...derived, ...transient].filter((row) => {
-      const [x = -1, y = -1] = row.cellId.split(":").map(Number);
-      return x >= (input.minX ?? 0) && x <= (input.maxX ?? 127) && y >= (input.minY ?? 0) && y <= (input.maxY ?? 72);
-    });
+
+  async updateMapShapes(input: UpdateMapShapesInput): Promise<RealmSnapshot> {
+    assertRecord(input);
+    if (!Array.isArray(input.shapes)) throw invalid("The map shape batch is invalid.");
+    return this.persistMapShapes(input.shapes, "map-shapes-update");
+  }
+
+  async deleteMapShapes(input: DeleteMapShapesInput): Promise<RealmSnapshot> {
+    assertRecord(input);
+    if (!Array.isArray(input.ids) || input.ids.length === 0 || input.ids.length > 4096 || input.ids.some((id) => typeof id !== "string")) throw invalid("The map shape identifier batch is invalid.");
+    const ids = input.ids.map((id) => canonicalUuid(id, "map shape"));
+    if (new Set(ids).size !== ids.length) throw invalid("The map shape identifiers must be unique.");
+    const current = projectSnapshot(this.current()).mapShapes;
+    if (ids.some((id) => !current.some((shape) => shape.id === id))) throw new RealmError("not_found", "The map shape was not found.");
+    return this.persistMapShapes(current.filter((shape) => !ids.includes(shape.id)), "map-shapes-delete");
   }
   async undoProject(): Promise<RealmSnapshot> { const session = this.current(); session.undo(); return projectSnapshot(session); }
   async redoProject(): Promise<RealmSnapshot> { const session = this.current(); session.redo(); return projectSnapshot(session); }
   async closeProject(): Promise<void> {
-    const path = this.session?.path;
     this.session?.close();
-    if (path) this.transientCellAttributes.delete(path);
     this.session = null;
   }
   async getOpenProject(): Promise<RealmSnapshot | null> { return this.session ? projectSnapshot(this.session) : null; }

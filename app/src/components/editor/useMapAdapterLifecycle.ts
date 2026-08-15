@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MapShape, MoveRegionCellsInput, RealmFeature } from "../../backend";
+import type { CellAttributeSnapshot, GeoJsonGeometry, MapShape, MapShapeEdit, RealmFeature } from "../../backend";
 import type { MapRaster } from "../../exportArtifacts";
 import type { ExportCanvasSize } from "../../map/contracts";
 import type {
@@ -41,9 +41,7 @@ export type MapAdapterLifecycleOptions = {
   onSelect: ((featureId: string | null) => void) | undefined;
   onSelectFeatures: ((featureIds: readonly string[]) => void) | undefined;
   onCellSelect: ((cellIds: readonly string[]) => void) | undefined;
-  onRegionMove: ((input: MoveRegionCellsInput) => void) | undefined;
-  onRegionShape: ((input: ApplyCellAttributesInput) => void) | undefined;
-  onCellResize: ((input: ApplyCellAttributesInput) => void) | undefined;
+  onMapShapeEdit: ((edit: MapShapeEdit) => void) | undefined;
   onModify: ((featureId: string, geometry: GeoJsonGeometry) => void) | undefined;
   onModifyFeatures: ((changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void) | undefined;
   onErase: ((featureId: string) => void) | undefined;
@@ -84,9 +82,7 @@ export function useMapAdapterLifecycle({
   onSelect,
   onSelectFeatures,
   onCellSelect,
-  onRegionMove,
-  onRegionShape,
-  onCellResize,
+  onMapShapeEdit,
   onModify,
   onModifyFeatures,
   onErase,
@@ -100,9 +96,7 @@ export function useMapAdapterLifecycle({
   const onSelectRef = useRef(onSelect);
   const onSelectFeaturesRef = useRef(onSelectFeatures);
   const onCellSelectRef = useRef(onCellSelect);
-  const onRegionMoveRef = useRef(onRegionMove);
-  const onRegionShapeRef = useRef(onRegionShape);
-  const onCellResizeRef = useRef(onCellResize);
+  const onMapShapeEditRef = useRef(onMapShapeEdit);
   const onModifyRef = useRef(onModify);
   const onModifyFeaturesRef = useRef(onModifyFeatures);
   const onEraseRef = useRef(onErase);
@@ -116,9 +110,7 @@ export function useMapAdapterLifecycle({
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
   useEffect(() => { onSelectFeaturesRef.current = onSelectFeatures; }, [onSelectFeatures]);
   useEffect(() => { onCellSelectRef.current = onCellSelect; }, [onCellSelect]);
-  useEffect(() => { onRegionMoveRef.current = onRegionMove; }, [onRegionMove]);
-  useEffect(() => { onRegionShapeRef.current = onRegionShape; }, [onRegionShape]);
-  useEffect(() => { onCellResizeRef.current = onCellResize; }, [onCellResize]);
+  useEffect(() => { onMapShapeEditRef.current = onMapShapeEdit; }, [onMapShapeEdit]);
   useEffect(() => { onModifyRef.current = onModify; }, [onModify]);
   useEffect(() => { onModifyFeaturesRef.current = onModifyFeatures; }, [onModifyFeatures]);
   useEffect(() => { onEraseRef.current = onErase; }, [onErase]);
@@ -141,9 +133,7 @@ export function useMapAdapterLifecycle({
       onSelectRef.current?.(featureIds[0] ?? null);
     });
     const stopCellSelectListener = adapter.onCellSelect((cellIds) => onCellSelectRef.current?.(cellIds));
-    const stopRegionMoveListener = adapter.onRegionMove?.((input) => onRegionMoveRef.current?.(input)) ?? (() => undefined);
-    const stopRegionShapeListener = adapter.onRegionShape?.((input) => onRegionShapeRef.current?.(input)) ?? (() => undefined);
-    const stopCellResizeListener = adapter.onCellResize?.((input) => onCellResizeRef.current?.(input)) ?? (() => undefined);
+    const stopMapShapeEditListener = adapter.onMapShapeEdit?.((edit) => onMapShapeEditRef.current?.(edit)) ?? (() => undefined);
     const stopModifyListener = adapter.onModifyFeatures((changes) => {
       onModifyFeaturesRef.current?.(changes);
       if (!onModifyFeaturesRef.current) for (const { id, geometry } of changes) onModifyRef.current?.(id, geometry);
@@ -182,9 +172,7 @@ export function useMapAdapterLifecycle({
       stopDrawListener();
       stopSelectListener();
       stopCellSelectListener();
-      stopRegionMoveListener();
-      stopRegionShapeListener();
-      stopCellResizeListener();
+      stopMapShapeEditListener();
       stopModifyListener();
       stopEraseListener();
       stopLayerShiftListener();

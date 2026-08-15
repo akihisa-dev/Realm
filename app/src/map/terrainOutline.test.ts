@@ -81,7 +81,7 @@ describe("terrainOutlineSegments", () => {
     expect(smoothCellBoundaryPolygons(ids)).toHaveLength(2);
   });
 
-  it("handles the complete active grid as one bounded smooth mass", () => {
+  it("handles the complete active grid as one bounded transient outline", () => {
     const ids: string[] = [];
     for (let row = 0; row < 73; row += 1) {
       for (let column = 0; column < 128; column += 1) ids.push(cellId(row, column));

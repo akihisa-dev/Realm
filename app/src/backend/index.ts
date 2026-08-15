@@ -4,17 +4,16 @@ import { localizedErrorMessage } from "../locales/ja";
 import type { ArtifactFormat, ElectronRealmApi, TransferPathMode } from "../shared/realmContract";
 
 export type {
-  ApplyCellAttributesInput,
+  CreateMapShapesInput,
+  DeleteMapShapesInput,
   MapShape,
   MapShapeGeometry,
+  MapShapeEdit,
   MapShapeLayer,
-  ReplaceMapShapesInput,
-  MoveRegionCellsInput,
+  UpdateMapShapesInput,
   AssetManifest,
   AssetRead,
-  CellAttribute,
   CellAttributeSnapshot,
-  CellViewportInput,
   CreateFeatureInput,
   CreateFeaturesBatchInput,
   DeleteFeaturesBatchInput,

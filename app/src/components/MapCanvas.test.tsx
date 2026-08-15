@@ -342,10 +342,14 @@ describe("MapCanvas", () => {
     expect(renderer.setThemeOverrides).toHaveBeenLastCalledWith({ land: "#aabbcc" });
 
     rerender(<MapCanvas mode="cell-select" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。端の大きさを変えるときはグラブに切り替えます。Escapeで選択を取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("六角グリッドを一時的な選択範囲として押したままなぞります。選択結果はPolygonへ変換して1回で保存します。ホイールを押したままドラッグすると地図を移動できます。Escapeで選択を取り消せます。")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-mode-cell-select");
     expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
+
+    rerender(<MapCanvas mode="grab" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
+    expect(screen.getByText("地形または領域の正確なPolygonの辺・頂点をつまみ、連続的に広げたり狭めたりできます。図形の内側をつまむと領域全体を移動します。グリッドへの吸着は離したときに行い、pointermove中は保存しません。pointercancel、Escape、フォーカス喪失で取り消せます。"))
+      .toBeInTheDocument();
 
     rerender(<MapCanvas mode="cell-erase" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("六角セルを押したままなぞって地形または領域を消去します。消しゴムの調整で削除対象を切り替えられます。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。")).toBeInTheDocument();
@@ -362,7 +366,7 @@ describe("MapCanvas", () => {
 
     rerender(<MapCanvas mode="cell-select" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setDrawingOptions).toHaveBeenLastCalledWith({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
-    expect(screen.getByText("六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。端の大きさを変えるときはグラブに切り替えます。Escapeで選択を取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("六角グリッドを一時的な選択範囲として押したままなぞります。選択結果はPolygonへ変換して1回で保存します。ホイールを押したままドラッグすると地図を移動できます。Escapeで選択を取り消せます。")).toBeInTheDocument();
 
     rerender(<MapCanvas mode="pan" disabled zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。")).toBeInTheDocument();

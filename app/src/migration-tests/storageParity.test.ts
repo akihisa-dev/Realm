@@ -25,6 +25,8 @@ import { RealmCommands } from "../main/commands/realmCommands";
 import { copySqliteSnapshot } from "../main/storage/atomic";
 import { preflightExistingProject, sameIdentity, sourceIdentity } from "../main/storage/path";
 import { openProject, openProjectAfterValidationForTest, createProject as createStoredProject } from "../main/storage/project";
+import { cellIdsToPolygonGeometries } from "../shared/mapShapeGeometry";
+import type { MapShape } from "../shared/realmContract";
 
 const directories: string[] = [];
 const fixtureDirectory = (): string => {
@@ -40,6 +42,7 @@ afterEach(() => {
 const point = { type: "Point" as const, coordinates: [1, 2] as [number, number] };
 const png = [137, 80, 78, 71, 13, 10, 26, 10, 0, 1, 2];
 const featureInput = { featureType: "city" as const, name: "Synthetic city", geometry: point, properties: { source: "parity" } };
+const terrainShape = (cells: string[], id = "11111111-1111-4111-8111-111111111111"): MapShape => ({ id, layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: cellIdsToPolygonGeometries(cells)[0]! });
 
 function privateSnapshots(directory: string): string[] {
   return readdirSync(directory).filter((name) => name.startsWith(".realm-source-") || name.includes("parity"));
@@ -272,7 +275,7 @@ describe("Electron storage parity: path, snapshots, migrations and transfer", ()
 });
 
 describe("Electron storage parity: transactional CRUD and session history", () => {
-  it("rolls back feature, cell, and asset writes when SQLite rejects a transaction", async () => {
+  it("rolls back feature, Polygon-shape, and asset writes when SQLite rejects a transaction", async () => {
     const directory = fixtureDirectory();
     const commands = new RealmCommands({ libraryDirectory: directory });
     const initial = await commands.createProject({ name: "Rollback" });
@@ -287,8 +290,8 @@ describe("Electron storage parity: transactional CRUD and session history", () =
     let check = new DatabaseSync(path, { readOnly: true }); expect(Number((check.prepare("SELECT COUNT(*) AS count FROM features").get() as Record<string, unknown>).count)).toBe(0); check.close();
     drop("reject_feature");
     reject("reject_shape", "map_shapes");
-    await expect(commands.applyCellAttributes({ cellIds: ["1:1", "2:2"], attribute: "terrain", value: "land" })).rejects.toThrow();
-    expect(await commands.viewCellAttributes({})).toEqual([]);
+    await expect(commands.updateMapShapes({ shapes: [terrainShape(["1:1", "2:2"])] })).rejects.toThrow();
+    expect((await commands.getOpenProject())?.mapShapes).toEqual([]);
     drop("reject_shape");
     reject("reject_asset", "assets");
     await expect(commands.importAsset({ mime: "image/png", bytes: png, width: 1, height: 1, metadata: {} })).rejects.toThrow();
@@ -307,10 +310,11 @@ describe("Electron storage parity: transactional CRUD and session history", () =
     expect(snapshot.canUndo).toBe(true);
     snapshot = await commands.undoProject(); expect(snapshot.world.name).toBe("History"); expect(snapshot.canRedo).toBe(true);
     snapshot = await commands.redoProject(); expect(snapshot.world.name).toBe("Renamed");
-    snapshot = await commands.applyCellAttributes({ cellIds: ["1:1"], attribute: "terrain", value: "land" });
+    const shape = terrainShape(["1:1"]);
+    snapshot = await commands.updateMapShapes({ shapes: [shape] });
     expect(snapshot.canUndo).toBe(true);
-    snapshot = await commands.undoProject(); expect(await commands.viewCellAttributes({})).toEqual([]);
-    snapshot = await commands.redoProject(); expect((await commands.viewCellAttributes({}))[0]?.value).toBe("terrain");
+    snapshot = await commands.undoProject(); expect(snapshot.mapShapes).toEqual([]);
+    snapshot = await commands.redoProject(); expect(snapshot.mapShapes[0]?.value).toBe("terrain");
     snapshot = await commands.importAsset({ mime: "image/png", bytes: png, width: 1, height: 1, metadata: { role: "history" } });
     expect(snapshot.assets).toHaveLength(1);
     snapshot = await commands.undoProject(); expect(snapshot.assets).toHaveLength(0);
@@ -318,7 +322,7 @@ describe("Electron storage parity: transactional CRUD and session history", () =
     await commands.closeProject();
     const reopened = await commands.openProject({ libraryId: basename(path, ".realmmap") });
     expect(reopened.featureCount).toBe(1);
-    expect((await commands.viewCellAttributes({}))[0]?.value).toBe("terrain");
+    expect((await commands.getOpenProject())?.mapShapes[0]?.value).toBe("terrain");
     expect(reopened.assets).toHaveLength(1);
     expect(reopened.canUndo).toBe(false);
     await commands.closeProject();

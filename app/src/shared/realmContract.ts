@@ -3,7 +3,6 @@
 
 export type FeatureType = "terrain" | "forest" | "river" | "coastline" | "country" | "region" | "boundary" | "city" | "town"
   | "road" | "lake" | "mountain" | "tree" | "symbol" | "label" | "overlay" | "frame" | "scale";
-export type CellAttribute = "terrain" | "forest" | "country" | "region";
 export type FeatureProperties = Record<string, unknown>;
 export type Position = [number, number];
 export type GeoJsonGeometry =
@@ -24,7 +23,11 @@ export type MapShape = {
   snapGridVersion: number;
   geometry: MapShapeGeometry;
 };
-export type ReplaceMapShapesInput = { shapes: MapShape[] };
+export type CreateMapShapesInput = { shapes: MapShape[] };
+export type UpdateMapShapesInput = { shapes: MapShape[] };
+export type DeleteMapShapesInput = { ids: string[] };
+/** A renderer-only preview/commit payload. It never crosses the storage boundary. */
+export type MapShapeEdit = { shapes: MapShape[] };
 
 export type ProjectSettings = {
   themeId: "ink" | "atlas" | "midnight";
@@ -46,10 +49,8 @@ export type ImportAssetInput = { sha256?: string; mime: string; bytes: number[];
 export type ImportAssetsBatchInput = { packName: string; assets: ImportAssetInput[] };
 export type DeleteAssetsBatchInput = { ids: string[] };
 export type ProjectSummary = { libraryId: string; name: string };
-export type CellAttributeSnapshot = { cellId: string; attribute: CellAttribute; value: string; regionId?: string };
-export type ApplyCellAttributesInput = { cellIds: string[]; attribute: CellAttribute; value: string | null; regionId?: string; clearRegion?: boolean };
-export type MoveRegionCellsInput = { sourceCellIds: string[]; targetCellIds: string[] };
-export type CellViewportInput = { minX?: number; maxX?: number; minY?: number; maxY?: number };
+/** Renderer-only cell projection; these values are never stored or sent over IPC. */
+export type CellAttributeSnapshot = { cellId: string; attribute: MapShapeLayer; value: string; regionId?: string };
 export type RealmSnapshot = { formatVersion: number; path: string; world: World; features: RealmFeature[]; mapShapes: MapShape[]; assets: AssetManifest[]; settings: ProjectSettings; featureCount: number; canUndo: boolean; canRedo: boolean };
 export type SaveProjectInput = { name: string };
 export type CreateFeatureInput = { featureType: FeatureType; name: string; geometry: GeoJsonGeometry; properties?: FeatureProperties };
@@ -82,10 +83,9 @@ export interface RealmBackend {
   deleteFeature(input: { id: string }): Promise<RealmSnapshot>;
   undoProject(): Promise<RealmSnapshot>;
   redoProject(): Promise<RealmSnapshot>;
-  replaceMapShapes(input: ReplaceMapShapesInput): Promise<RealmSnapshot>;
-  applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot>;
-  moveRegionCells(input: MoveRegionCellsInput): Promise<RealmSnapshot>;
-  viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]>;
+  createMapShapes(input: CreateMapShapesInput): Promise<RealmSnapshot>;
+  updateMapShapes(input: UpdateMapShapesInput): Promise<RealmSnapshot>;
+  deleteMapShapes(input: DeleteMapShapesInput): Promise<RealmSnapshot>;
   closeProject(): Promise<void>;
   getOpenProject(): Promise<RealmSnapshot | null>;
 }

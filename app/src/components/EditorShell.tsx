@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { errorMessage, type ApplyCellAttributesInput, type CellAttributeSnapshot, type MapShape, type MoveRegionCellsInput, type RealmBackend, type RealmSnapshot } from "../backend";
+import { errorMessage, type CellAttributeSnapshot, type MapShape, type MapShapeEdit, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { DEFAULT_ERASE_TARGET, eraseTargetDefinition, type EraseTarget } from "./editor/eraseTargets";
 import { ObjectManager } from "./editor/ObjectManager";
 import { deriveRegionObjects, type RegionComponent, type RegionObject } from "./editor/regionObjects";
 import { mapErrorMessage } from "../locales/ja";
+import { applyGridSelectionToMapShapes, cellIdsToPolygonGeometries, mapShapeCellIds, deriveMapGridCells, normalizeMapShapes } from "../shared/mapShapeGeometry";
 
 type Tool = "terrain" | "region" | "erase" | "grab" | "shape";
 
@@ -23,7 +24,6 @@ const enqueueSerial = <T,>(tail: { current: Promise<void> }, action: () => Promi
 
 type RunOptions = {
   recover?: (identity: string) => Promise<void>;
-  refreshOnSuccess?: boolean;
   isCurrent?: () => boolean;
 };
 
@@ -31,7 +31,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
   const [activeTool, setActiveTool] = useState<Tool>("terrain");
   const [regionColor, setRegionColor] = useState("#7A6FA8");
-  const [cellAttributes, setCellAttributes] = useState<CellAttributeSnapshot[]>([]);
   const [mapShapes, setMapShapes] = useState<MapShape[]>(snapshot.mapShapes ?? []);
   const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
   const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
@@ -46,9 +45,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const viewedIdentity = useRef(`${snapshot.path}:${snapshot.world.id}`);
   const mounted = useRef(true);
   const commandTail = useRef<Promise<void>>(Promise.resolve());
-  const cellRequest = useRef(0);
-  const cellMutation = useRef(0);
   const projectIdentity = `${snapshot.path}:${snapshot.world.id}`;
+  const cellAttributes = useMemo(() => deriveMapGridCells(mapShapes) as CellAttributeSnapshot[], [mapShapes]);
   const regionObjects = useMemo(() => deriveRegionObjects(cellAttributes), [cellAttributes]);
 
   useEffect(() => {
@@ -61,8 +59,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     viewedIdentity.current = projectIdentity;
     setViewedSnapshot(snapshot);
     if (identityChanged) {
-      cellRequest.current += 1;
-      setCellAttributes([]);
       setMapShapes(snapshot.mapShapes ?? []);
       setSelectedCellIds([]);
       setSelectedRegionIds([]);
@@ -93,26 +89,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     eraseTargetRef.current = target;
   };
 
-  const refreshCellAttributes = async (identity: string): Promise<void> => {
-    const request = ++cellRequest.current;
-    const mutation = cellMutation.current;
-    try {
-      const attributes = await backend.viewCellAttributes({});
-      const openSnapshot = await backend.getOpenProject();
-      const terrainAndRegions = attributes.filter((attribute) => attribute.attribute === "terrain" || attribute.attribute === "region");
-      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request && cellMutation.current === mutation) {
-        setCellAttributes(terrainAndRegions);
-        if (openSnapshot) setMapShapes(openSnapshot.mapShapes ?? []);
-      }
-    } catch (cause) {
-      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request && cellMutation.current === mutation) setError(errorMessage(cause, "セル属性を読み込めませんでした。"));
-    }
-  };
-
-  useEffect(() => {
-    void refreshCellAttributes(projectIdentity);
-  }, [backend, projectIdentity]);
-
   useEffect(() => {
     if (locked) setSelectedCellIds([]);
   }, [activeTool, locked]);
@@ -129,7 +105,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         setViewedSnapshot(next);
         setMapShapes(next.mapShapes ?? []);
         onSaved(next);
-        if (options.refreshOnSuccess !== false) await refreshCellAttributes(identity);
         if (!options.isCurrent || options.isCurrent()) setSelectedCellIds([]);
       } catch (cause) {
         if (mounted.current && viewedIdentity.current === identity) {
@@ -142,23 +117,27 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     });
   };
 
-  const updateOptimisticCellAttributes = (cellIds: readonly string[], attribute: "terrain" | "region", value: string | null, regionId?: string, clearRegion = false): void => {
-    // Invalidate an in-flight read before publishing the optimistic state. Its
-    // old read result must not overwrite a newer paint operation.
-    ++cellRequest.current;
-    const selected = new Set(cellIds);
-    setCellAttributes((current) => {
-      const byCell = new Map(current.map((item) => [`${item.cellId}:${item.attribute}`, item]));
-      if (value === null) {
-        for (const cellId of selected) {
-          byCell.delete(`${cellId}:${attribute}`);
-          if (clearRegion) byCell.delete(`${cellId}:region`);
-        }
-      } else {
-        for (const cellId of selected) byCell.set(`${cellId}:${attribute}`, { cellId, attribute, value, ...(attribute === "region" && regionId ? { regionId } : {}) });
-      }
-      return [...byCell.values()];
-    });
+  const recoverMapShapes = async (identity: string): Promise<void> => {
+    const openSnapshot = await backend.getOpenProject();
+    if (mounted.current && viewedIdentity.current === identity && openSnapshot) setMapShapes(openSnapshot.mapShapes ?? []);
+  };
+
+  const commitMapShapes = (next: readonly MapShape[], fallback: string): void => {
+    if (locked) return;
+    let shapes: MapShape[];
+    try {
+      const copied = next.map((shape) => ({ ...shape, geometry: { type: "Polygon" as const, coordinates: shape.geometry.coordinates.map((ring) => ring.map(([x, y]) => [x, y] as [number, number])) } }));
+      shapes = normalizeMapShapes(copied);
+    } catch {
+      setError(fallback);
+      return;
+    }
+    setMapShapes(shapes);
+    void run(
+      () => backend.updateMapShapes({ shapes }),
+      fallback,
+      { recover: async (identity) => recoverMapShapes(identity) },
+    );
   };
 
   const selectRegionObject = (region: RegionObject): void => {
@@ -229,64 +208,12 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       : undefined;
     const regionId = tool === "region" ? targetRegion?.persistentId ?? crypto.randomUUID() : undefined;
     const clearRegion = tool === "erase" && attribute === "terrain";
-    const mutation = ++cellMutation.current;
-    updateOptimisticCellAttributes(nextIds, attribute, value, regionId, clearRegion);
-    // Completed strokes are represented immediately by the optimistic terrain
-    // outline. Keep controlled selection empty so only pointer hover can show
-    // a transient fill after commit.
+    const next = applyGridSelectionToMapShapes(mapShapes, { cellIds: nextIds, layer: attribute, value, ...(regionId ? { regionId } : {}), ...(clearRegion ? { clearRegion: true } : {}) });
     setSelectedCellIds([]);
-    const input: ApplyCellAttributesInput = { cellIds: nextIds, attribute, value, ...(regionId ? { regionId } : {}), ...(clearRegion ? { clearRegion: true } : {}) };
-    void run(
-      () => backend.applyCellAttributes(input),
-      attribute === "region" ? "セルの領域属性を更新できませんでした。" : "セルの地形属性を更新できませんでした。",
-      {
-        recover: async (identity) => {
-          if (cellMutation.current === mutation) await refreshCellAttributes(identity);
-        },
-        refreshOnSuccess: false,
-        isCurrent: () => cellMutation.current === mutation,
-      },
-    );
+    commitMapShapes(next, attribute === "region" ? "セル選択から領域を更新できませんでした。" : "セル選択から地形を更新できませんでした。");
   };
-  const moveRegion = (input: MoveRegionCellsInput): void => {
-    if (locked) return;
-    void run(() => backend.moveRegionCells(input), "領域を移動できませんでした。", { recover: async (identity) => refreshCellAttributes(identity) });
-  };
-  const resizeCells = (input: ApplyCellAttributesInput): void => {
-    if (locked || (input.attribute !== "terrain" && input.attribute !== "region")) return;
-    const mutation = ++cellMutation.current;
-    updateOptimisticCellAttributes(input.cellIds, input.attribute, input.value, input.regionId);
-    void run(
-      () => backend.applyCellAttributes(input),
-      input.attribute === "terrain" ? "地形の端を変更できませんでした。" : "領域の端を変更できませんでした。",
-      {
-        recover: async (identity) => {
-          if (cellMutation.current === mutation) await refreshCellAttributes(identity);
-        },
-        refreshOnSuccess: false,
-        isCurrent: () => cellMutation.current === mutation,
-      },
-    );
-  };
-
-  const shapeRegion = (input: ApplyCellAttributesInput): void => {
-    if (locked || input.attribute !== "region" || input.value !== null) return;
-    const cellIds = [...new Set(input.cellIds)];
-    if (cellIds.length === 0) return;
-    const mutation = ++cellMutation.current;
-    updateOptimisticCellAttributes(cellIds, "region", null);
-    setSelectedCellIds([]);
-    void run(
-      () => backend.applyCellAttributes({ cellIds, attribute: "region", value: null }),
-      "領域をシェイピングできませんでした。",
-      {
-        recover: async (identity) => {
-          if (cellMutation.current === mutation) await refreshCellAttributes(identity);
-        },
-        refreshOnSuccess: false,
-        isCurrent: () => cellMutation.current === mutation,
-      },
-    );
+  const commitShapeEdit = (edit: MapShapeEdit): void => {
+    commitMapShapes(edit.shapes, activeToolRef.current === "shape" ? "領域を地形に合わせられませんでした。" : "図形を更新できませんでした。");
   };
 
   const mergeRegions = (): void => {
@@ -298,47 +225,45 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       setError("旧形式の領域は、先に新しい領域として描き直してください。");
       return;
     }
-    const cellIds = [...new Set(regions.flatMap((region) => region.cellIds))];
-    const mutation = ++cellMutation.current;
-    updateOptimisticCellAttributes(cellIds, "region", target.color, target.persistentId);
+    const selectedIds = new Set(regions.map((region) => region.persistentId).filter((id): id is string => id !== null));
+    const next = mapShapes.map((shape) => shape.layer === "region" && shape.regionId && selectedIds.has(shape.regionId)
+      ? { ...shape, regionId: target.persistentId!, value: target.color }
+      : shape);
     setSelectedRegionIds([target.id]);
     setSelectedComponentId(null);
     setRegionPaintTargetId(target.id);
     setRegionColor(target.color);
     setSelectedCellIds([]);
-    void run(
-      () => backend.applyCellAttributes({ cellIds, attribute: "region", value: target.color, regionId: target.persistentId! }),
-      "領域を統合できませんでした。",
-      {
-        recover: async (identity) => {
-          if (cellMutation.current === mutation) await refreshCellAttributes(identity);
-        },
-        refreshOnSuccess: false,
-        isCurrent: () => cellMutation.current === mutation,
-      },
-    );
+    commitMapShapes(next, "領域を統合できませんでした。");
   };
 
   const splitRegionComponent = (region: RegionObject, component: RegionComponent): void => {
     if (!region.persistentId || region.components.length < 2) return;
     const newRegionId = crypto.randomUUID();
-    const mutation = ++cellMutation.current;
-    updateOptimisticCellAttributes(component.cellIds, "region", region.color, newRegionId);
+    const componentCells = new Set(component.cellIds);
+    const next: MapShape[] = [];
+    for (const shape of mapShapes) {
+      if (shape.layer !== "region" || shape.regionId !== region.persistentId) {
+        next.push(shape);
+        continue;
+      }
+      const ownCells = mapShapeCellIds(shape);
+      const inside = new Set([...ownCells].filter((cell) => componentCells.has(cell)));
+      const outside = new Set([...ownCells].filter((cell) => !componentCells.has(cell)));
+      if (inside.size === 0) {
+        next.push(shape);
+        continue;
+      }
+      const outsideGeometry = cellIdsToPolygonGeometries(outside);
+      outsideGeometry.forEach((geometry, index) => next.push({ ...shape, id: index === 0 ? shape.id : crypto.randomUUID(), geometry }));
+      const insideGeometry = cellIdsToPolygonGeometries(inside);
+      insideGeometry.forEach((geometry, index) => next.push({ ...shape, id: outsideGeometry.length === 0 && index === 0 ? shape.id : crypto.randomUUID(), regionId: newRegionId, geometry }));
+    }
     setSelectedRegionIds([]);
     setSelectedComponentId(null);
     setRegionPaintTargetId(null);
     setSelectedCellIds([]);
-    void run(
-      () => backend.applyCellAttributes({ cellIds: component.cellIds, attribute: "region", value: region.color, regionId: newRegionId }),
-      "領域の塊を分離できませんでした。",
-      {
-        recover: async (identity) => {
-          if (cellMutation.current === mutation) await refreshCellAttributes(identity);
-        },
-        refreshOnSuccess: false,
-        isCurrent: () => cellMutation.current === mutation,
-      },
-    );
+    commitMapShapes(next, "領域の塊を分離できませんでした。");
   };
 
   useEffect(() => {
@@ -400,9 +325,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             cellGridOptions={cellGridOptions}
             gridOptions={gridOptions}
             onCellSelect={applyCellSelection}
-            onRegionMove={moveRegion}
-            onRegionShape={shapeRegion}
-            onCellResize={resizeCells}
+            onMapShapeEdit={commitShapeEdit}
             regionColor={regionColor}
             onToolChange={selectTool}
             onEraseTargetChange={selectEraseTarget}

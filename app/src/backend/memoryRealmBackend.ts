@@ -1,13 +1,12 @@
 import type {
-  CellAttributeSnapshot, CellViewportInput, CreateFeatureInput,
+  CreateFeatureInput,
   AssetRead, ImportAssetInput, ProjectSummary, RealmBackend, RealmFeature, RealmSnapshot,
-  ReviseFeatureInput, ReviseFeaturesBatchInput, SaveProjectInput, ApplyCellAttributesInput, MoveRegionCellsInput, MapShape, ReplaceMapShapesInput,
+  ReviseFeatureInput, ReviseFeaturesBatchInput, SaveProjectInput, CreateMapShapesInput, UpdateMapShapesInput, DeleteMapShapesInput,
 } from "./types";
-import { applyCellSelectionToMapShapes, mapShapeCellIds, mapShapesToCellAttributes, moveRegionMapShapes, validateMapShapes } from "../shared/mapShapeGeometry";
+import { validateMapShapes } from "../shared/mapShapeGeometry";
 
 type MemoryProject = {
   snapshot: RealmSnapshot;
-  cells: CellAttributeSnapshot[];
   assetBytes: Record<string, number[]>;
 };
 
@@ -18,8 +17,6 @@ const makeSnapshot = (path: string, name: string): RealmSnapshot => ({
 });
 
 const clone = <T>(value: T): T => structuredClone(value);
-const validRegionId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(value.trim());
-const normalizeRegionId = (value: unknown): string => { if (!validRegionId(value)) throw new Error("領域IDが不正です。"); return value.trim().toLowerCase(); };
 const normalizeName = (name: string): string => {
   const normalized = name.trim();
   if (!normalized) throw new Error("世界の名前を入力してください。");
@@ -178,13 +175,6 @@ const validateGeometry = (input: CreateFeatureInput): void => {
   validatePolygonRelationships(input.geometry.coordinates);
 };
 
-const validCell = (id: string): boolean => {
-  const match = /^(\d+):(\d+)$/u.exec(id);
-  if (!match) return false;
-  const x = Number(match[1]); const y = Number(match[2]);
-  return x >= 0 && x < 128 && y >= 0 && y < 73;
-};
-
 export class MemoryRealmBackend implements RealmBackend {
   private readonly projects = new Map<string, MemoryProject>();
   private readonly undo = new Map<string, MemoryProject[]>();
@@ -194,7 +184,7 @@ export class MemoryRealmBackend implements RealmBackend {
   constructor(initialProjects: RealmSnapshot[] = []) {
     for (const snapshot of initialProjects) {
       const normalized = clone({ ...snapshot, mapShapes: snapshot.mapShapes ?? [], formatVersion: 11 });
-      this.projects.set(snapshot.path, { snapshot: normalized, cells: mapShapesToCellAttributes(normalized.mapShapes), assetBytes: {} });
+      this.projects.set(snapshot.path, { snapshot: normalized, assetBytes: {} });
     }
   }
 
@@ -226,7 +216,7 @@ export class MemoryRealmBackend implements RealmBackend {
   async createProject(input: { name: string; path?: string }): Promise<RealmSnapshot> {
     const path = input.path ?? `browser://${crypto.randomUUID()}.realmmap`;
     if (this.projects.has(path)) throw new Error("同じ場所に世界がすでにあります。");
-    const project = { snapshot: makeSnapshot(path, input.name), cells: [], assetBytes: {} };
+    const project = { snapshot: makeSnapshot(path, input.name), assetBytes: {} };
     this.projects.set(path, project); this.openPath = path; return this.result(project);
   }
   async openProject(input: { libraryId: string }): Promise<RealmSnapshot> {
@@ -409,61 +399,27 @@ export class MemoryRealmBackend implements RealmBackend {
     if (!next) throw new Error("やり直す操作がありません。"); const undo = this.undo.get(project.snapshot.path) ?? [];
     undo.push(clone(project)); this.undo.set(project.snapshot.path, undo); this.projects.set(project.snapshot.path, next); return this.result(next);
   }
-  async replaceMapShapes(input: ReplaceMapShapesInput): Promise<RealmSnapshot> {
+  async createMapShapes(input: CreateMapShapesInput): Promise<RealmSnapshot> {
+    const project = this.current();
+    if (!input || !Array.isArray(input.shapes)) throw new Error("形状の指定が不正です。");
+    const ids = new Set(project.snapshot.mapShapes.map((shape) => shape.id));
+    if (input.shapes.some((shape) => ids.has(shape.id))) throw new Error("形状IDが重複しています。");
+    return this.updateMapShapes({ shapes: [...project.snapshot.mapShapes, ...input.shapes] });
+  }
+  async updateMapShapes(input: UpdateMapShapesInput): Promise<RealmSnapshot> {
     if (!input || !Array.isArray(input.shapes)) throw new Error("形状の指定が不正です。");
     try { validateMapShapes(input.shapes); } catch { throw new Error("形状の形または重なりが不正です。"); }
     const project = this.current();
     this.checkpoint(project);
     project.snapshot.mapShapes = clone(input.shapes);
-    project.cells = mapShapesToCellAttributes(project.snapshot.mapShapes);
     return this.result(project);
   }
-  async applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot> {
-    const project = this.current(); const ids = [...new Set(input.cellIds)];
-    if (!ids.length) throw new Error("セルを選択してください。"); if (ids.some((id) => !validCell(id))) throw new Error("セルの指定が不正です。");
-    if (input.clearRegion !== undefined && typeof input.clearRegion !== "boolean") throw new Error("領域消去の指定が不正です。");
-    if (input.clearRegion === true && (input.attribute !== "terrain" || input.value !== null)) throw new Error("領域消去の指定が不正です。");
-    if (input.regionId !== undefined && (input.attribute !== "region" || input.value === null)) throw new Error("領域IDの指定が不正です。");
-    if (input.value !== null && !input.value.trim()) throw new Error("属性値を入力してください。");
-    if (input.attribute === "terrain" || input.attribute === "region") {
-      const regionId = input.attribute === "region" && input.value !== null ? normalizeRegionId(input.regionId ?? crypto.randomUUID()) : undefined;
-      const next = applyCellSelectionToMapShapes(project.snapshot.mapShapes, { cellIds: ids, layer: input.attribute, value: input.value, ...(regionId ? { regionId } : {}), ...(input.clearRegion ? { clearRegion: true } : {}) });
-      this.checkpoint(project);
-      project.snapshot.mapShapes = clone(next);
-      project.cells = mapShapesToCellAttributes(next);
-      return this.result(project);
-    }
-    this.checkpoint(project);
-    project.cells = project.cells.filter((cell) => !(ids.includes(cell.cellId) && cell.attribute === input.attribute));
-    if (input.clearRegion === true) project.cells = project.cells.filter((cell) => !(ids.includes(cell.cellId) && cell.attribute === "region"));
-    if (input.value !== null) {
-      for (const cellId of ids) project.cells.push({ cellId, attribute: input.attribute, value: input.value.trim() });
-    }
-    return this.result(project);
-  }
-  async moveRegionCells(input: MoveRegionCellsInput): Promise<RealmSnapshot> {
+  async deleteMapShapes(input: DeleteMapShapesInput): Promise<RealmSnapshot> {
+    if (!input || !Array.isArray(input.ids) || input.ids.length === 0) throw new Error("形状IDの指定が不正です。");
     const project = this.current();
-    if (!Array.isArray(input.sourceCellIds) || !Array.isArray(input.targetCellIds) || input.sourceCellIds.length === 0 || input.sourceCellIds.length !== input.targetCellIds.length) throw new Error("領域の移動指定が不正です。");
-    const source = input.sourceCellIds.map((id) => id.trim()); const target = input.targetCellIds.map((id) => id.trim());
-    if (source.some((id) => !validCell(id)) || target.some((id) => !validCell(id)) || new Set(source).size !== source.length || new Set(target).size !== target.length) throw new Error("領域の移動指定が不正です。");
-    const axial = (id: string): [number, number] => { const parts = id.split(":"); const x = Number(parts[0] ?? 0); const y = Number(parts[1] ?? 0); return [x - Math.floor(y / 2), y]; };
-    const firstSource = axial(source[0]!); const firstTarget = axial(target[0]!); const delta: [number, number] = [firstTarget[0] - firstSource[0], firstTarget[1] - firstSource[1]];
-    const expected = source.map((id) => { const [q, row] = axial(id); const nextRow = row + delta[1]; return `${q + delta[0] + Math.floor(nextRow / 2)}:${nextRow}`; });
-    if (expected.some((id, index) => id !== target[index])) throw new Error("領域は固定グリッド上で移動してください。");
-    const regionId = project.snapshot.mapShapes.find((shape) => shape.layer === "region" && mapShapeCellIds(shape).has(source[0]!))?.regionId;
-    if (!regionId) throw new Error("移動する領域が見つかりません。");
-    if (source.every((id, index) => id === target[index])) return this.result(project);
-    let next: MapShape[];
-    try { next = moveRegionMapShapes(project.snapshot.mapShapes, regionId, source, target); } catch (error) { throw new Error(error instanceof Error ? error.message : "領域を移動できません。"); }
-    this.checkpoint(project);
-    project.snapshot.mapShapes = clone(next);
-    project.cells = mapShapesToCellAttributes(next);
-    return this.result(project);
-  }
-  async viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]> {
-    const project = this.current(); const minX = Math.max(0, input.minX ?? 0); const maxX = Math.min(127, input.maxX ?? 127);
-    const minY = Math.max(0, input.minY ?? 0); const maxY = Math.min(72, input.maxY ?? 72);
-    return project.cells.filter((cell) => { const [x = -1, y = -1] = cell.cellId.split(":").map(Number); return x >= minX && x <= maxX && y >= minY && y <= maxY; }).map(clone);
+    const ids = new Set(input.ids);
+    if (ids.size !== input.ids.length || input.ids.some((id) => !project.snapshot.mapShapes.some((shape) => shape.id === id))) throw new Error("形状が見つかりません。");
+    return this.updateMapShapes({ shapes: project.snapshot.mapShapes.filter((shape) => !ids.has(shape.id)) });
   }
   async closeProject(): Promise<void> { this.openPath = null; }
   async getOpenProject(): Promise<RealmSnapshot | null> { return this.openPath ? this.result(this.current()) : null; }

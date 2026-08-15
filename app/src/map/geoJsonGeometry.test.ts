@@ -53,13 +53,13 @@ describe("map geometry modules", () => {
     const empty = new Feature({ attributes: [], selected: false });
     const layered = new Feature({
       attributes: [
-        { cellId: "0:0", attribute: "country", value: "A" },
+        { cellId: "0:0", attribute: "terrain", value: "terrain" },
         { cellId: "0:0", attribute: "region", value: "B" },
       ],
       selected: true,
     });
     expect(cellStyle(empty)).toBeUndefined();
-    expect(cellStyle(layered)).toHaveLength(2);
+    expect(cellStyle(layered)).toHaveLength(1);
     expect(cellStyle(layered)).toBe(cellStyle(layered));
 
     const coloredRegion = new Feature({

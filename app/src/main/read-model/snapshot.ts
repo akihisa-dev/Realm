@@ -1,12 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { AssetManifest, CellAttributeSnapshot, CellViewportInput, FeatureProperties, MapShape, RealmFeature, RealmSnapshot } from "../../shared/realmContract";
+import type { AssetManifest, FeatureProperties, MapShape, RealmFeature, RealmSnapshot } from "../../shared/realmContract";
 import { validateGeometry, validateProperties } from "../domain/geometry";
 import { MAX_ASSET_BYTES, sha256Hex, validateAsset } from "../domain/assets";
 import { parseStoredSettings } from "../domain/settings";
-import { EDITOR_GRID_COLUMNS, EDITOR_GRID_ROWS } from "../domain/cell";
-import { mapShapesToCellAttributes, validateMapShapes } from "../../shared/mapShapeGeometry";
+import { validateMapShapes } from "../../shared/mapShapeGeometry";
 import type { OpenProjectSession } from "../state/session";
-import { corrupt, invalid } from "../domain/errors";
+import { corrupt } from "../domain/errors";
 
 function json(value: unknown, label: string): unknown { try { return JSON.parse(String(value)); } catch { throw corrupt("A project contains invalid " + label + "."); } }
 export function projectSnapshot(session: OpenProjectSession): RealmSnapshot {
@@ -32,22 +31,6 @@ export function projectSnapshot(session: OpenProjectSession): RealmSnapshot {
   });
   try { validateMapShapes(mapShapes); } catch { throw corrupt("A map shape is invalid or overlaps another shape."); }
   return { formatVersion: 11, path: session.path, world: { id: String(world.id), name: String(world.name) }, settings, features, mapShapes, assets, featureCount: features.length, canUndo: session.canUndo, canRedo: session.canRedo };
-}
-
-export function cellAttributesSnapshot(session: OpenProjectSession, input: CellViewportInput = {}): CellAttributeSnapshot[] {
-  const bound = (value: unknown, fallback: number): number => {
-    if (value === undefined) return fallback;
-    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < -2_147_483_648 || value > 2_147_483_647) throw invalid("The cell viewport is invalid.");
-    return value;
-  };
-  const minX = Math.max(0, Math.min(EDITOR_GRID_COLUMNS - 1, bound(input.minX, 0))); const maxX = Math.max(0, Math.min(EDITOR_GRID_COLUMNS - 1, bound(input.maxX, EDITOR_GRID_COLUMNS - 1)));
-  const minY = Math.max(0, Math.min(EDITOR_GRID_ROWS - 1, bound(input.minY, 0))); const maxY = Math.max(0, Math.min(EDITOR_GRID_ROWS - 1, bound(input.maxY, EDITOR_GRID_ROWS - 1)));
-  if (minX > maxX || minY > maxY) throw invalid("The cell viewport is invalid.");
-  const mapShapes = projectSnapshot(session).mapShapes;
-  return mapShapesToCellAttributes(mapShapes).filter((row) => {
-    const [x = -1, y = -1] = row.cellId.split(":").map(Number);
-    return x >= minX && x <= maxX && y >= minY && y <= maxY;
-  }).map((row): CellAttributeSnapshot => ({ cellId: row.cellId, attribute: row.attribute, value: row.value, ...(row.regionId ? { regionId: row.regionId } : {}) }));
 }
 
 export function rawDatabase(session: OpenProjectSession): DatabaseSync { return session.database; }

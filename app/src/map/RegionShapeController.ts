@@ -1,44 +1,63 @@
 import PointerInteraction from "ol/interaction/Pointer";
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, Position } from "../backend";
-import { sameRegionCells } from "./regionGrab";
+import type { MapShape, Position } from "../shared/realmContract";
+import { hitTestMapShapes, intersectionMapShapeGeometries, normalizeMapShapes, unionMapShapeGeometries } from "../shared/mapShapeGeometry";
 
 type Options = {
-  cellAt: (position: Position) => string | null;
-  attributes: () => ReadonlyMap<string, readonly CellAttributeSnapshot[]>;
-  emit: (input: ApplyCellAttributesInput) => void;
+  shapes: () => readonly MapShape[];
+  hitTolerance: () => number;
+  emit: (shapes: MapShape[]) => void;
 };
 
-/** Emits one region clear for the non-terrain cells in a clicked logical region. */
+/** Clips the complete logical region to the union of terrain polygons. */
 export class RegionShapeController {
   readonly interaction: PointerInteraction;
-  private pressedCell: string | null = null;
+  private pressedShapeId: string | null = null;
 
   constructor(options: Options) {
     this.interaction = new PointerInteraction({
       handleDownEvent: (event) => {
         const pointer = event.originalEvent as PointerEvent;
         if (!pointer.isPrimary || pointer.button !== 0) return false;
-        const cellId = options.cellAt(event.coordinate as Position);
-        if (!cellId || !options.attributes().get(cellId)?.some((item) => item.attribute === "region")) return false;
-        this.pressedCell = cellId;
+        const position = [...(event.coordinate as Position)] as Position;
+        const regionShapes = options.shapes().filter((candidate) => candidate.layer === "region");
+        const hit = hitTestMapShapes(regionShapes, position, options.hitTolerance());
+        const shape = hit ? regionShapes.find((candidate) => candidate.id === hit.shapeId) : undefined;
+        if (!shape || shape.layer !== "region") return false;
+        this.pressedShapeId = shape.id;
         return true;
       },
       handleUpEvent: (event) => {
-        const pressedCell = this.pressedCell;
-        const releasedCell = options.cellAt(event.coordinate as Position);
-        this.pressedCell = null;
-        if (!pressedCell || releasedCell !== pressedCell) return false;
-        const attributes = options.attributes();
-        const outsideTerrainIds = sameRegionCells(pressedCell, attributes)
-          .filter((id) => !attributes.get(id)?.some((item) => item.attribute === "terrain"));
-        if (outsideTerrainIds.length > 0) options.emit({ cellIds: outsideTerrainIds, attribute: "region", value: null });
+        const pressedShapeId = this.pressedShapeId;
+        this.pressedShapeId = null;
+        if (!pressedShapeId) return false;
+        const position = [...(event.coordinate as Position)] as Position;
+        const hit = hitTestMapShapes(options.shapes().filter((shape) => shape.layer === "region"), position, options.hitTolerance());
+        if (!hit || hit.shapeId !== pressedShapeId) return false;
+        const shapes = options.shapes().map((shape) => ({
+          ...shape,
+          geometry: { type: "Polygon" as const, coordinates: shape.geometry.coordinates.map((ring) => ring.map(([x, y]) => [x, y] as Position)) },
+        }));
+        const pressed = shapes.find((shape) => shape.id === pressedShapeId);
+        if (!pressed?.regionId) return false;
+        const terrain = unionMapShapeGeometries(shapes.filter((shape) => shape.layer === "terrain").map((shape) => shape.geometry));
+        const next: MapShape[] = [];
+        for (const shape of shapes) {
+          if (shape.layer !== "region" || shape.regionId !== pressed.regionId) {
+            next.push(shape);
+            continue;
+          }
+          const clipped = unionMapShapeGeometries(terrain.flatMap((terrainGeometry) => intersectionMapShapeGeometries(shape.geometry, terrainGeometry)));
+          clipped.forEach((geometry, index) => next.push({ ...shape, id: index === 0 ? shape.id : crypto.randomUUID(), geometry }));
+        }
+        const normalized = normalizeMapShapes(next);
+        if (JSON.stringify(normalized) !== JSON.stringify(shapes)) options.emit(normalized);
         return false;
       },
     });
   }
 
   cancel(): void {
-    this.pressedCell = null;
+    this.pressedShapeId = null;
     this.interaction.setActive(false);
     this.interaction.setActive(true);
   }

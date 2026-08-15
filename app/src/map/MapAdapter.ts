@@ -22,7 +22,7 @@ import Style from "ol/style/Style";
 import { primaryAction, singleClick } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MapShape, MoveRegionCellsInput, Position, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, GeoJsonGeometry, MapShape, MapShapeEdit, Position, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import { CELL_PAINT_RADII, WORLD_EXTENT, availableViewportSize, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
@@ -31,20 +31,20 @@ import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors"
 import { createCellStyle, createFeatureStyle } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
 import { assertGeometryWithinWorld } from "./geometryGuard";
-import { smoothCellBoundaryRings } from "./terrainOutline";
 import { TerrainOutlineAnimator } from "./terrainOutlineAnimator";
 import { CellRegionController } from "./CellRegionController";
 import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
 import { exportMapRaster } from "./mapRasterExporter";
-import { RegionGrabController } from "./RegionGrabController";
+import { MapShapeGrabController } from "./MapShapeGrabController";
 import { RegionShapeController } from "./RegionShapeController";
 import { GrabHoverController } from "./GrabHoverController";
 import { cloneMapShapes, renderCanonicalMapShapes, renderTransientCellGeometry } from "./mapShapeRendering";
+import { hitTestMapShapes } from "../shared/mapShapeGeometry";
 import { nudgeGeometry, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
+import { colorWithOpacity, DEFAULT_CELL_GRID_OPTIONS, OUTSIDE_GRID_LINE_DASH, OUTSIDE_GRID_OPACITY, TERRAIN_GRID_OPACITY, terrainGridDotRadius } from "./mapAdapterPresentation";
 import { MiddleButtonDragPan, MiddleButtonSafeDraw } from "./middleButtonPan";
 import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
-
 export type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellPaintSize } from "./gridGeometry";
 export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, availableViewportSize, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
@@ -52,17 +52,6 @@ export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld
 export { selectFeatureIdsWithinLasso } from "./lassoSelection";
 export { resolutionForFittingExtent } from "./mapAdapterGeometry";
 const MAX_LASSO_POINTS = 4096;
-const DEFAULT_CELL_GRID_OPTIONS: CellGridOptions = { color: "#d1d7dc", width: 0.65 };
-const TERRAIN_GRID_OPACITY = 0.32;
-const OUTSIDE_GRID_OPACITY = 0.28;
-const OUTSIDE_GRID_LINE_DASH = [1, 3];
-const terrainGridDotRadius = (width: number): number => Math.max(0.75, Math.min(1.75, width * 1.25));
-const colorWithOpacity = (color: string, opacity: number): string => {
-  const red = Number.parseInt(color.slice(1, 3), 16);
-  const green = Number.parseInt(color.slice(3, 5), 16);
-  const blue = Number.parseInt(color.slice(5, 7), 16);
-  return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
-};
 class CancelablePointerInteraction extends PointerInteraction {
   cancelSequence(): void {
     this.handlingDownUpSequence = false;
@@ -124,7 +113,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private cellEraseRadius = 0;
   private paint: CancelablePointerInteraction | null = null;
   private eraser: PointerInteraction | null = null;
-  private grab: RegionGrabController | null = null;
+  private grab: MapShapeGrabController | null = null;
   private regionShape: RegionShapeController | null = null;
   private readonly grabHover: GrabHoverController;
   private paintLastPoint: [number, number] | null = null;
@@ -142,9 +131,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly selectFeaturesListeners = new Set<(featureIds: readonly string[]) => void>();
   private readonly selectListeners = new Set<(featureId: string | null) => void>();
   private readonly cellSelectListeners = new Set<(cellIds: readonly string[]) => void>();
-  private readonly regionMoveListeners = new Set<(input: MoveRegionCellsInput) => void>();
-  private readonly regionShapeListeners = new Set<(input: ApplyCellAttributesInput) => void>();
-  private readonly cellResizeListeners = new Set<(input: ApplyCellAttributesInput) => void>();
+  private readonly mapShapeEditListeners = new Set<(edit: MapShapeEdit) => void>();
   private readonly modifyFeaturesListeners = new Set<(changes: readonly FeatureGeometryChange[]) => void>();
   private readonly modifyListeners = new Set<(featureId: string, geometry: GeoJsonGeometry) => void>();
   private readonly eraseFeaturesListeners = new Set<(featureIds: readonly string[]) => void>();
@@ -507,9 +494,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.setNavigationActive(mode === "pan");
     this.refreshHoveredCells();
     this.refreshGrabHover();
-    if (mode === "grab") this.grab = new RegionGrabController({
-      cellAt: (position) => this.cellAtCoordinate(position), cellCandidatesAt: (position) => gridCellIdsWithinPaintPosition(position, 1), allowMove: mode === "grab", allowInteriorBoundaryPress: mode === "grab", attributes: () => this.cellAttributesById, getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id), changed: () => this.cellLayer.changed(),
-      setRegionSmoothVisible: (visible, regionIdentity) => { this.regionSmoothHiddenIdentity = visible ? null : regionIdentity ?? null; this.regionSmoothLayer.changed(); }, setTerrainSmoothVisible: (visible, hiddenCellIds = []) => { if (visible && this.mapShapesControlled) { this.setMapShapes(this.mapShapes); return; } if (!visible) this.terrainOutlineLayer.setVisible(false); this.setTerrainSmoothPreview(hiddenCellIds); this.terrainSmoothLayer.setVisible(true); }, emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); }, emitResize: (input) => { for (const listener of this.cellResizeListeners) listener(input); },
+    if (mode === "grab") this.grab = new MapShapeGrabController({
+      shapes: () => this.mapShapes,
+      hitTolerance: () => Math.max(0.15, (this.map.getView().getResolution() ?? 1) * 8),
+      setPreview: (shapes) => this.setMapShapePreview(shapes),
+      emit: (shapes) => { for (const listener of this.mapShapeEditListeners) listener({ shapes }); },
+      onInvalid: () => { for (const listener of this.errorListeners) listener("feature_outside_world"); },
     });
     if (mode === "erase") {
       this.setSelected(null);
@@ -580,9 +570,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (mode === "shape") {
       this.setSelected(null);
       this.regionShape = new RegionShapeController({
-        cellAt: (position) => this.cellAtCoordinate(position),
-        attributes: () => this.cellAttributesById,
-        emit: (input) => { for (const listener of this.regionShapeListeners) listener(input); },
+        shapes: () => this.mapShapes,
+        hitTolerance: () => Math.max(0.15, (this.map.getView().getResolution() ?? 1) * 8),
+        emit: (shapes) => { for (const listener of this.mapShapeEditListeners) listener({ shapes }); },
       });
       this.map.addInteraction(this.regionShape.interaction);
       return;
@@ -782,7 +772,22 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.refreshGrabHover();
   }
 
-  private refreshGrabHover(): void { const enabled = this.activeMode === "grab"; const interiorCellId = enabled && this.lastPointerCoordinate ? this.cellAtCoordinate(this.lastPointerCoordinate) : null; this.grabHover.refresh(enabled && this.pointerInside && !this.temporaryPan && this.paintLastPoint === null, this.lastPointerCoordinate, interiorCellId); }
+  private refreshGrabHover(): void {
+    const enabled = this.activeMode === "grab" && this.pointerInside && !this.temporaryPan && this.paintLastPoint === null;
+    if (this.mapShapesControlled) {
+      // Once the editor has supplied canonical shapes, the affordance follows
+      // the same exact Polygon hit test as the grab interaction. Cell
+      // attributes remain renderer-only and must not create a resize target.
+      this.grabHover.clear();
+      const hit = enabled && this.lastPointerCoordinate
+        ? hitTestMapShapes(this.mapShapes, this.lastPointerCoordinate, Math.max(0.15, (this.map.getView().getResolution() ?? 1) * 8))
+        : null;
+      this.target.classList.toggle("map-canvas-grab-target", hit !== null);
+      return;
+    }
+    const interiorCellId = enabled && this.lastPointerCoordinate ? this.cellAtCoordinate(this.lastPointerCoordinate) : null;
+    this.grabHover.refresh(enabled, this.lastPointerCoordinate, interiorCellId);
+  }
 
   private readonly handlePointerMove = (event: Event | BaseEvent): void => {
     if (!("coordinate" in event) || !Array.isArray(event.coordinate)) {
@@ -968,20 +973,24 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellLayer.changed();
   }
 
-  private setTerrainSmoothPreview(hiddenCellIds: readonly string[] = []): void { const hidden = new Set(hiddenCellIds); const visibleTerrainIds = [...this.cellAttributesById.entries()].filter(([id, values]) => !hidden.has(id) && values.some(({ attribute }) => attribute === "terrain")).map(([id]) => id); this.terrainSmoothSource.clear(); const rings = smoothCellBoundaryRings(visibleTerrainIds); if (rings.length > 0) this.terrainSmoothSource.addFeature(new Feature({ geometry: new MultiLineString(rings) })); }
-
   /** Renders the canonical Polygon rows without smoothing or per-cell geometry. */
   setMapShapes(shapes: readonly MapShape[]): void {
     this.mapShapesControlled = true;
     this.mapShapes = cloneMapShapes(shapes);
+    this.setMapShapePreview(null);
+    this.refreshGrabHover();
+  }
+
+  /** Renders a continuous edit preview without changing the canonical shapes. */
+  private setMapShapePreview(shapes: readonly MapShape[] | null): void {
+    const renderedShapes = shapes === null ? this.mapShapes : shapes;
     this.regionSmoothHiddenIdentity = null;
-    const { terrainCount, regionCount } = renderCanonicalMapShapes(this.mapShapes, this.terrainSmoothSource, this.regionSmoothSource);
+    const { terrainCount, regionCount } = renderCanonicalMapShapes(renderedShapes, this.terrainSmoothSource, this.regionSmoothSource);
     this.terrainOutlineLayer.setVisible(false);
     this.terrainSmoothLayer.setVisible(terrainCount > 0);
     this.regionSmoothLayer.setVisible(regionCount > 0);
     this.terrainSmoothSource.changed();
     this.regionSmoothSource.changed();
-    this.refreshGrabHover();
   }
 
   setCellAttributes(attributes: readonly CellAttributeSnapshot[]): void {
@@ -1039,15 +1048,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellSelectListeners.add(listener);
     return () => this.cellSelectListeners.delete(listener);
   }
-  onRegionMove(listener: (input: MoveRegionCellsInput) => void): () => void {
-    this.regionMoveListeners.add(listener);
-    return () => this.regionMoveListeners.delete(listener);
+  onMapShapeEdit(listener: (edit: MapShapeEdit) => void): () => void {
+    this.mapShapeEditListeners.add(listener);
+    return () => this.mapShapeEditListeners.delete(listener);
   }
-  onRegionShape(listener: (input: ApplyCellAttributesInput) => void): () => void {
-    this.regionShapeListeners.add(listener);
-    return () => this.regionShapeListeners.delete(listener);
-  }
-  onCellResize(listener: (input: ApplyCellAttributesInput) => void): () => void { this.cellResizeListeners.add(listener); return () => this.cellResizeListeners.delete(listener); }
   onModifyFeatures(listener: (changes: readonly FeatureGeometryChange[]) => void): () => void {
     this.modifyFeaturesListeners.add(listener);
     return () => this.modifyFeaturesListeners.delete(listener);
@@ -1147,9 +1151,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.selectFeaturesListeners.clear();
     this.selectListeners.clear();
     this.cellSelectListeners.clear();
-    this.regionMoveListeners.clear();
-    this.regionShapeListeners.clear();
-    this.cellResizeListeners.clear();
+    this.mapShapeEditListeners.clear();
     this.modifyFeaturesListeners.clear();
     this.target.removeEventListener("keydown", this.handleKeyDown);
     this.target.removeEventListener("keyup", this.handleKeyUp);

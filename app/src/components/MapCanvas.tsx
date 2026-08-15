@@ -8,7 +8,7 @@ import {
   type RealmMapRenderer,
   type RealmMapRendererFactory,
 } from "../map/MapAdapter";
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MapShape, MoveRegionCellsInput, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, GeoJsonGeometry, MapShape, MapShapeEdit, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { ExportCanvasSize } from "../map/contracts";
 import type { MapErrorCode } from "../map/errors";
@@ -43,9 +43,7 @@ type MapCanvasProps = {
   onSelect?: (featureId: string | null) => void;
   onSelectFeatures?: (featureIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
-  onRegionMove?: (input: MoveRegionCellsInput) => void;
-  onRegionShape?: (input: ApplyCellAttributesInput) => void;
-  onCellResize?: (input: ApplyCellAttributesInput) => void;
+  onMapShapeEdit?: (edit: MapShapeEdit) => void;
   onToolChange?: (tool: "terrain" | "region" | "erase" | "grab" | "shape") => void;
   onEraseTargetChange?: (target: EraseTarget) => void;
   onRegionColorChange?: (color: string) => void;
@@ -82,9 +80,7 @@ export function MapCanvas({
   onSelect,
   onSelectFeatures,
   onCellSelect,
-  onRegionMove,
-  onRegionShape,
-  onCellResize,
+  onMapShapeEdit,
   onToolChange,
   onEraseTargetChange,
   onRegionColorChange,
@@ -125,10 +121,10 @@ export function MapCanvas({
       : mode === "shape"
         ? "領域をクリックすると、地形の外にはみ出した部分だけを削り、地形の形に合わせます。ホイールを押したままドラッグすると地図を移動できます。"
       : mode === "grab"
-        ? "地形または領域の外周セルをつまみ、外側へ引いて広げたり内側へ引いて狭めたりできます。領域は同じIDを保ったまま、内部をつまむと六角グリッドに沿って移動します。移動先が範囲外なら移動できず、別の領域との重なりは移動側だけが削れます。Escapeで取り消せます。"
+        ? "地形または領域の正確なPolygonの辺・頂点をつまみ、連続的に広げたり狭めたりできます。図形の内側をつまむと領域全体を移動します。グリッドへの吸着は離したときに行い、pointermove中は保存しません。pointercancel、Escape、フォーカス喪失で取り消せます。"
       : mode === "region"
         ? "領域の輪郭をドラッグして描きます。色を選んで保存できます。Escapeで取り消せます。"
-      : "六角セルを押したままなぞって選択します。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。端の大きさを変えるときはグラブに切り替えます。Escapeで選択を取り消せます。";
+      : "六角グリッドを一時的な選択範囲として押したままなぞります。選択結果はPolygonへ変換して1回で保存します。ホイールを押したままドラッグすると地図を移動できます。Escapeで選択を取り消せます。";
   const controlledFeatureIds = selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []);
 
   useRendererSync({
@@ -177,9 +173,7 @@ export function MapCanvas({
     onSelect,
     onSelectFeatures,
     onCellSelect,
-    onRegionMove,
-    onRegionShape,
-    onCellResize,
+    onMapShapeEdit,
     onModify,
     onModifyFeatures,
     onErase,

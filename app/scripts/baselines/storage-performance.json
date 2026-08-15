@@ -1,9 +1,9 @@
 {
   "reportVersion": 1,
-  "schemaVersion": 10,
+  "schemaVersion": 11,
   "fixture": {
     "features": 96,
-    "cells": 192
+    "shapes": 1
   },
   "samples": {
     "warmup": 1,
@@ -18,11 +18,11 @@
     "backup": 10000
   },
   "rowOperations": {
-    "create": 288,
-    "open": 288,
-    "read": 288,
-    "terrainBatch": 192,
+    "create": 97,
+    "open": 97,
+    "read": 97,
+    "terrainBatch": 1,
     "save": 1,
-    "backup": 288
+    "backup": 97
   }
 }

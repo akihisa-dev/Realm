@@ -1,4 +1,4 @@
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, FeatureType, GeoJsonGeometry, MapShape, MoveRegionCellsInput, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, FeatureType, GeoJsonGeometry, MapShape, MapShapeEdit, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { MapThemeId, ThemeOverrides } from "./themes";
 import type { MapErrorCode } from "./errors";
@@ -59,9 +59,7 @@ export interface RealmMapRenderer {
   /** @deprecated Use onSelectFeatures for multi-selection-aware consumers. */
   onSelect(listener: (featureId: string | null) => void): () => void;
   onCellSelect(listener: (cellIds: readonly string[]) => void): () => void;
-  onRegionMove?(listener: (input: MoveRegionCellsInput) => void): () => void;
-  onRegionShape?(listener: (input: ApplyCellAttributesInput) => void): () => void;
-  onCellResize?(listener: (input: ApplyCellAttributesInput) => void): () => void;
+  onMapShapeEdit?(listener: (edit: MapShapeEdit) => void): () => void;
   onModifyFeatures(listener: (changes: readonly FeatureGeometryChange[]) => void): () => void;
   onModify(listener: (featureId: string, geometry: GeoJsonGeometry) => void): () => void;
   onEraseFeatures(listener: (featureIds: readonly string[]) => void): () => void;

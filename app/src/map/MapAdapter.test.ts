@@ -108,7 +108,7 @@ describe("RealmMapAdapter", () => {
     requestAnimationFrame.mockRestore();
   });
 
-  it("renders every region component separately and hides only the grabbed smooth mass", () => {
+  it("renders every transient region component separately while canonical grab uses the shape controller", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
@@ -137,20 +137,13 @@ describe("RealmMapAdapter", () => {
       { cellId: "40:40", attribute: "region", value: "#AA0000", regionId: "region-b" },
     ]);
     expect(regionLayer.getSource()?.getFeatures()).toHaveLength(4);
-    const hoverBoundary: [number, number] = [(cellCenter(10, 10)[0] + cellCenter(10, 9)[0]) / 2, (cellCenter(10, 10)[1] + cellCenter(10, 9)[1]) / 2];
-    adapter.setMode("cell-select"); adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: hoverBoundary } as never); expect(cellLayer.getSource()?.getFeatureById("10:10")?.get("grabHover")).toBeUndefined(); expect(host.classList.contains("map-canvas-grab-target")).toBe(false);
-    adapter.setMode("grab"); adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: cellCenter(10, 10) } as never); expect(cellLayer.getSource()?.getFeatureById("10:10")?.get("grabHover")).toBe(true); expect(host.classList.contains("map-canvas-grab-target")).toBe(true);
-    const pointer = new MouseEvent("pointerdown", { button: 0, bubbles: true });
-    Object.defineProperty(pointer, "isPrimary", { value: true });
-    const grab = adapter.getMap().getInteractions().getArray().at(-1) as unknown as {
-      handleDownEvent: (event: unknown) => boolean;
-      handleUpEvent: (event: unknown) => boolean;
-    };
-    expect(grab.handleDownEvent({ originalEvent: pointer, coordinate: cellCenter(10, 10) })).toBe(true);
-    expect(regionLayer.getVisible()).toBe(true);
-    const style = regionLayer.getStyleFunction(); const grabbedFeature = regionLayer.getSource()?.getFeatures().find((feature) => feature.get("regionIdentity") === "region-a"); const otherFeature = regionLayer.getSource()?.getFeatures().find((feature) => feature.get("regionIdentity") === "region-b");
-    expect(style?.(grabbedFeature!, 1)).toEqual([]); expect(style?.(otherFeature!, 1)).toBeInstanceOf(Style);
-    grab.handleUpEvent({ originalEvent: pointer, coordinate: cellCenter(10, 11) });
+    adapter.setMode("cell-select");
+    adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: cellCenter(10, 10) } as never);
+    expect(host.classList.contains("map-canvas-grab-target")).toBe(false);
+    // The transient cell layer no longer owns grab edits. Canonical Polygon
+    // hit testing and one-shot editing are covered by MapShapeGrabController.
+    adapter.setMode("grab");
+    expect(host.classList.contains("map-canvas-grab-target")).toBe(true);
     expect(regionLayer.getVisible()).toBe(true);
 
     adapter.dispose();
@@ -1014,9 +1007,9 @@ describe("RealmMapAdapter", () => {
     expect(fixedCellGridLayer.getVisible()).toBe(true);
     adapter.setCellAttributes([
       { cellId: "0:0", attribute: "terrain", value: "terrain" },
-      { cellId: "1:0", attribute: "forest", value: "forest" },
-      { cellId: "3:0", attribute: "country", value: "A" },
-      { cellId: "4:0", attribute: "region", value: "B" },
+      { cellId: "1:0", attribute: "region", value: "#2468AC" },
+      { cellId: "3:0", attribute: "region", value: "#AA0000" },
+      { cellId: "4:0", attribute: "region", value: "#00AA00" },
     ]);
     const insideGridLayer = adapter.getMap().getLayers().item(5) as VectorLayer;
     const outsideGridStyles = fixedCellGridLayer.getStyleFunction()?.(fixedCellGridLayer.getSource()?.getFeatures()[0]!, 1) as Style[];
@@ -1036,10 +1029,13 @@ describe("RealmMapAdapter", () => {
     expect(outlineStyle.getStroke()?.getColor()).toBe("#443a2b");
     expect(cellLayer.getSource()?.getFeatures().length).toBeLessThan(CELL_GRID_CELL_COUNT);
     const cellStyleFunction = cellLayer.getStyleFunction();
-    const forestCell = cellLayer.getSource()?.getFeatureById("1:0");
-    const forestStyle = (cellStyleFunction?.(forestCell!, 1) as Style[])[0]!;
-    expect(forestCell?.getGeometry()).toBeInstanceOf(Polygon);
-    expect(forestStyle.getFill()?.getColor()).toBe("#426a45");
+    const regionCell = cellLayer.getSource()?.getFeatureById("1:0");
+    expect(regionCell?.getGeometry()).toBeInstanceOf(Polygon);
+    // Canonical terrain/region Polygon rows are rendered by their direct
+    // layers. Cell features only carry transient selection/preview state.
+    const regionStyles = cellStyleFunction?.(regionCell!, 1) as Style[];
+    expect(regionStyles).toHaveLength(1);
+    expect(regionStyles[0]?.getFill()?.getColor()).not.toBe("#426a45");
     expect(host.style.background).toBe("rgb(255, 255, 255)");
     adapter.setTheme("midnight");
     expect(host.dataset.mapTheme).toBe("midnight");
