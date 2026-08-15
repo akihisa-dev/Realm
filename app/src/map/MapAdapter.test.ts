@@ -136,7 +136,8 @@ describe("RealmMapAdapter", () => {
       { cellId: "40:40", attribute: "region", value: "#AA0000", regionId: "region-b" },
     ]);
     expect(regionLayer.getSource()?.getFeatures()).toHaveLength(4);
-    adapter.setMode("cell-select"); adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: cellCenter(10, 10) } as never); expect(cellLayer.getSource()?.getFeatureById("10:10")?.get("grabHover")).toBe(true); expect(host.classList.contains("map-canvas-grab-target")).toBe(true); adapter.setMode("grab");
+    const hoverBoundary: [number, number] = [(cellCenter(10, 10)[0] + cellCenter(10, 9)[0]) / 2, (cellCenter(10, 10)[1] + cellCenter(10, 9)[1]) / 2];
+    adapter.setMode("cell-select"); adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: hoverBoundary } as never); expect(cellLayer.getSource()?.getFeatureById("10:10")?.get("grabHover")).toBe(true); expect(host.classList.contains("map-canvas-grab-target")).toBe(true); adapter.setMode("grab");
     const pointer = new MouseEvent("pointerdown", { button: 0, bubbles: true });
     Object.defineProperty(pointer, "isPrimary", { value: true });
     const grab = adapter.getMap().getInteractions().getArray().at(-1) as unknown as {

@@ -75,7 +75,7 @@ describe("MapCanvas", () => {
 
     const map = screen.getByRole("region", { name: "世界地図" });
     expect(map).toHaveClass("map-canvas-mode-cell-region", "map-canvas-draw");
-    expect(screen.getByText("自由線で囲んだ内側の六角セルを領域として塗ります。既存の地形または領域の境界セルは、押したまま外側へ引いて広げたり内側へ引いて狭めたりできます。色を選んで描き、Escapeで取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("自由線で囲んだ内側の六角セルを領域として塗ります。既存の地形または領域の境界線にカーソルを重ねると対象セルが破線で示され、押したまま外側へ引いて広げたり内側へ引いて狭めたりできます。色を選んで描き、Escapeで取り消せます。")).toBeInTheDocument();
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     const regionButton = screen.getByRole("button", { name: "領域" });
     expect(regionButton).toHaveAttribute("aria-pressed", "true");
@@ -342,7 +342,7 @@ describe("MapCanvas", () => {
     expect(renderer.setThemeOverrides).toHaveBeenLastCalledWith({ land: "#aabbcc" });
 
     rerender(<MapCanvas mode="cell-select" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("六角セルを押したままなぞって選択します。既存の地形または領域の境界セルは破線で示され、押したまま外側へ引いて広げたり内側へ引いて狭めたりできます。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("六角セルを押したままなぞって選択します。既存の地形または領域の境界線にカーソルを重ねると対象セルが破線で示され、押したまま外側へ引いて広げたり内側へ引いて狭めたりできます。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-draw");
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-mode-cell-select");
     expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
@@ -362,7 +362,7 @@ describe("MapCanvas", () => {
 
     rerender(<MapCanvas mode="cell-select" drawingOptions={{ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 }} zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(renderer.setDrawingOptions).toHaveBeenLastCalledWith({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
-    expect(screen.getByText("六角セルを押したままなぞって選択します。既存の地形または領域の境界セルは破線で示され、押したまま外側へ引いて広げたり内側へ引いて狭めたりできます。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("六角セルを押したままなぞって選択します。既存の地形または領域の境界線にカーソルを重ねると対象セルが破線で示され、押したまま外側へ引いて広げたり内側へ引いて狭めたりできます。ホイールを押したままドラッグすると地図を移動できます。選択したセルへ地形属性を適用します。Escapeで選択を取り消せます。")).toBeInTheDocument();
 
     rerender(<MapCanvas mode="pan" disabled zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
     expect(screen.getByText("ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。")).toBeInTheDocument();

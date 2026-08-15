@@ -83,4 +83,40 @@ describe("terrain boundary resize in RealmMapAdapter", () => {
     adapter.dispose();
     host.remove();
   });
+
+  it("leaves terrain painting active away from an exact boundary", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const resized: unknown[] = [];
+    const painted: string[][] = [];
+    adapter.onCellResize((input) => resized.push(input));
+    adapter.onCellSelect((cellIds) => painted.push([...cellIds]));
+    adapter.setCellAttributes([{ cellId: "10:10", attribute: "terrain", value: "terrain" }]);
+    adapter.setMode("cell-select");
+    const map = adapter.getMap();
+    const center = cellCenter(10, 10);
+    map.dispatchEvent({ type: "pointermove", coordinate: center } as never);
+    expect(host.classList.contains("map-canvas-grab-target")).toBe(false);
+
+    const dispatch = (type: string, originalEvent: MouseEvent, coordinate: [number, number], activePointers: MouseEvent[]): void => {
+      const mapEvent = new MapBrowserEvent(type, map, originalEvent as never, type === MapBrowserEventType.POINTERDRAG, undefined, activePointers as never);
+      mapEvent.coordinate = coordinate;
+      for (const interaction of map.getInteractions().getArray().slice().reverse()) {
+        if (!interaction.getActive() || interaction.handleEvent(mapEvent) !== false) continue;
+        break;
+      }
+    };
+    const down = new MouseEvent("pointerdown", { button: 0, bubbles: true });
+    Object.defineProperty(down, "isPrimary", { value: true });
+    const up = new MouseEvent("pointerup", { button: 0, bubbles: true });
+    dispatch(MapBrowserEventType.POINTERDOWN, down, center, [down]);
+    dispatch(MapBrowserEventType.POINTERUP, up, center, []);
+
+    expect(resized).toEqual([]);
+    expect(painted).toHaveLength(1);
+    expect(painted[0]).toContain("10:10");
+    adapter.dispose();
+    host.remove();
+  });
 });

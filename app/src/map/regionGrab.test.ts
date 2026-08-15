@@ -2,10 +2,11 @@ import Feature from "ol/Feature";
 import { describe, expect, it, vi } from "vitest";
 import { RegionGrabController } from "./RegionGrabController";
 import { clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, connectedTerrainCells, resizableCellIdsAt, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
-import { cellCenter, cellIdsWithinPaintPosition } from "./gridGeometry";
+import { cellCenter, cellIdsWithinPaintPosition, parseCellId } from "./gridGeometry";
 
 const region = (cellId: string, value: string, regionId = "region-a") => ({ cellId, attribute: "region" as const, value, regionId });
 const terrain = (cellId: string) => ({ cellId, attribute: "terrain" as const, value: "terrain" });
+const midpoint = (left: [number, number], right: [number, number]): [number, number] => [(left[0] + right[0]) / 2, (left[1] + right[1]) / 2];
 
 describe("region grab geometry", () => {
   it("collects one same-ID hex-connected mass and excludes another region ID", () => {
@@ -49,10 +50,23 @@ describe("region grab geometry", () => {
     ]);
   });
 
-  it("marks the inner edge of a hex gap as pullable", () => {
-    const ring = cellIdsWithinPaintPosition(cellCenter(10, 10), 1).filter((id) => id !== "10:10");
+  it("marks only the inner hex edge under the pointer as pullable", () => {
+    const center = cellCenter(10, 10);
+    const ring = cellIdsWithinPaintPosition(center, 1).filter((id) => id !== "10:10");
     const attributes = new Map(ring.map((id) => [id, [region(id, "#AA0000")]]));
-    expect(resizableCellIdsAt(cellCenter(10, 10), attributes)).toHaveLength(ring.length);
+    expect(resizableCellIdsAt(center, attributes)).toEqual([]);
+    const firstNeighbor = parseCellId(ring[0]!)!;
+    expect(resizableCellIdsAt(midpoint(center, cellCenter(firstNeighbor[0], firstNeighbor[1])), attributes)).toEqual([ring[0]]);
+  });
+
+  it("does not treat a shared edge inside one terrain mass as pullable", () => {
+    const center = cellCenter(10, 10);
+    const neighbor = cellCenter(10, 11);
+    const attributes = new Map([
+      ["10:10", [terrain("10:10")]],
+      ["11:10", [terrain("11:10")]],
+    ]);
+    expect(resizableCellIdsAt(midpoint(center, neighbor), attributes)).toEqual([]);
   });
 
   it("keeps only translated cells that have terrain", () => {
@@ -147,16 +161,16 @@ describe("region grab geometry", () => {
     });
     const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean; handleDragEvent: (event: unknown) => void; handleUpEvent: (event: unknown) => boolean };
     const pointer = { isPrimary: true, button: 0 };
-    const start = cellCenter(10, 10); const outside = cellCenter(10, 9); const inside = cellCenter(10, 11);
+    const start = cellCenter(10, 10); const outside = cellCenter(10, 9); const inside = cellCenter(10, 11); const boundary = midpoint(start, outside);
     expect(cellIdsWithinPaintPosition(start, 0)).toContain("10:10");
     expect(cellIdsWithinPaintPosition(outside, 0)).toContain("9:10");
-    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
+    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: boundary })).toBe(true);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: outside });
     expect(features.get("9:10")?.get("grabPreview")).toBe(true);
     interaction.handleUpEvent({ originalEvent: pointer, coordinate: outside });
     expect(resized).toEqual([{ cellIds: ["9:10"], attribute: "region", value: "#AA0000", regionId }]);
 
-    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
+    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: boundary })).toBe(true);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: inside });
     interaction.handleUpEvent({ originalEvent: pointer, coordinate: inside });
     expect(resized).toEqual([
@@ -212,7 +226,8 @@ describe("region grab geometry", () => {
       emitResize: vi.fn(),
     });
     const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean };
-    expect(interaction.handleDownEvent({ originalEvent: { isPrimary: true, button: 0 }, coordinate: cellCenter(10, 10) })).toBe(true);
+    const boundary = midpoint(cellCenter(10, 10), cellCenter(parseCellId(terrainId)![0], parseCellId(terrainId)![1]));
+    expect(interaction.handleDownEvent({ originalEvent: { isPrimary: true, button: 0 }, coordinate: boundary })).toBe(true);
     expect(setTerrainSmoothVisible).toHaveBeenCalledWith(false, [terrainId]);
     controller.dispose();
   });
@@ -240,9 +255,9 @@ describe("region grab geometry", () => {
     });
     const interaction = controller.interaction as unknown as { handleDownEvent: (event: unknown) => boolean; handleDragEvent: (event: unknown) => void; handleUpEvent: (event: unknown) => boolean };
     const pointer = { isPrimary: true, button: 0 };
-    const start = cellCenter(10, 10); const outside = cellCenter(10, 9); const inside = cellCenter(10, 11);
+    const start = cellCenter(10, 10); const outside = cellCenter(10, 9); const inside = cellCenter(10, 11); const boundary = midpoint(start, outside);
 
-    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
+    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: boundary })).toBe(true);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: outside });
     expect(features.get("9:10")?.get("grabPreview")).toBe(true);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: start });
@@ -250,12 +265,12 @@ describe("region grab geometry", () => {
     interaction.handleUpEvent({ originalEvent: pointer, coordinate: start });
     expect(resized).toHaveLength(0);
 
-    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
+    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: boundary })).toBe(true);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: outside });
     interaction.handleUpEvent({ originalEvent: pointer, coordinate: outside });
     expect(resized).toEqual([{ cellIds: ["9:10"], attribute: "terrain", value: "terrain" }]);
 
-    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: start })).toBe(true);
+    expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: boundary })).toBe(true);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: inside });
     interaction.handleUpEvent({ originalEvent: pointer, coordinate: inside });
     expect(resized).toEqual([

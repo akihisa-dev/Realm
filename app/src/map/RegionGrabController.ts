@@ -49,36 +49,25 @@ export class RegionGrabController {
         const region = attributes.get(anchor)?.find((item) => item.attribute === "region");
         const terrain = attributes.get(anchor)?.find((item) => item.attribute === "terrain");
         const regionSource = region ? sameRegionCells(anchor, attributes) : [];
-        const regionComponent = regionSource.length > 0 ? connectedRegionCells(anchor, attributes) : [];
-        if (region && isRegionBoundaryCell(anchor, regionComponent)) {
-          this.beginResize("region", region.value, region.regionId ?? null, regionSource, regionComponent, anchor, position);
-          return true;
-        }
-        const terrainComponent = terrain ? connectedTerrainCells(anchor, attributes) : [];
-        if (terrain && isRegionBoundaryCell(anchor, terrainComponent)) {
-          this.beginResize("terrain", terrain.value, null, terrainComponent, terrainComponent, anchor, position);
-          return true;
-        }
-
-        // A pointer on the rendered edge may resolve to an empty cell or to
-        // the other persisted layer.  Search nearby only in that case; an
-        // interior cell of the same layer must remain a paint/move gesture.
+        // Resolve only the exact hex edge below the pointer. A pointer on a
+        // rendered edge can belong to an empty cell or to the other persisted
+        // layer, so the candidate footprint still includes immediate neighbors;
+        // resizableCellIdsAt filters that footprint by actual edge distance.
         const configuredCandidates = options.cellCandidatesAt?.(position);
         const candidateIds = configuredCandidates === undefined
           ? undefined
           : [...new Set([anchor, ...configuredCandidates])];
         const boundaryCandidates = resizableCellIdsAt(position, attributes, candidateIds);
         for (const candidate of boundaryCandidates) {
-          if (candidate === anchor) continue;
           const values = attributes.get(candidate) ?? [];
-          const candidateRegion = !region ? values.find((item) => item.attribute === "region") : undefined;
+          const candidateRegion = candidate === anchor ? region : !region ? values.find((item) => item.attribute === "region") : undefined;
           const candidateRegionSource = candidateRegion ? sameRegionCells(candidate, attributes) : [];
           const candidateRegionComponent = candidateRegionSource.length > 0 ? connectedRegionCells(candidate, attributes) : [];
           if (candidateRegion && isRegionBoundaryCell(candidate, candidateRegionComponent)) {
             this.beginResize("region", candidateRegion.value, candidateRegion.regionId ?? null, candidateRegionSource, candidateRegionComponent, candidate, position);
             return true;
           }
-          const candidateTerrain = !terrain ? values.find((item) => item.attribute === "terrain") : undefined;
+          const candidateTerrain = candidate === anchor ? terrain : !terrain ? values.find((item) => item.attribute === "terrain") : undefined;
           const candidateTerrainComponent = candidateTerrain ? connectedTerrainCells(candidate, attributes) : [];
           if (candidateTerrain && isRegionBoundaryCell(candidate, candidateTerrainComponent)) {
             this.beginResize("terrain", candidateTerrain.value, null, candidateTerrainComponent, candidateTerrainComponent, candidate, position);
