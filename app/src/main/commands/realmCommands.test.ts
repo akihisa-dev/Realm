@@ -91,12 +91,12 @@ describe("RealmCommands user-visible operations", () => {
     await commands.applyCellAttributes({ cellIds: ["8:8"], attribute: "terrain", value: null, clearRegion: true });
     expect(await commands.viewCellAttributes({})).toEqual(expect.arrayContaining([{ cellId: "2:2", attribute: "region", value: "#AA0000", regionId }]));
     expect(await commands.viewCellAttributes({})).not.toEqual(expect.arrayContaining([
-      { cellId: "8:8", attribute: "terrain", value: "land" },
+      { cellId: "8:8", attribute: "terrain", value: "terrain" },
       { cellId: "8:8", attribute: "region", value: "#AA0000", regionId: eraseRegionId },
     ]));
     await commands.undoProject();
     expect(await commands.viewCellAttributes({})).toEqual(expect.arrayContaining([
-      { cellId: "8:8", attribute: "terrain", value: "land" },
+      { cellId: "8:8", attribute: "terrain", value: "terrain" },
       { cellId: "8:8", attribute: "region", value: "#AA0000", regionId: eraseRegionId },
     ]));
     await expect(commands.applyCellAttributes({ cellIds: ["8:8"], attribute: "terrain", value: "land", clearRegion: true })).rejects.toThrow("region clearing");
@@ -106,7 +106,7 @@ describe("RealmCommands user-visible operations", () => {
     const moved = await commands.viewCellAttributes({ minX: 2, maxX: 6, minY: 2, maxY: 3 });
     expect(moved).toEqual(expect.arrayContaining([
       { cellId: "5:3", attribute: "region", value: "#AA0000", regionId },
-      { cellId: "5:3", attribute: "terrain", value: "land" },
+      { cellId: "5:3", attribute: "terrain", value: "terrain" },
     ]));
     expect(moved).toEqual(expect.arrayContaining([
       { cellId: "6:3", attribute: "region", value: "#AA0000", regionId },
@@ -144,7 +144,7 @@ describe("RealmCommands user-visible operations", () => {
     await commands.applyCellAttributes({ cellIds: ["2:2", "3:2", "20:20"], attribute: "region", value: "#AA0000", regionId });
     await commands.applyCellAttributes({ cellIds: ["2:2", "3:2", "20:20", "5:3", "23:21"], attribute: "terrain", value: "land" });
 
-    await expect(commands.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] })).rejects.toThrow("entire region");
+    await expect(commands.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] })).rejects.toThrow("領域全体");
     await commands.moveRegionCells({ sourceCellIds: ["2:2", "3:2", "20:20"], targetCellIds: ["5:3", "6:3", "23:21"] });
 
     const moved = await commands.viewCellAttributes({});
@@ -158,23 +158,20 @@ describe("RealmCommands user-visible operations", () => {
     ]));
   });
 
-  it("keeps the stationary region and clips only the grabbed side on overlap", async () => {
+  it("rejects a region move when the target overlaps another region", async () => {
     const dir = directory(); const commands = new RealmCommands({ libraryDirectory: dir }); await commands.createProject({ name: "Grab overlap" });
     const movingRegionId = "55555555-5555-4555-8555-555555555555";
     const stationaryRegionId = "66666666-6666-4666-8666-666666666666";
     await commands.applyCellAttributes({ cellIds: ["2:2", "3:2"], attribute: "region", value: "#AA0000", regionId: movingRegionId });
     await commands.applyCellAttributes({ cellIds: ["5:3"], attribute: "region", value: "#00AA00", regionId: stationaryRegionId });
 
-    await commands.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] });
+    await expect(commands.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] })).rejects.toThrow("移動先に別の領域");
 
-    const moved = await commands.viewCellAttributes({});
-    expect(moved).toEqual(expect.arrayContaining([
-      { cellId: "5:3", attribute: "region", value: "#00AA00", regionId: stationaryRegionId },
-      { cellId: "6:3", attribute: "region", value: "#AA0000", regionId: movingRegionId },
-    ]));
-    expect(moved).not.toEqual(expect.arrayContaining([
+    const unchanged = await commands.viewCellAttributes({});
+    expect(unchanged).toEqual(expect.arrayContaining([
       { cellId: "2:2", attribute: "region", value: "#AA0000", regionId: movingRegionId },
       { cellId: "3:2", attribute: "region", value: "#AA0000", regionId: movingRegionId },
+      { cellId: "5:3", attribute: "region", value: "#00AA00", regionId: stationaryRegionId },
     ]));
   });
 });

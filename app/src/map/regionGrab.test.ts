@@ -1,7 +1,7 @@
 import Feature from "ol/Feature";
 import { describe, expect, it, vi } from "vitest";
 import { RegionGrabController } from "./RegionGrabController";
-import { adjacentCellIds, clipRegionCellsToAvailableTargets, clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, connectedTerrainCells, resizableCellIdsAt, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
+import { adjacentCellIds, clipRegionCellsToTerrain, connectedCellComponents, connectedRegionCells, connectedTerrainCells, resizableCellIdsAt, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
 import { cellCenter, cellIdsWithinPaintPosition, parseCellId } from "./gridGeometry";
 
 const region = (cellId: string, value: string, regionId = "region-a") => ({ cellId, attribute: "region" as const, value, regionId });
@@ -96,17 +96,7 @@ describe("region grab geometry", () => {
     expect(clipRegionCellsToTerrain(["5:3", "6:3", "6:4"], attributes)).toEqual(["5:3"]);
   });
 
-  it("clips only targets occupied by another region, including terrainless cells", () => {
-    const attributes = new Map([
-      ["5:3", [terrain("5:3")]],
-      ["6:3", [region("6:3", "#00AA00", "region-b")]],
-      ["7:3", [region("7:3", "#AA0000", "region-a")]],
-      ["20:20", [region("20:20", "#00AA00", "region-b")]],
-    ]);
-    expect(clipRegionCellsToAvailableTargets(["5:3", "6:3", "7:3", "20:20"], ["2:2", "3:2"], "region-a", attributes)).toEqual(["5:3", "7:3"]);
-  });
-
-  it("previews terrainless cells, clips overlapping regions, restores attributes, and emits one move", () => {
+  it("rejects an overlapping region move and restores the canonical preview", () => {
     const attributes = new Map([
       ["2:1", [region("2:1", "#AA0000")]],
       ["3:1", [region("3:1", "#AA0000")]],
@@ -139,20 +129,20 @@ describe("region grab geometry", () => {
     expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: [0, 0] })).toBe(true);
     expect(setRegionSmoothVisible).toHaveBeenLastCalledWith(false, "region-a");
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: [1, 0] });
-    expect(features.get("5:3")?.get("grabPreview")).toBe(true);
-    expect(features.get("6:4")?.get("grabPreview")).toBe(true);
+    expect(features.get("5:3")?.get("grabPreview")).toBeUndefined();
+    expect(features.get("6:4")?.get("grabPreview")).toBeUndefined();
     expect(features.get("6:3")).toBeUndefined();
     expect(interaction.handleUpEvent({ originalEvent: pointer, coordinate: [1, 0] })).toBe(false);
     expect(setRegionSmoothVisible).toHaveBeenLastCalledWith(true);
     expect(features.get("2:1")?.get("attributes")).toEqual([region("2:1", "#AA0000")]);
-    expect(features.get("5:3")?.get("attributes")).toEqual([terrain("5:3")]);
+    expect(features.get("5:3")).toBeUndefined();
     expect(features.get("6:4")).toBeUndefined();
-    expect(emitted).toEqual([{ sourceCellIds: ["2:1", "3:1", "2:2", "3:2", "4:2", "2:3", "3:3", "20:20"], targetCellIds: ["5:2", "6:2", "4:3", "5:3", "6:3", "5:4", "6:4", "22:21"] }]);
+    expect(emitted).toEqual([]);
 
     expect(interaction.handleDownEvent({ originalEvent: pointer, coordinate: [0, 0] })).toBe(true);
     interaction.handleDragEvent({ originalEvent: pointer, coordinate: [2, 0] });
     interaction.handleUpEvent({ originalEvent: pointer, coordinate: [2, 0] });
-    expect(emitted).toHaveLength(1);
+    expect(emitted).toHaveLength(0);
     expect(features.get("2:2")?.get("grabPreview")).toBeUndefined();
     controller.dispose();
   });

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { CellAttributeSnapshot, RealmFeature } from "../../backend";
+import type { CellAttributeSnapshot, MapShape, RealmFeature } from "../../backend";
 import { canonicalValueSignature } from "../../canonicalValue";
 import type {
   CellGridOptions,
@@ -22,6 +22,7 @@ type RendererSyncOptions = {
   showCellGrid: boolean;
   cellGridOptions: CellGridOptions;
   drawingOptions: DrawingOptions;
+  mapShapes: readonly MapShape[];
   cellAttributes: readonly CellAttributeSnapshot[];
   mode: RealmMapMode;
   selectedCellIds: readonly string[];
@@ -42,6 +43,7 @@ export function useRendererSync({
   showCellGrid,
   cellGridOptions,
   drawingOptions,
+  mapShapes,
   cellAttributes,
   mode,
   selectedCellIds,
@@ -55,6 +57,7 @@ export function useRendererSync({
   const gridOptionsSignature = canonicalValueSignature(gridOptions);
   const cellGridOptionsSignature = canonicalValueSignature(cellGridOptions);
   const drawingOptionsSignature = canonicalValueSignature(drawingOptions);
+  const mapShapesSignature = canonicalValueSignature(mapShapes);
   const cellAttributesSignature = canonicalValueSignature(cellAttributes);
   const selectedCellIdsSignature = canonicalValueSignature(selectedCellIds);
   const selectedFeatureIdsSignature = canonicalValueSignature(selectedFeatureIds);
@@ -67,9 +70,10 @@ export function useRendererSync({
   useEffect(() => { adapterRef.current?.setCellGridVisible(showCellGrid); }, [adapterRef, showCellGrid]);
   useEffect(() => { adapterRef.current?.setCellGridOptions(cellGridOptions); }, [adapterRef, cellGridOptionsSignature]);
   useEffect(() => { adapterRef.current?.setDrawingOptions(drawingOptions); }, [adapterRef, drawingOptionsSignature]);
-  // Apply semantic cell attributes before mode changes so a save that switches
+  // Apply transient grid read-model attributes before mode changes so a save that switches
   // to pan cannot expose a stale erase preview for one render.
   useEffect(() => { adapterRef.current?.setCellAttributes(cellAttributes); }, [adapterRef, cellAttributesSignature]);
+  useEffect(() => { adapterRef.current?.setMapShapes?.(mapShapes); }, [adapterRef, mapShapesSignature]);
   useEffect(() => { adapterRef.current?.setMode(mode); }, [adapterRef, mode]);
   useEffect(() => { adapterRef.current?.setSelectedCells(selectedCellIds); }, [adapterRef, selectedCellIdsSignature]);
   useEffect(() => { adapterRef.current?.setCellPaintRadius(effectivePaintRadius); }, [adapterRef, effectivePaintRadius]);

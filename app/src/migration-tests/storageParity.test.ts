@@ -85,12 +85,6 @@ function createLegacyFixture(path: string, version: number, settings?: string): 
   } finally { db.close(); }
 }
 
-function addMigrationFailure(path: string, version: number): void {
-  const failureVersion = version === 3 ? 4 : version === 4 ? 5 : version === 5 ? 6 : 8;
-  const db = new DatabaseSync(path);
-  try { db.exec(`CREATE TRIGGER migration_failure BEFORE INSERT ON schema_migrations WHEN NEW.version = ${failureVersion} BEGIN SELECT RAISE(ABORT, 'synthetic migration failure'); END;`); } finally { db.close(); }
-}
-
 describe("Electron storage parity: path, snapshots, migrations and transfer", () => {
   it("rejects path replacement before writable open and same-inode content mutation", () => {
     const directory = fixtureDirectory();
@@ -212,14 +206,13 @@ describe("Electron storage parity: path, snapshots, migrations and transfer", ()
     expect(existsSync(join(newParent, "published.realmmap"))).toBe(false);
   });
 
-  it.each([3, 4, 5, 6, 7])("rolls back a late-stage v%d migration and preserves source bytes", async (version) => {
+  it.each([3, 4, 5, 6, 7, 8, 9, 10])("rejects a legacy v%d source and preserves source bytes", async (version) => {
     const directory = fixtureDirectory();
     const path = join(directory, `failed-v${version}.realmmap`);
     createLegacyFixture(path, version);
-    addMigrationFailure(path, version);
     const before = readFileSync(path);
     const identity = sourceIdentity(path);
-    await expect(Promise.resolve().then(() => openProject(path))).rejects.toThrow();
+    await expect(Promise.resolve().then(() => openProject(path))).rejects.toMatchObject({ code: "unsupported_schema" });
     expect(readFileSync(path)).toEqual(before);
     expect(sameIdentity(identity, sourceIdentity(path))).toBe(true);
     const check = new DatabaseSync(path, { readOnly: true });
@@ -293,10 +286,10 @@ describe("Electron storage parity: transactional CRUD and session history", () =
     await expect(commands.createFeature(featureInput)).rejects.toThrow();
     let check = new DatabaseSync(path, { readOnly: true }); expect(Number((check.prepare("SELECT COUNT(*) AS count FROM features").get() as Record<string, unknown>).count)).toBe(0); check.close();
     drop("reject_feature");
-    reject("reject_cell", "cell_attributes");
+    reject("reject_shape", "map_shapes");
     await expect(commands.applyCellAttributes({ cellIds: ["1:1", "2:2"], attribute: "terrain", value: "land" })).rejects.toThrow();
     expect(await commands.viewCellAttributes({})).toEqual([]);
-    drop("reject_cell");
+    drop("reject_shape");
     reject("reject_asset", "assets");
     await expect(commands.importAsset({ mime: "image/png", bytes: png, width: 1, height: 1, metadata: {} })).rejects.toThrow();
     check = new DatabaseSync(path, { readOnly: true }); expect(Number((check.prepare("SELECT COUNT(*) AS count FROM assets").get() as Record<string, unknown>).count)).toBe(0); check.close();
@@ -317,7 +310,7 @@ describe("Electron storage parity: transactional CRUD and session history", () =
     snapshot = await commands.applyCellAttributes({ cellIds: ["1:1"], attribute: "terrain", value: "land" });
     expect(snapshot.canUndo).toBe(true);
     snapshot = await commands.undoProject(); expect(await commands.viewCellAttributes({})).toEqual([]);
-    snapshot = await commands.redoProject(); expect((await commands.viewCellAttributes({}))[0]?.value).toBe("land");
+    snapshot = await commands.redoProject(); expect((await commands.viewCellAttributes({}))[0]?.value).toBe("terrain");
     snapshot = await commands.importAsset({ mime: "image/png", bytes: png, width: 1, height: 1, metadata: { role: "history" } });
     expect(snapshot.assets).toHaveLength(1);
     snapshot = await commands.undoProject(); expect(snapshot.assets).toHaveLength(0);
@@ -325,7 +318,7 @@ describe("Electron storage parity: transactional CRUD and session history", () =
     await commands.closeProject();
     const reopened = await commands.openProject({ libraryId: basename(path, ".realmmap") });
     expect(reopened.featureCount).toBe(1);
-    expect((await commands.viewCellAttributes({}))[0]?.value).toBe("land");
+    expect((await commands.viewCellAttributes({}))[0]?.value).toBe("terrain");
     expect(reopened.assets).toHaveLength(1);
     expect(reopened.canUndo).toBe(false);
     await commands.closeProject();

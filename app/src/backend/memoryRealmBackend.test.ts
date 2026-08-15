@@ -37,7 +37,7 @@ it("creates, edits, deletes, and undoes current features", async () => {
     expect(await backend.viewCellAttributes({})).toHaveLength(2);
   });
 
-  it("clears terrain and region together as one undoable operation", async () => {
+  it("clears terrain and region shapes together as one undoable operation", async () => {
     const backend = new MemoryRealmBackend();
     await backend.createProject({ path: "browser://terrain-region-erase.realmmap", name: "Terrain region erase" });
     const regionId = "55555555-5555-4555-8555-555555555555";
@@ -47,7 +47,7 @@ it("creates, edits, deletes, and undoes current features", async () => {
     expect(await backend.viewCellAttributes({})).toEqual([]);
     await backend.undoProject();
     expect(await backend.viewCellAttributes({})).toEqual([
-      { cellId: "2:3", attribute: "terrain", value: "land" },
+      { cellId: "2:3", attribute: "terrain", value: "terrain" },
       { cellId: "2:3", attribute: "region", value: "#AA0000", regionId },
     ]);
     await expect(backend.applyCellAttributes({ cellIds: ["2:3"], attribute: "terrain", value: "land", clearRegion: true })).rejects.toThrow("領域消去");
@@ -262,7 +262,7 @@ it("moves every cell with one region ID, including a visually separated componen
   ]));
 });
 
-it("keeps the stationary region and clips only the grabbed side on overlap", async () => {
+it("rejects a region move when it overlaps another region", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://grab-overlap.realmmap", name: "Grab overlap" });
   const movingRegionId = "55555555-5555-4555-8555-555555555555";
@@ -270,16 +270,13 @@ it("keeps the stationary region and clips only the grabbed side on overlap", asy
   await backend.applyCellAttributes({ cellIds: ["2:2", "3:2"], attribute: "region", value: "#AA0000", regionId: movingRegionId });
   await backend.applyCellAttributes({ cellIds: ["5:3"], attribute: "region", value: "#00AA00", regionId: stationaryRegionId });
 
-  await backend.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] });
+  await expect(backend.moveRegionCells({ sourceCellIds: ["2:2", "3:2"], targetCellIds: ["5:3", "6:3"] })).rejects.toThrow("移動先に別の領域");
 
-  const moved = await backend.viewCellAttributes({});
-  expect(moved).toEqual(expect.arrayContaining([
-    { cellId: "5:3", attribute: "region", value: "#00AA00", regionId: stationaryRegionId },
-    { cellId: "6:3", attribute: "region", value: "#AA0000", regionId: movingRegionId },
-  ]));
-  expect(moved).not.toEqual(expect.arrayContaining([
+  const unchanged = await backend.viewCellAttributes({});
+  expect(unchanged).toEqual(expect.arrayContaining([
     { cellId: "2:2", attribute: "region", value: "#AA0000", regionId: movingRegionId },
     { cellId: "3:2", attribute: "region", value: "#AA0000", regionId: movingRegionId },
+    { cellId: "5:3", attribute: "region", value: "#00AA00", regionId: stationaryRegionId },
   ]));
 });
 

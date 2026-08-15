@@ -1,11 +1,11 @@
 /**
- * Characterization inventory for the Electron migration.
+ * Characterization inventory for the Electron storage boundary.
  *
  * The references intentionally name the existing legacy/React tests instead of
  * importing implementation details.  An Electron storage test can add its
  * own suite name while retaining the same requirement id and comparison
- * fixture.  This keeps the migration gate about observable behaviour rather
- * than a one-to-one module rewrite.
+ * fixture. This keeps the characterization gate about observable behaviour
+ * rather than a one-to-one module rewrite.
  */
 export type MigrationRequirement = {
   id: string;
@@ -17,9 +17,9 @@ export type MigrationRequirement = {
 
 export const migrationInventory = [
   {
-    id: "schema-v3-v8",
+    id: "schema11-shape-storage",
     area: "storage",
-    observable: "Schema versions 3 through 7 open and finish at the current version 8 without losing rows.",
+    observable: "Schema versions 3 through 10 are rejected without mutation; schema 11 stores continuous grid-snapped map shapes.",
     baselineEvidence: [
       "v3_migrates_to_v7_without_changing_existing_features",
       "v4_migrates_to_v7_with_empty_asset_store",
@@ -27,12 +27,12 @@ export const migrationInventory = [
       "v6_migrates_to_v7_preserving_settings_and_adding_canvas_defaults",
       "v7_migrates_cell_layers_to_v8_and_preserves_terrain_undo_reopen",
     ],
-    electronSuite: "migration-tests/electronStorage.test.ts :: migrates each synthetic v%d source independently",
+    electronSuite: "migration-tests/electronStorage.test.ts :: rejects each synthetic v%d source without mutation",
   },
   {
     id: "schema-rejection",
     area: "storage",
-    observable: "Corrupt, partial, weakened, retired legacy, and future schemas are rejected before mutation.",
+    observable: "Corrupt, partial, legacy, retired, and future schemas are rejected before mutation.",
     baselineEvidence: [
       "rejects_mismatch_partial_and_weakened_schema_without_writing",
       "corrupt_sqlite_source_remains_unchanged",
@@ -91,7 +91,7 @@ export const migrationInventory = [
   {
     id: "migration-rollback",
     area: "storage",
-    observable: "A failure at any migration stage rolls back every schema/data change and preserves source bytes.",
+    observable: "Legacy schema rejection preserves every source byte; current edits roll back transactionally.",
     baselineEvidence: [
       "failed_v3_migration_rolls_back_and_preserves_source_bytes",
       "failed_v4_to_v7_migration_rolls_back_source",
@@ -99,12 +99,12 @@ export const migrationInventory = [
       "failed_v6_to_v8_late_stage_migration_rolls_back_source",
       "failed_v7_to_v8_cell_migration_rolls_back_source",
     ],
-    electronSuite: "migration-tests/storageParity.test.ts :: rolls back a late-stage v%d migration and preserves source bytes",
+    electronSuite: "migration-tests/storageParity.test.ts :: rejects a legacy v%d source and preserves source bytes",
   },
   {
     id: "crud-transaction",
     area: "storage",
-    observable: "Feature/cell/asset CRUD batches validate before writing and commit as one transaction.",
+    observable: "Feature/shape/asset CRUD batches validate before writing and commit as one transaction.",
     baselineEvidence: [
       "static_feature_crud_reopen_and_undo_redo",
       "feature_batch_is_one_transaction_and_one_undo_step",
@@ -117,7 +117,7 @@ export const migrationInventory = [
   {
     id: "undo-redo",
     area: "storage",
-    observable: "Successful edits expose one undo step, restore persisted state, and can be redone after reopen.",
+    observable: "Successful edits expose one undo step, restore persisted shapes, and can be redone after reopen.",
     baselineEvidence: [
       "static_feature_crud_reopen_and_undo_redo",
       "v7_migrates_cell_layers_to_v8_and_preserves_terrain_undo_reopen",

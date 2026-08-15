@@ -45,8 +45,8 @@ describe("Electron migration characterization evidence", () => {
   });
 
   it("reports persisted data differences without treating source metadata as map data", () => {
-    const changed = { ...baselineSnapshot, cells: [{ cellId: "1:0", layer: "terrain", value: "water" }] };
-    expect(compareMigrationSnapshots(baselineSnapshot, changed)).toEqual({ equal: false, differences: ["cells"] });
+    const changed = { ...baselineSnapshot, mapShapes: [{ id: "shape", layer: "terrain", value: "terrain" }] };
+    expect(compareMigrationSnapshots(baselineSnapshot, changed)).toEqual({ equal: false, differences: ["mapShapes"] });
     expect(compareSourceIdentity(baselineIdentity, baselineIdentity)).toEqual({ equal: true, differences: [] });
   });
 

@@ -8,7 +8,7 @@ import {
   type RealmMapRenderer,
   type RealmMapRendererFactory,
 } from "../map/MapAdapter";
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MoveRegionCellsInput, RealmFeature } from "../backend";
+import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MapShape, MoveRegionCellsInput, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { ExportCanvasSize } from "../map/contracts";
 import type { MapErrorCode } from "../map/errors";
@@ -29,6 +29,7 @@ type MapCanvasProps = {
   disabled?: boolean;
   selectedFeatureId?: string | null;
   selectedFeatureIds?: readonly string[];
+  mapShapes?: readonly MapShape[];
   cellAttributes?: readonly CellAttributeSnapshot[];
   selectedCellIds?: readonly string[];
   drawingOptions?: DrawingOptions;
@@ -67,6 +68,7 @@ export function MapCanvas({
   disabled = false,
   selectedFeatureId = null,
   selectedFeatureIds,
+  mapShapes = [],
   cellAttributes = [],
   selectedCellIds = [],
   drawingOptions = { gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null },
@@ -139,6 +141,7 @@ export function MapCanvas({
     showCellGrid,
     cellGridOptions,
     drawingOptions,
+    mapShapes,
     cellAttributes,
     mode,
     selectedCellIds,
@@ -161,6 +164,7 @@ export function MapCanvas({
     showCellGrid,
     cellGridOptions,
     drawingOptions,
+    mapShapes,
     cellAttributes,
     mode,
     selectedCellIds,

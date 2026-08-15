@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 8,
+  "schemaVersion": 11,
   "world": {
     "id": "synthetic-world",
     "name": "Characterization"
@@ -8,8 +8,26 @@
     { "id": "feature-2", "featureType": "city" },
     { "id": "feature-1", "featureType": "terrain" }
   ],
-  "cells": [
-    { "cellId": "1:0", "layer": "terrain", "value": "grass" }
+  "mapShapes": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "layer": "terrain",
+      "value": "terrain",
+      "geometryVersion": 1,
+      "snapGridVersion": 2,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-174.33147008432005, -87.54545454545455],
+          [-172.91433760540005, -86.72727272727272],
+          [-172.91433760540005, -85.0909090909091],
+          [-174.33147008432005, -84.27272727272727],
+          [-175.74860256324004, -85.0909090909091],
+          [-175.74860256324004, -86.72727272727272],
+          [-174.33147008432005, -87.54545454545455]
+        ]]
+      }
+    }
   ],
   "assets": [],
   "sourceHash": "synthetic-source-hash",

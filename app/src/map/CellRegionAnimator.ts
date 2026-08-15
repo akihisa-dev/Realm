@@ -3,8 +3,8 @@ import Feature from "ol/Feature";
 const TRANSITION_DURATION_MS = 240;
 
 /**
- * Renderer-only fade for region cell changes. Persisted cell attributes remain
- * the source of truth; this class only controls a transient feature opacity.
+ * Renderer-only fade for region shape changes. Canonical map shapes remain the
+ * source of truth; this class only controls a transient feature opacity.
  */
 export class CellRegionAnimator {
   private readonly animationFrames = new Map<Feature, number>();

@@ -4,7 +4,6 @@ import type BaseEvent from "ol/events/Event";
 import View from "ol/View";
 import type Graticule from "ol/layer/Graticule";
 import MultiLineString from "ol/geom/MultiLineString";
-import MultiPoint from "ol/geom/MultiPoint";
 import Polygon from "ol/geom/Polygon";
 import Draw from "ol/interaction/Draw";
 import PointerInteraction from "ol/interaction/Pointer";
@@ -23,7 +22,7 @@ import Style from "ol/style/Style";
 import { primaryAction, singleClick } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MoveRegionCellsInput, Position, RealmFeature } from "../backend";
+import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MapShape, MoveRegionCellsInput, Position, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import { CELL_PAINT_RADII, WORLD_EXTENT, availableViewportSize, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
@@ -32,7 +31,7 @@ import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors"
 import { createCellStyle, createFeatureStyle } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
 import { assertGeometryWithinWorld } from "./geometryGuard";
-import { smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments, terrainCellCenters } from "./terrainOutline";
+import { smoothCellBoundaryRings } from "./terrainOutline";
 import { TerrainOutlineAnimator } from "./terrainOutlineAnimator";
 import { CellRegionController } from "./CellRegionController";
 import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
@@ -41,7 +40,7 @@ import { exportMapRaster } from "./mapRasterExporter";
 import { RegionGrabController } from "./RegionGrabController";
 import { RegionShapeController } from "./RegionShapeController";
 import { GrabHoverController } from "./GrabHoverController";
-import { connectedCellComponents } from "./regionGrab";
+import { cloneMapShapes, renderCanonicalMapShapes, renderTransientCellGeometry } from "./mapShapeRendering";
 import { nudgeGeometry, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
 import { MiddleButtonDragPan, MiddleButtonSafeDraw } from "./middleButtonPan";
 import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
@@ -133,6 +132,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private paintSelectionBeforeStroke: string[] = [];
   private readonly cellFeatures = new globalThis.Map<string, Feature>();
   private cellAttributesById = new globalThis.Map<string, CellAttributeSnapshot[]>();
+  private mapShapes: MapShape[] = [];
+  private mapShapesControlled = false;
   private selectedCellIds = new Set<string>();
   private hoveredCellIds = new Set<string>();
   private lastPointerCoordinate: [number, number] | null = null;
@@ -508,7 +509,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.refreshGrabHover();
     if (mode === "grab") this.grab = new RegionGrabController({
       cellAt: (position) => this.cellAtCoordinate(position), cellCandidatesAt: (position) => gridCellIdsWithinPaintPosition(position, 1), allowMove: mode === "grab", allowInteriorBoundaryPress: mode === "grab", attributes: () => this.cellAttributesById, getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id), changed: () => this.cellLayer.changed(),
-      setRegionSmoothVisible: (visible, regionIdentity) => { this.regionSmoothHiddenIdentity = visible ? null : regionIdentity ?? null; this.regionSmoothLayer.changed(); }, setTerrainSmoothVisible: (visible, hiddenCellIds = []) => { if (!visible) this.terrainOutlineLayer.setVisible(false); this.setTerrainSmoothPreview(hiddenCellIds); this.terrainSmoothLayer.setVisible(true); }, emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); }, emitResize: (input) => { for (const listener of this.cellResizeListeners) listener(input); },
+      setRegionSmoothVisible: (visible, regionIdentity) => { this.regionSmoothHiddenIdentity = visible ? null : regionIdentity ?? null; this.regionSmoothLayer.changed(); }, setTerrainSmoothVisible: (visible, hiddenCellIds = []) => { if (visible && this.mapShapesControlled) { this.setMapShapes(this.mapShapes); return; } if (!visible) this.terrainOutlineLayer.setVisible(false); this.setTerrainSmoothPreview(hiddenCellIds); this.terrainSmoothLayer.setVisible(true); }, emit: (input) => { for (const listener of this.regionMoveListeners) listener(input); }, emitResize: (input) => { for (const listener of this.cellResizeListeners) listener(input); },
     });
     if (mode === "erase") {
       this.setSelected(null);
@@ -969,6 +970,20 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   private setTerrainSmoothPreview(hiddenCellIds: readonly string[] = []): void { const hidden = new Set(hiddenCellIds); const visibleTerrainIds = [...this.cellAttributesById.entries()].filter(([id, values]) => !hidden.has(id) && values.some(({ attribute }) => attribute === "terrain")).map(([id]) => id); this.terrainSmoothSource.clear(); const rings = smoothCellBoundaryRings(visibleTerrainIds); if (rings.length > 0) this.terrainSmoothSource.addFeature(new Feature({ geometry: new MultiLineString(rings) })); }
 
+  /** Renders the canonical Polygon rows without smoothing or per-cell geometry. */
+  setMapShapes(shapes: readonly MapShape[]): void {
+    this.mapShapesControlled = true;
+    this.mapShapes = cloneMapShapes(shapes);
+    this.regionSmoothHiddenIdentity = null;
+    const { terrainCount, regionCount } = renderCanonicalMapShapes(this.mapShapes, this.terrainSmoothSource, this.regionSmoothSource);
+    this.terrainOutlineLayer.setVisible(false);
+    this.terrainSmoothLayer.setVisible(terrainCount > 0);
+    this.regionSmoothLayer.setVisible(regionCount > 0);
+    this.terrainSmoothSource.changed();
+    this.regionSmoothSource.changed();
+    this.refreshGrabHover();
+  }
+
   setCellAttributes(attributes: readonly CellAttributeSnapshot[]): void {
     const previous = this.cellAttributesById;
     const byCell = new globalThis.Map<string, CellAttributeSnapshot[]>();
@@ -978,9 +993,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
       current.push(attribute);
       byCell.set(attribute.cellId, current);
     }
-    const terrainCellIds = [...byCell.entries()]
-      .filter(([, values]) => values.some(({ attribute }) => attribute === "terrain"))
-      .map(([id]) => id);
     // Region cells remain visible even when terrain is absent.  The persisted
     // layers are independent, so hiding region rows here can make a moved or
     // otherwise terrainless region impossible to find again.
@@ -995,29 +1007,17 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellAttributesById = byCell;
     for (const id of changedIds) this.removeUnusedCell(id);
     this.syncSelectedCellFlags();
-    const grid = splitTerrainGridSegments(this.fixedCellGridLines, terrainCellIds);
-    this.cellGridSource.clear();
-    if (grid.outside.length > 0) this.cellGridSource.addFeature(new Feature({ geometry: new MultiLineString(grid.outside) }));
-    this.terrainCellGridSource.clear();
-    const centers = terrainCellCenters(terrainCellIds);
-    if (centers.length > 0) this.terrainCellGridSource.addFeature(new Feature({ geometry: new MultiPoint(centers) }));
-    this.terrainOutlineAnimator.update(new Set(terrainCellIds));
-    this.terrainSmoothSource.clear();
-    const terrainRings = smoothCellBoundaryRings(terrainCellIds);
-    if (terrainRings.length > 0) this.terrainSmoothSource.addFeature(new Feature({ geometry: new MultiLineString(terrainRings) }));
-    this.regionSmoothSource.clear();
-    const regionIdsByIdentity = new globalThis.Map<string, { color: string; ids: string[]; identity: string }>();
-    for (const [id, values] of byCell) {
-      const region = values.find(({ attribute }) => attribute === "region"); if (!region) continue;
-      const color = /^#[\da-f]{6}$/i.test(region.value) ? region.value.toUpperCase() : mapTheme(this.activeThemeId, this.themeOverrides).region;
-      const identity = region.regionId ?? region.value;
-      const key = `${identity}\u0000${color}`;
-      const entry = regionIdsByIdentity.get(key) ?? { color, ids: [], identity }; entry.ids.push(id); regionIdsByIdentity.set(key, entry);
-    }
-    for (const { color, ids, identity } of regionIdsByIdentity.values()) for (const component of connectedCellComponents(ids)) {
-      const polygons = smoothCellBoundaryPolygons(component);
-      for (const polygon of polygons) this.regionSmoothSource.addFeature(new Feature({ geometry: new Polygon(polygon), regionColor: color, regionIdentity: identity }));
-    }
+    const terrainCellIds = renderTransientCellGeometry({
+      attributes: byCell,
+      fixedCellGridLines: this.fixedCellGridLines,
+      cellGridSource: this.cellGridSource,
+      terrainCellGridSource: this.terrainCellGridSource,
+      terrainSmoothSource: this.terrainSmoothSource,
+      regionSmoothSource: this.regionSmoothSource,
+      regionFallbackColor: mapTheme(this.activeThemeId, this.themeOverrides).region,
+      renderSmoothShapes: !this.mapShapesControlled,
+    });
+    this.terrainOutlineAnimator.update(terrainCellIds);
     this.cellRegion.animateChanges(previous, renderedByCell, (id) => this.getCellFeature(id));
     this.cellLayer.changed();
     this.refreshGrabHover();
@@ -1183,6 +1183,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.map.removeLayer(this.terrainCellGridLayer);
     this.cellFeatures.clear();
     this.cellAttributesById.clear();
+    this.mapShapes = [];
     this.selectedCellIds.clear();
     this.hoveredCellIds.clear();
     this.grabHover.dispose();

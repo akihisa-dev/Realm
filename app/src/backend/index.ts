@@ -5,6 +5,10 @@ import type { ArtifactFormat, ElectronRealmApi, TransferPathMode } from "../shar
 
 export type {
   ApplyCellAttributesInput,
+  MapShape,
+  MapShapeGeometry,
+  MapShapeLayer,
+  ReplaceMapShapesInput,
   MoveRegionCellsInput,
   AssetManifest,
   AssetRead,

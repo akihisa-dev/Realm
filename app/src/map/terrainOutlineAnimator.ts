@@ -4,7 +4,7 @@ import { terrainOutlineTransitionSegments } from "./terrainOutlineTransition";
 const TRANSITION_DURATION_MS = 240;
 export type TerrainOutlineRenderPhase = "transition" | "complete";
 
-/** Keeps terrain-boundary motion transient and independent from persisted cell state. */
+/** Keeps terrain-boundary motion transient and independent from canonical map shapes. */
 export class TerrainOutlineAnimator {
   private cellIds = new Set<string>();
   private initialized = false;

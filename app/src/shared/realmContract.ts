@@ -12,6 +12,19 @@ export type GeoJsonGeometry =
   | { type: "Polygon"; coordinates: Position[][] };
 export type RealmFeature = { id: string; featureType: FeatureType; name: string; geometry: GeoJsonGeometry; properties: FeatureProperties };
 export type World = { id: string; name: string };
+/** Canonical editable surfaces. Cell ids are transient paint/hit-test values. */
+export type MapShapeLayer = "terrain" | "region";
+export type MapShapeGeometry = { type: "Polygon"; coordinates: Position[][] };
+export type MapShape = {
+  id: string;
+  layer: MapShapeLayer;
+  regionId?: string;
+  value: string;
+  geometryVersion: number;
+  snapGridVersion: number;
+  geometry: MapShapeGeometry;
+};
+export type ReplaceMapShapesInput = { shapes: MapShape[] };
 
 export type ProjectSettings = {
   themeId: "ink" | "atlas" | "midnight";
@@ -37,7 +50,7 @@ export type CellAttributeSnapshot = { cellId: string; attribute: CellAttribute; 
 export type ApplyCellAttributesInput = { cellIds: string[]; attribute: CellAttribute; value: string | null; regionId?: string; clearRegion?: boolean };
 export type MoveRegionCellsInput = { sourceCellIds: string[]; targetCellIds: string[] };
 export type CellViewportInput = { minX?: number; maxX?: number; minY?: number; maxY?: number };
-export type RealmSnapshot = { formatVersion: number; path: string; world: World; features: RealmFeature[]; assets: AssetManifest[]; settings: ProjectSettings; featureCount: number; canUndo: boolean; canRedo: boolean };
+export type RealmSnapshot = { formatVersion: number; path: string; world: World; features: RealmFeature[]; mapShapes: MapShape[]; assets: AssetManifest[]; settings: ProjectSettings; featureCount: number; canUndo: boolean; canRedo: boolean };
 export type SaveProjectInput = { name: string };
 export type CreateFeatureInput = { featureType: FeatureType; name: string; geometry: GeoJsonGeometry; properties?: FeatureProperties };
 export type ReviseFeatureInput = Omit<CreateFeatureInput, "featureType"> & { id: string };
@@ -69,6 +82,7 @@ export interface RealmBackend {
   deleteFeature(input: { id: string }): Promise<RealmSnapshot>;
   undoProject(): Promise<RealmSnapshot>;
   redoProject(): Promise<RealmSnapshot>;
+  replaceMapShapes(input: ReplaceMapShapesInput): Promise<RealmSnapshot>;
   applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot>;
   moveRegionCells(input: MoveRegionCellsInput): Promise<RealmSnapshot>;
   viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]>;

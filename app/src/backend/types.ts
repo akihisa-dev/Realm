@@ -22,11 +22,17 @@ export type World = {
   name: string;
 };
 
+export type MapShapeLayer = "terrain" | "region";
+export type MapShapeGeometry = { type: "Polygon"; coordinates: Position[][] };
+export type MapShape = { id: string; layer: MapShapeLayer; regionId?: string; value: string; geometryVersion: number; snapGridVersion: number; geometry: MapShapeGeometry };
+export type ReplaceMapShapesInput = { shapes: MapShape[] };
+
 export type RealmSnapshot = {
   formatVersion: number;
   path: string;
   world: World;
   features: RealmFeature[];
+  mapShapes: MapShape[];
   assets: AssetManifest[];
   settings: ProjectSettings;
   featureCount: number;
@@ -122,6 +128,7 @@ export interface RealmBackend {
   deleteFeature(input: { id: string }): Promise<RealmSnapshot>;
   undoProject(): Promise<RealmSnapshot>;
   redoProject(): Promise<RealmSnapshot>;
+  replaceMapShapes(input: ReplaceMapShapesInput): Promise<RealmSnapshot>;
   applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot>;
   moveRegionCells(input: MoveRegionCellsInput): Promise<RealmSnapshot>;
   viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]>;

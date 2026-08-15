@@ -16,9 +16,9 @@ const edgeKey = (start: Position, end: Position): string => {
 };
 
 /**
- * Derives only the exposed edges of the persisted terrain-cell set. Shared
- * edges cancel, so adjacent cells render as one unfilled terrain mass rather
- * than as individually painted hexagons.
+ * Derives only the exposed edges of a transient terrain-cell set derived from
+ * canonical map shapes. Shared edges cancel, so adjacent cells render as one
+ * unfilled terrain mass rather than as individually painted hexagons.
  */
 export const terrainOutlineSegments = (cellIds: Iterable<string>): TerrainOutlineSegment[] => {
   const edges = new Map<string, { count: number; segment: TerrainOutlineSegment }>();

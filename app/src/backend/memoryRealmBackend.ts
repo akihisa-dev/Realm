@@ -1,8 +1,9 @@
 import type {
   CellAttributeSnapshot, CellViewportInput, CreateFeatureInput,
   AssetRead, ImportAssetInput, ProjectSummary, RealmBackend, RealmFeature, RealmSnapshot,
-  ReviseFeatureInput, ReviseFeaturesBatchInput, SaveProjectInput, ApplyCellAttributesInput, MoveRegionCellsInput,
+  ReviseFeatureInput, ReviseFeaturesBatchInput, SaveProjectInput, ApplyCellAttributesInput, MoveRegionCellsInput, MapShape, ReplaceMapShapesInput,
 } from "./types";
+import { applyCellSelectionToMapShapes, mapShapeCellIds, mapShapesToCellAttributes, moveRegionMapShapes, validateMapShapes } from "../shared/mapShapeGeometry";
 
 type MemoryProject = {
   snapshot: RealmSnapshot;
@@ -11,7 +12,7 @@ type MemoryProject = {
 };
 
 const makeSnapshot = (path: string, name: string): RealmSnapshot => ({
-  formatVersion: 10, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, features: [], assets: [],
+  formatVersion: 11, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, features: [], mapShapes: [], assets: [],
   settings: { themeId: "ink", showGrid: true, exportScale: 1, exportExtent: "world", canvasWidth: 2048, canvasHeight: 1024, gridKind: "graticule", gridColor: "#687784", gridWidth: 1, gridSpacing: 10, themeOverrides: {} }, featureCount: 0,
   canUndo: false, canRedo: false,
 });
@@ -191,7 +192,10 @@ export class MemoryRealmBackend implements RealmBackend {
   private openPath: string | null = null;
 
   constructor(initialProjects: RealmSnapshot[] = []) {
-    for (const snapshot of initialProjects) this.projects.set(snapshot.path, { snapshot: clone(snapshot), cells: [], assetBytes: {} });
+    for (const snapshot of initialProjects) {
+      const normalized = clone({ ...snapshot, mapShapes: snapshot.mapShapes ?? [], formatVersion: 11 });
+      this.projects.set(snapshot.path, { snapshot: normalized, cells: mapShapesToCellAttributes(normalized.mapShapes), assetBytes: {} });
+    }
   }
 
   private current(): MemoryProject {
@@ -203,6 +207,7 @@ export class MemoryRealmBackend implements RealmBackend {
 
   private result(project: MemoryProject): RealmSnapshot {
     const snapshot = clone(project.snapshot);
+    snapshot.mapShapes ??= [];
     snapshot.featureCount = snapshot.features.length;
     snapshot.canUndo = (this.undo.get(snapshot.path)?.length ?? 0) > 0;
     snapshot.canRedo = (this.redo.get(snapshot.path)?.length ?? 0) > 0;
@@ -404,18 +409,35 @@ export class MemoryRealmBackend implements RealmBackend {
     if (!next) throw new Error("やり直す操作がありません。"); const undo = this.undo.get(project.snapshot.path) ?? [];
     undo.push(clone(project)); this.undo.set(project.snapshot.path, undo); this.projects.set(project.snapshot.path, next); return this.result(next);
   }
+  async replaceMapShapes(input: ReplaceMapShapesInput): Promise<RealmSnapshot> {
+    if (!input || !Array.isArray(input.shapes)) throw new Error("形状の指定が不正です。");
+    try { validateMapShapes(input.shapes); } catch { throw new Error("形状の形または重なりが不正です。"); }
+    const project = this.current();
+    this.checkpoint(project);
+    project.snapshot.mapShapes = clone(input.shapes);
+    project.cells = mapShapesToCellAttributes(project.snapshot.mapShapes);
+    return this.result(project);
+  }
   async applyCellAttributes(input: ApplyCellAttributesInput): Promise<RealmSnapshot> {
     const project = this.current(); const ids = [...new Set(input.cellIds)];
     if (!ids.length) throw new Error("セルを選択してください。"); if (ids.some((id) => !validCell(id))) throw new Error("セルの指定が不正です。");
     if (input.clearRegion !== undefined && typeof input.clearRegion !== "boolean") throw new Error("領域消去の指定が不正です。");
     if (input.clearRegion === true && (input.attribute !== "terrain" || input.value !== null)) throw new Error("領域消去の指定が不正です。");
     if (input.regionId !== undefined && (input.attribute !== "region" || input.value === null)) throw new Error("領域IDの指定が不正です。");
-    if (input.value !== null && !input.value.trim()) throw new Error("属性値を入力してください。"); this.checkpoint(project);
+    if (input.value !== null && !input.value.trim()) throw new Error("属性値を入力してください。");
+    if (input.attribute === "terrain" || input.attribute === "region") {
+      const regionId = input.attribute === "region" && input.value !== null ? normalizeRegionId(input.regionId ?? crypto.randomUUID()) : undefined;
+      const next = applyCellSelectionToMapShapes(project.snapshot.mapShapes, { cellIds: ids, layer: input.attribute, value: input.value, ...(regionId ? { regionId } : {}), ...(input.clearRegion ? { clearRegion: true } : {}) });
+      this.checkpoint(project);
+      project.snapshot.mapShapes = clone(next);
+      project.cells = mapShapesToCellAttributes(next);
+      return this.result(project);
+    }
+    this.checkpoint(project);
     project.cells = project.cells.filter((cell) => !(ids.includes(cell.cellId) && cell.attribute === input.attribute));
     if (input.clearRegion === true) project.cells = project.cells.filter((cell) => !(ids.includes(cell.cellId) && cell.attribute === "region"));
     if (input.value !== null) {
-      const regionId = input.attribute === "region" ? normalizeRegionId(input.regionId ?? crypto.randomUUID()) : undefined;
-      for (const cellId of ids) project.cells.push({ cellId, attribute: input.attribute, value: input.value.trim(), ...(regionId ? { regionId } : {}) });
+      for (const cellId of ids) project.cells.push({ cellId, attribute: input.attribute, value: input.value.trim() });
     }
     return this.result(project);
   }
@@ -428,19 +450,14 @@ export class MemoryRealmBackend implements RealmBackend {
     const firstSource = axial(source[0]!); const firstTarget = axial(target[0]!); const delta: [number, number] = [firstTarget[0] - firstSource[0], firstTarget[1] - firstSource[1]];
     const expected = source.map((id) => { const [q, row] = axial(id); const nextRow = row + delta[1]; return `${q + delta[0] + Math.floor(nextRow / 2)}:${nextRow}`; });
     if (expected.some((id, index) => id !== target[index])) throw new Error("領域は固定グリッド上で移動してください。");
-    const sourceSet = new Set(source); const sourceRegions = source.map((id) => project.cells.find((cell) => cell.cellId === id && cell.attribute === "region"));
-    if (sourceRegions.some((cell) => !cell)) throw new Error("移動する領域が見つかりません。");
-    const color = sourceRegions[0]!.value;
-    if (sourceRegions.some((cell) => cell!.value !== color)) throw new Error("同じ色の領域だけを移動できます。");
-    const regionIdentity = sourceRegions[0]!.regionId ?? color;
-    const regionId = normalizeRegionId(sourceRegions[0]!.regionId ?? crypto.randomUUID());
-    const completeRegion = project.cells.filter((cell) => cell.attribute === "region" && (cell.regionId ?? cell.value) === regionIdentity).map((cell) => cell.cellId);
-    if (completeRegion.length !== source.length || completeRegion.some((id) => !sourceSet.has(id))) throw new Error("領域全体を移動してください。");
-    const availableTarget = target.filter((id) => !project.cells.some((cell) => cell.attribute === "region" && cell.cellId === id && !sourceSet.has(id) && (cell.regionId ?? cell.value) !== regionIdentity));
+    const regionId = project.snapshot.mapShapes.find((shape) => shape.layer === "region" && mapShapeCellIds(shape).has(source[0]!))?.regionId;
+    if (!regionId) throw new Error("移動する領域が見つかりません。");
     if (source.every((id, index) => id === target[index])) return this.result(project);
+    let next: MapShape[];
+    try { next = moveRegionMapShapes(project.snapshot.mapShapes, regionId, source, target); } catch (error) { throw new Error(error instanceof Error ? error.message : "領域を移動できません。"); }
     this.checkpoint(project);
-    project.cells = project.cells.filter((cell) => !(cell.attribute === "region" && sourceSet.has(cell.cellId)));
-    for (const cellId of availableTarget) project.cells.push({ cellId, attribute: "region", value: color, regionId });
+    project.snapshot.mapShapes = clone(next);
+    project.cells = mapShapesToCellAttributes(next);
     return this.result(project);
   }
   async viewCellAttributes(input: CellViewportInput): Promise<CellAttributeSnapshot[]> {

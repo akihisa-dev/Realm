@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { errorMessage, type ApplyCellAttributesInput, type CellAttributeSnapshot, type MoveRegionCellsInput, type RealmBackend, type RealmSnapshot } from "../backend";
+import { errorMessage, type ApplyCellAttributesInput, type CellAttributeSnapshot, type MapShape, type MoveRegionCellsInput, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { DEFAULT_ERASE_TARGET, eraseTargetDefinition, type EraseTarget } from "./editor/eraseTargets";
 import { ObjectManager } from "./editor/ObjectManager";
@@ -32,6 +32,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [activeTool, setActiveTool] = useState<Tool>("terrain");
   const [regionColor, setRegionColor] = useState("#7A6FA8");
   const [cellAttributes, setCellAttributes] = useState<CellAttributeSnapshot[]>([]);
+  const [mapShapes, setMapShapes] = useState<MapShape[]>(snapshot.mapShapes ?? []);
   const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
   const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     if (identityChanged) {
       cellRequest.current += 1;
       setCellAttributes([]);
+      setMapShapes(snapshot.mapShapes ?? []);
       setSelectedCellIds([]);
       setSelectedRegionIds([]);
       setSelectedComponentId(null);
@@ -96,8 +98,12 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     const mutation = cellMutation.current;
     try {
       const attributes = await backend.viewCellAttributes({});
+      const openSnapshot = await backend.getOpenProject();
       const terrainAndRegions = attributes.filter((attribute) => attribute.attribute === "terrain" || attribute.attribute === "region");
-      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request && cellMutation.current === mutation) setCellAttributes(terrainAndRegions);
+      if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request && cellMutation.current === mutation) {
+        setCellAttributes(terrainAndRegions);
+        if (openSnapshot) setMapShapes(openSnapshot.mapShapes ?? []);
+      }
     } catch (cause) {
       if (mounted.current && viewedIdentity.current === identity && cellRequest.current === request && cellMutation.current === mutation) setError(errorMessage(cause, "セル属性を読み込めませんでした。"));
     }
@@ -121,6 +127,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         const next = await action();
         if (!mounted.current || viewedIdentity.current !== identity) return;
         setViewedSnapshot(next);
+        setMapShapes(next.mapShapes ?? []);
         onSaved(next);
         if (options.refreshOnSuccess !== false) await refreshCellAttributes(identity);
         if (!options.isCurrent || options.isCurrent()) setSelectedCellIds([]);
@@ -381,6 +388,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             // Compatibility region objects remain in snapshots but are not
             // rendered or created by the cell-region editor.
             features={[]}
+            mapShapes={mapShapes}
             mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "cell-region" : activeTool === "grab" ? "grab" : activeTool === "shape" ? "shape" : "cell-select"}
             disabled={busy}
             cellAttributes={cellAttributes}

@@ -5,7 +5,7 @@ export type MigrationSnapshot = {
   schemaVersion: number;
   world: SnapshotRow;
   features: readonly SnapshotRow[];
-  cells: readonly SnapshotRow[];
+  mapShapes: readonly SnapshotRow[];
   assets: readonly SnapshotRow[];
   sourceHash?: string;
   sidecars?: readonly string[];
@@ -32,7 +32,7 @@ export const canonicalSnapshot = (snapshot: MigrationSnapshot): string =>
     schemaVersion: snapshot.schemaVersion,
     world: snapshot.world,
     features: canonicalRows(snapshot.features),
-    cells: canonicalRows(snapshot.cells),
+    mapShapes: canonicalRows(snapshot.mapShapes),
     assets: canonicalRows(snapshot.assets),
   }));
 
@@ -48,7 +48,7 @@ export const compareMigrationSnapshots = (
   const differences: string[] = [];
   if (expected.schemaVersion !== actual.schemaVersion) differences.push("schemaVersion");
   if (JSON.stringify(sortObject(expected.world)) !== JSON.stringify(sortObject(actual.world))) differences.push("world");
-  for (const key of ["features", "cells", "assets"] as const) {
+  for (const key of ["features", "mapShapes", "assets"] as const) {
     if (JSON.stringify(canonicalRows(expected[key])) !== JSON.stringify(canonicalRows(actual[key]))) differences.push(key);
   }
   return { equal: differences.length === 0, differences };

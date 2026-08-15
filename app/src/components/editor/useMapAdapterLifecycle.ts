@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MoveRegionCellsInput, RealmFeature } from "../../backend";
+import type { ApplyCellAttributesInput, CellAttributeSnapshot, GeoJsonGeometry, MapShape, MoveRegionCellsInput, RealmFeature } from "../../backend";
 import type { MapRaster } from "../../exportArtifacts";
 import type { ExportCanvasSize } from "../../map/contracts";
 import type {
@@ -28,6 +28,7 @@ export type MapAdapterLifecycleOptions = {
   showCellGrid: boolean;
   cellGridOptions: CellGridOptions;
   drawingOptions: DrawingOptions;
+  mapShapes: readonly MapShape[];
   cellAttributes: readonly CellAttributeSnapshot[];
   mode: RealmMapMode;
   selectedCellIds: readonly string[];
@@ -70,6 +71,7 @@ export function useMapAdapterLifecycle({
   showCellGrid,
   cellGridOptions,
   drawingOptions,
+  mapShapes,
   cellAttributes,
   mode,
   selectedCellIds,
@@ -162,6 +164,7 @@ export function useMapAdapterLifecycle({
     adapter.setCellGridOptions(cellGridOptions);
     adapter.setMode(mode);
     adapter.setDrawingOptions(drawingOptions);
+    adapter.setMapShapes?.(mapShapes);
     adapter.setCellAttributes(cellAttributes);
     adapter.setSelectedCells(selectedCellIds);
     adapter.setCellPaintRadius(effectivePaintRadius);

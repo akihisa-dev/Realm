@@ -1,4 +1,4 @@
-import type { ApplyCellAttributesInput, CellAttributeSnapshot, FeatureType, GeoJsonGeometry, MoveRegionCellsInput, RealmFeature } from "../backend";
+import type { ApplyCellAttributesInput, CellAttributeSnapshot, FeatureType, GeoJsonGeometry, MapShape, MoveRegionCellsInput, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { MapThemeId, ThemeOverrides } from "./themes";
 import type { MapErrorCode } from "./errors";
@@ -51,6 +51,7 @@ export interface RealmMapRenderer {
   /** Replace the controlled selectable feature set; this sync does not emit. */
   setSelectedFeatures(featureIds: readonly string[]): void;
   setSelectedCells(cellIds: readonly string[]): void;
+  setMapShapes?(shapes: readonly MapShape[]): void;
   setCellAttributes(attributes: readonly CellAttributeSnapshot[]): void;
   onDraw(listener: (geometry: GeoJsonGeometry) => void): () => void;
   /** Emits the complete ordered set after click, shift-click, lasso, or Escape. */

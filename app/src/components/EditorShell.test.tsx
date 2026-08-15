@@ -274,7 +274,7 @@ it("saves a terrain boundary expansion through the grab callback", async () => {
   ])));
 });
 
-it("keeps the stationary region when a grabbed region overlaps it", async () => {
+it("rejects a grabbed region when it overlaps another region", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://grab-overlap-editor.realmmap", name: "Grab overlap editor" });
   const movingRegionId = "77777777-7777-4777-8777-777777777777";
@@ -288,13 +288,11 @@ it("keeps the stationary region when a grabbed region overlaps it", async () => 
   fireEvent.click(screen.getByRole("button", { name: "テストグラブ" }));
   fireEvent.click(screen.getByRole("button", { name: "テスト領域移動" }));
 
-  await waitFor(async () => expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
-    { cellId: "4:2", attribute: "region", value: "#AA0000", regionId: stationaryRegionId },
-    { cellId: "5:2", attribute: "region", value: "#2468AC", regionId: movingRegionId },
-  ])));
-  expect(await backend.viewCellAttributes({})).not.toEqual(expect.arrayContaining([
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("移動先に別の領域があるため移動できません。"));
+  expect(await backend.viewCellAttributes({})).toEqual(expect.arrayContaining([
     { cellId: "1:1", attribute: "region", value: "#2468AC", regionId: movingRegionId },
     { cellId: "2:1", attribute: "region", value: "#2468AC", regionId: movingRegionId },
+    { cellId: "4:2", attribute: "region", value: "#AA0000", regionId: stationaryRegionId },
   ]));
 });
 

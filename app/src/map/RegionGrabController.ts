@@ -1,7 +1,7 @@
 import Feature from "ol/Feature";
 import PointerInteraction from "ol/interaction/Pointer";
 import type { ApplyCellAttributesInput, CellAttributeSnapshot, MoveRegionCellsInput, Position } from "../backend";
-import { clipRegionCellsToAvailableTargets, connectedRegionCells, connectedTerrainCells, isRegionBoundaryCell, regionResizeStroke, resizableCellIdsAt, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
+import { connectedRegionCells, connectedTerrainCells, isRegionBoundaryCell, regionResizeStroke, resizableCellIdsAt, sameCellSet, sameRegionCells, translateRegionCells } from "./regionGrab";
 
 type ResizableAttribute = "terrain" | "region";
 
@@ -22,7 +22,7 @@ type Options = {
   emitResize: (input: ApplyCellAttributesInput) => void;
 };
 
-/** Owns the transient exact-hex preview used while moving or resizing a cell mass. */
+/** Owns the transient exact-hex preview used while moving or resizing a map shape. */
 export class RegionGrabController {
   readonly interaction: PointerInteraction;
   private sourceIds: string[] = [];
@@ -213,12 +213,20 @@ export class RegionGrabController {
     const sourceIdentity = sourceRegion ? sourceRegion.regionId ?? sourceRegion.value : null;
     this.options.setRegionSmoothVisible(false, sourceIdentity);
     if (targetIds === null || targetIds.length !== this.sourceIds.length || new Set(targetIds).size !== targetIds.length) { this.targetIds = []; this.previewValid = false; return; }
-    const availableTargetIds = sourceIdentity === null ? [...targetIds] : clipRegionCellsToAvailableTargets(targetIds, this.sourceIds, sourceIdentity, attributes);
+    const sourceSet = new Set(this.sourceIds);
+    const overlapsAnotherRegion = sourceIdentity !== null && targetIds.some((id) => !sourceSet.has(id) && attributes.get(id)?.some((item) => item.attribute === "region" && (item.regionId ?? item.value) !== sourceIdentity));
+    if (overlapsAnotherRegion) {
+      this.targetIds = [];
+      this.previewValid = false;
+      this.options.setRegionSmoothVisible(true);
+      this.options.changed();
+      return;
+    }
     this.previewValid = true;
     this.targetIds = [...targetIds]; const region = attributes.get(this.sourceIds[0] ?? "")?.find((item) => item.attribute === "region");
     for (const id of this.sourceIds) { this.options.getFeature(id)?.set("grabSourceHidden", true, true); this.previewIds.add(id); }
-    this.options.ensureFeatures(availableTargetIds);
-    for (const id of availableTargetIds) {
+    this.options.ensureFeatures(targetIds);
+    for (const id of targetIds) {
       const existing = attributes.get(id) ?? [];
       const feature = this.options.getFeature(id); feature?.set("attributes", region ? [...existing.filter((item) => item.attribute !== "region"), region] : existing, true); feature?.set("grabPreview", true, true); this.previewIds.add(id);
     }
