@@ -1,9 +1,9 @@
 import PointerInteraction from "ol/interaction/Pointer";
 import type { MapShape, Position } from "../shared/realmContract";
+import { normalizeSoftResizeMapShapeGeometry } from "../shared/mapShapeResizeInfluence";
 import {
   hitTestMapShapes,
   normalizeMapShapes,
-  normalizeResizedMapShapeGeometry,
   resizeMapShapeGeometry,
   translateMapShapeGeometry,
   type MapShapeHitTarget,
@@ -87,7 +87,7 @@ export class MapShapeGrabController {
             ? preview.map((shape) => {
               if (shape.id !== target.shapeId) return shape;
               const originalShape = original.find((candidate) => candidate.id === shape.id);
-              const geometry = originalShape ? normalizeResizedMapShapeGeometry(originalShape.geometry, shape.geometry)[0] : undefined;
+              const geometry = originalShape ? normalizeSoftResizeMapShapeGeometry(originalShape.geometry, shape.geometry)[0] : undefined;
               return geometry ? { ...shape, geometry } : shape;
             })
             : preview;

@@ -16,6 +16,7 @@ import {
   validateMapShapes,
 } from "./mapShapeGeometry";
 import type { MapShape } from "./realmContract";
+import { normalizeSoftResizeMapShapeGeometry } from "./mapShapeResizeInfluence";
 
 const terrain = (cells: string[], id = "11111111-1111-4111-8111-111111111111"): MapShape => ({
   id,
@@ -40,12 +41,18 @@ describe("grid-snapped continuous map shapes", () => {
     const original = terrain(["30:30"]);
     const ring = original.geometry.coordinates[0]!;
     const preview = resizeMapShapeGeometry(original.geometry, { kind: "vertex", ringIndex: 0, vertexIndex: 0, distance: 0 }, ring[0]!, [ring[0]![0], ring[0]![1] - 42]);
-    const normalized = normalizeResizedMapShapeGeometry(original.geometry, preview);
+    const normalized = normalizeSoftResizeMapShapeGeometry(original.geometry, preview);
     expect(normalized).toHaveLength(1);
     const cells = mapShapeCellIds({ geometry: normalized[0]! });
     expect(cells).toContain("30:30");
     expect(cells).toContain("30:13");
     expect(cells.size).toBeGreaterThan(1);
+    const rowWidths = new Map<number, number>();
+    for (const cell of cells) {
+      const row = Number(cell.split(":")[1]);
+      rowWidths.set(row, (rowWidths.get(row) ?? 0) + 1);
+    }
+    expect(Math.max(...rowWidths.values())).toBeGreaterThan(1);
     const remaining = new Set(cells);
     const queue = ["30:30"];
     remaining.delete("30:30");

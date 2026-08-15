@@ -39,8 +39,15 @@ describe("MapShapeGrabController", () => {
     expect(commits).toHaveLength(1);
     expect(commits[0]).toHaveLength(1);
     expect(commits[0]?.[0]?.id).toBe(original.id);
-    expect(mapShapeCellIds(commits[0]![0]!)).toContain("30:30");
-    expect(mapShapeCellIds(commits[0]![0]!)).toContain("30:13");
+    const cells = mapShapeCellIds(commits[0]![0]!);
+    expect(cells).toContain("30:30");
+    expect(cells).toContain("30:13");
+    const rowWidths = new Map<number, number>();
+    for (const cell of cells) {
+      const row = Number(cell.split(":")[1]);
+      rowWidths.set(row, (rowWidths.get(row) ?? 0) + 1);
+    }
+    expect(Math.max(...rowWidths.values())).toBeGreaterThan(1);
     controller.dispose();
   });
 
