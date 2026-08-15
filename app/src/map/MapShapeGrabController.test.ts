@@ -21,6 +21,29 @@ const interactionOf = (controller: MapShapeGrabController) => controller.interac
 };
 
 describe("MapShapeGrabController", () => {
+  it("keeps a distant vertex pull as one connected shape with the original ID", () => {
+    const original = shape("terrain", ["30:30"], "55555555-5555-4555-8555-555555555555");
+    const ring = original.geometry.coordinates[0]!;
+    let current: MapShape[] = [original];
+    const commits: MapShape[][] = [];
+    const controller = new MapShapeGrabController({
+      shapes: () => current,
+      hitTolerance: () => 0.1,
+      setPreview: () => undefined,
+      emit: (next) => { commits.push(next); current = next; },
+    });
+    const interaction = interactionOf(controller);
+    expect(interaction.handleDownEvent(event(ring[0]!))).toBe(true);
+    interaction.handleDragEvent(event([ring[0]![0], ring[0]![1] - 42]));
+    interaction.handleUpEvent(event([ring[0]![0], ring[0]![1] - 42]));
+    expect(commits).toHaveLength(1);
+    expect(commits[0]).toHaveLength(1);
+    expect(commits[0]?.[0]?.id).toBe(original.id);
+    expect(mapShapeCellIds(commits[0]![0]!)).toContain("30:30");
+    expect(mapShapeCellIds(commits[0]![0]!)).toContain("30:13");
+    controller.dispose();
+  });
+
   it("previews a continuous Polygon edit and commits exactly once on pointerup", () => {
     const original = shape("terrain", ["10:10"], "11111111-1111-4111-8111-111111111111");
     let current: MapShape[] = [original];

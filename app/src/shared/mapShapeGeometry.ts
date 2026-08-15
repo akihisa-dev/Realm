@@ -257,6 +257,71 @@ export const normalizeMapShapeGeometry = (geometry: MapShapeGeometry): MapShapeG
   return cellIdsToPolygonGeometries(cells);
 };
 
+const nearestCellId = (point: Position): string => {
+  let nearest = "0:0";
+  let distance = Number.POSITIVE_INFINITY;
+  for (let row = 0; row < MAP_SHAPE_GRID_ROWS; row += 1) {
+    for (let column = 0; column < MAP_SHAPE_GRID_COLUMNS; column += 1) {
+      const center = mapShapeCellCenter({ row, column });
+      const nextDistance = (center[0] - point[0]) ** 2 + (center[1] - point[1]) ** 2;
+      if (nextDistance < distance) { distance = nextDistance; nearest = `${column}:${row}`; }
+    }
+  }
+  return nearest;
+};
+
+const movedResizeAnchorCells = (original: MapShapeGeometry, preview: MapShapeGeometry): string[] => {
+  const anchors: string[] = [];
+  for (let ringIndex = 0; ringIndex < preview.coordinates.length; ringIndex += 1) {
+    const originalRing = original.coordinates[ringIndex];
+    const previewRing = preview.coordinates[ringIndex];
+    if (!originalRing || !previewRing) continue;
+    for (let vertexIndex = 0; vertexIndex < previewRing.length - 1; vertexIndex += 1) {
+      const originalPoint = originalRing[vertexIndex];
+      const previewPoint = previewRing[vertexIndex];
+      if (!originalPoint || !previewPoint) continue;
+      if (Math.hypot(previewPoint[0] - originalPoint[0], previewPoint[1] - originalPoint[1]) <= radius) continue;
+      anchors.push(nearestCellId(previewPoint));
+    }
+  }
+  return anchors;
+};
+
+/**
+ * Normalizes a boundary pull while retaining the original surface as the
+ * continuity anchor. A narrow, long preview can contain cell centers at both
+ * ends without containing any center between them, so plain center sampling
+ * would turn one pull into multiple disconnected shapes.
+ */
+export const normalizeResizedMapShapeGeometry = (
+  original: MapShapeGeometry,
+  preview: MapShapeGeometry,
+): MapShapeGeometry[] => {
+  if (!geometryIsWithinWorld(original) || !geometryIsWithinWorld(preview)) throw new Error("形状を地図の範囲外へ移動できません。");
+  const originalCells = geometryCellIds(original);
+  const previewCells = geometryCellIds(preview);
+  if (originalCells.size === 0) throw new Error("形状にグリッドセルがありません。");
+
+  const isExpansion = Math.abs(ringArea(preview.coordinates[0] ?? [])) >= Math.abs(ringArea(original.coordinates[0] ?? []));
+  const cells = isExpansion
+    ? connectCellComponents(new Set([
+      ...originalCells,
+      ...previewCells,
+      ...movedResizeAnchorCells(original, preview),
+    ]))
+    : (() => {
+      const remaining = new Set([...originalCells].filter((cell) => previewCells.has(cell)));
+      const components = connectedComponents(remaining);
+      return components.sort((left, right) => {
+        const leftOverlap = [...left].filter((cell) => originalCells.has(cell)).length;
+        const rightOverlap = [...right].filter((cell) => originalCells.has(cell)).length;
+        return rightOverlap - leftOverlap || [...left].sort().join().localeCompare([...right].sort().join());
+      })[0] ?? new Set<string>();
+    })();
+  if (cells.size === 0) throw new Error("形状にグリッドセルがありません。");
+  return cellIdsToPolygonGeometries(cells);
+};
+
 const cellsForGeometries = (geometries: readonly MapShapeGeometry[]): Set<string> => {
   const cells = new Set<string>();
   for (const geometry of geometries) for (const cell of geometryCellIds(geometry)) cells.add(cell);
@@ -445,6 +510,33 @@ const connectedComponents = (cells: Set<string>): Set<string>[] => {
     components.push(component);
   }
   return components;
+};
+
+const connectCellComponents = (cells: Set<string>): Set<string> => {
+  let connected = new Set(cells);
+  while (true) {
+    const components = connectedComponents(connected);
+    if (components.length <= 1) return connected;
+    const base = components[0]!;
+    const targets = new Set([...connected].filter((cell) => !base.has(cell)));
+    const queue = [...base].sort();
+    const parent = new Map<string, string | null>(queue.map((cell) => [cell, null]));
+    let found: string | null = null;
+    for (let index = 0; index < queue.length && !found; index += 1) {
+      const current = queue[index]!;
+      const parsed = parseCellId(current);
+      if (!parsed) continue;
+      for (const neighbor of componentNeighbors(parsed).sort((left, right) => cellId(left).localeCompare(cellId(right)))) {
+        const neighborId = cellId(neighbor);
+        if (parent.has(neighborId)) continue;
+        parent.set(neighborId, current);
+        queue.push(neighborId);
+        if (targets.has(neighborId)) { found = neighborId; break; }
+      }
+    }
+    if (!found) return connected;
+    for (let current: string | null = found; current; current = parent.get(current) ?? null) connected.add(current);
+  }
 };
 
 type ExistingPart = { shape: MapShape; cells: Set<string> };

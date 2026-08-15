@@ -3,6 +3,7 @@ import type { MapShape, Position } from "../shared/realmContract";
 import {
   hitTestMapShapes,
   normalizeMapShapes,
+  normalizeResizedMapShapeGeometry,
   resizeMapShapeGeometry,
   translateMapShapeGeometry,
   type MapShapeHitTarget,
@@ -77,10 +78,20 @@ export class MapShapeGrabController {
         this.update([...(event.coordinate as Position)] as Position);
         const preview = this.previewShapes;
         const original = this.baseShapes;
+        const editKind = this.editKind;
+        const target = this.target;
         this.reset();
         if (!preview || equalShapes(preview, original)) return false;
         try {
-          const normalized = normalizeMapShapes(preview);
+          const normalizedPreview = editKind === "resize" && target
+            ? preview.map((shape) => {
+              if (shape.id !== target.shapeId) return shape;
+              const originalShape = original.find((candidate) => candidate.id === shape.id);
+              const geometry = originalShape ? normalizeResizedMapShapeGeometry(originalShape.geometry, shape.geometry)[0] : undefined;
+              return geometry ? { ...shape, geometry } : shape;
+            })
+            : preview;
+          const normalized = normalizeMapShapes(normalizedPreview);
           if (!equalShapes(normalized, original)) this.options.emit(normalized);
         } catch {
           this.options.onInvalid?.();

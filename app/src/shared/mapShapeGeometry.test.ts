@@ -8,6 +8,7 @@ import {
   deriveMapGridCells,
   mapShapeCellCenter,
   normalizeMapShapes,
+  normalizeResizedMapShapeGeometry,
   translateMapShapeGeometry,
   unionMapShapeGeometries,
   hitTestMapShapeGeometry,
@@ -35,6 +36,38 @@ const region = (cells: string[], regionId = "22222222-2222-4222-8222-22222222222
 });
 
 describe("grid-snapped continuous map shapes", () => {
+  it("bridges a narrow distant vertex pull instead of creating disconnected cells", () => {
+    const original = terrain(["30:30"]);
+    const ring = original.geometry.coordinates[0]!;
+    const preview = resizeMapShapeGeometry(original.geometry, { kind: "vertex", ringIndex: 0, vertexIndex: 0, distance: 0 }, ring[0]!, [ring[0]![0], ring[0]![1] - 42]);
+    const normalized = normalizeResizedMapShapeGeometry(original.geometry, preview);
+    expect(normalized).toHaveLength(1);
+    const cells = mapShapeCellIds({ geometry: normalized[0]! });
+    expect(cells).toContain("30:30");
+    expect(cells).toContain("30:13");
+    expect(cells.size).toBeGreaterThan(1);
+    const remaining = new Set(cells);
+    const queue = ["30:30"];
+    remaining.delete("30:30");
+    for (let index = 0; index < queue.length; index += 1) {
+      const [column = 0, row = 0] = queue[index]!.split(":").map(Number);
+      const axialQ = column - Math.floor(row / 2);
+      for (const [dq = 0, drow = 0] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]]) {
+        const next = `${axialQ + dq + Math.floor((row + drow) / 2)}:${row + drow}`;
+        if (remaining.delete(next)) queue.push(next);
+      }
+    }
+    expect(remaining).toHaveLength(0);
+  });
+
+  it("does not grow neighboring cells for a small vertex adjustment", () => {
+    const original = terrain(["30:30"]);
+    const ring = original.geometry.coordinates[0]!;
+    const preview = resizeMapShapeGeometry(original.geometry, { kind: "vertex", ringIndex: 0, vertexIndex: 0, distance: 0 }, ring[0]!, [ring[0]![0], ring[0]![1] - 0.2]);
+    const normalized = normalizeResizedMapShapeGeometry(original.geometry, preview);
+    expect(mapShapeCellIds({ geometry: normalized[0]! })).toEqual(new Set(["30:30"]));
+  });
+
   it("stores one Polygon for one connected surface and reconstructs transient cells", () => {
     const shape = terrain(["1:1", "2:1"]);
     validateMapShapes([shape]);
