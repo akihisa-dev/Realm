@@ -397,8 +397,27 @@ const ringSelfIntersects = (ring: readonly Position[]): boolean => {
 
 const geometryCellIds = (geometry: MapShapeGeometry): Set<string> => {
   const cells = new Set<string>();
-  for (let row = 0; row < MAP_SHAPE_GRID_ROWS; row += 1) {
-    for (let column = 0; column < MAP_SHAPE_GRID_COLUMNS; column += 1) {
+  const points = geometry.coordinates.flat();
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const [x, y] of points) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+    minX = MAP_SHAPE_WORLD_EXTENT[0]; maxX = MAP_SHAPE_WORLD_EXTENT[2];
+    minY = MAP_SHAPE_WORLD_EXTENT[1]; maxY = MAP_SHAPE_WORLD_EXTENT[3];
+  }
+  const firstRow = Math.max(0, Math.floor((minY - firstCenter[1]) / rowStep) - 1);
+  const lastRow = Math.min(MAP_SHAPE_GRID_ROWS - 1, Math.ceil((maxY - firstCenter[1]) / rowStep) + 1);
+  for (let row = firstRow; row <= lastRow; row += 1) {
+    const rowOffset = row % 2 === 0 ? 0 : 0.5;
+    const firstColumn = Math.max(0, Math.floor((minX - firstCenter[0]) / columnStep - rowOffset) - 1);
+    const lastColumn = Math.min(MAP_SHAPE_GRID_COLUMNS - 1, Math.ceil((maxX - firstCenter[0]) / columnStep - rowOffset) + 1);
+    for (let column = firstColumn; column <= lastColumn; column += 1) {
       const point = mapShapeCellCenter({ row, column });
       const inShell = geometry.coordinates[0] ? pointInRing(point, geometry.coordinates[0]) : false;
       const inHole = geometry.coordinates.slice(1).some((ring) => pointInRing(point, ring));
@@ -444,6 +463,7 @@ export const validateMapShapes = (shapes: readonly MapShape[]): void => {
   const ids = new Set<string>();
   const occupied = new Map<MapShapeLayer, Set<string>>([['terrain', new Set()], ['region', new Set()]]);
   const regionValues = new Map<string, string>();
+  const validatedShapes: { shape: MapShape; cells: Set<string> }[] = [];
   for (const shape of shapes) {
     if (ids.has(shape.id)) throw new Error("形状IDが重複しています。");
     ids.add(shape.id);
@@ -456,13 +476,14 @@ export const validateMapShapes = (shapes: readonly MapShape[]): void => {
     const layerCells = occupied.get(shape.layer)!;
     for (const cell of cells) if (layerCells.has(cell)) throw new Error("同じレイヤーの形状を重ねることはできません。");
     for (const cell of cells) layerCells.add(cell);
+    validatedShapes.push({ shape, cells });
   }
   const identityGroups = new Map<string, { shapeCount: number; cells: Set<string> }>();
-  for (const shape of shapes) {
+  for (const { shape, cells } of validatedShapes) {
     const key = `${shape.layer}:${shape.regionId ?? ""}:${shape.value}`;
     const group = identityGroups.get(key) ?? { shapeCount: 0, cells: new Set<string>() };
     group.shapeCount += 1;
-    for (const cell of mapShapeCellIds(shape)) group.cells.add(cell);
+    for (const cell of cells) group.cells.add(cell);
     identityGroups.set(key, group);
   }
   for (const { shapeCount, cells } of identityGroups.values()) {
