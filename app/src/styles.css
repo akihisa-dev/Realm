@@ -75,7 +75,7 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .object-manager-component { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; padding: 5px 7px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #53616a; font-size: 11px; text-align: left; }
 .object-manager-component:hover, .object-manager-component[aria-pressed="true"] { border-color: #b9dfe1; background: #f0fbfb; color: #006c77; }
 .object-manager-help { margin: auto 18px 18px; padding-top: 14px; border-top: 1px solid #e3e7e9; color: #68757c; font-size: 11px; line-height: 1.6; }
-.map-canvas-shell { position: relative; display: grid; grid-template-columns: minmax(188px, 220px) minmax(0, 1fr); width: 100%; height: 100%; overflow: hidden; background: #f7f9f9; container-type: size; }
+.map-canvas-shell { position: relative; display: grid; grid-template-columns: minmax(220px, 240px) minmax(0, 1fr); width: 100%; height: 100%; overflow: hidden; background: #f7f9f9; container-type: size; }
 .map-canvas-shell.map-canvas-sidebar-collapsed { grid-template-columns: 58px minmax(0, 1fr); }
 .tool-sidebar { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border-right: 1px solid #d6dadd; background: #fbfcfc; color: #292f35; }
 .tool-sidebar-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #e3e7e9; background: #fff; }
@@ -92,7 +92,7 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .tool-sidebar-button:hover { border-color: #b9dfe1; background: #eef8f8; color: #006c77; }
 .tool-sidebar-button.is-active { border-color: #9fd0d3; background: #d9f0f1; color: #006c77; font-weight: 650; }
 .tool-sidebar-button > svg { flex: 0 0 auto; }
-.tool-sidebar-button > span:not(.tool-sidebar-button-detail) { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-sidebar-button > span:not(.tool-sidebar-button-detail) { min-width: max-content; flex: 0 0 auto; overflow: visible; text-overflow: clip; white-space: nowrap; }
 .tool-sidebar-button-detail { margin-left: auto; color: #7a858b; font-size: 11px; font-weight: 400; }
 .tool-sidebar-button.is-active .tool-sidebar-button-detail { color: #007c89; }
 .tool-sidebar-help { margin: auto 4px 0; padding-top: 12px; border-top: 1px solid #e3e7e9; color: #68757c; font-size: 11px; line-height: 1.6; }
@@ -152,10 +152,10 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .region-color-option input:focus-visible + .region-color-swatch { outline: 2px solid #078c98; outline-offset: 3px; }
 .eraser-targets { display: grid; gap: 5px; }
 .eraser-targets-label { font-weight: 600; }
-.eraser-target-buttons { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.eraser-target-buttons { position: relative; display: grid; grid-template-columns: repeat(2, max-content); justify-content: space-between; gap: 4px; }
 .eraser-target-pill { position: absolute; top: 0; left: 0; z-index: 0; width: 0; height: 100%; border: 1px solid #078c98; border-radius: 4px; background: #d9f0f1; pointer-events: none; transition: left 0.4s cubic-bezier(0.65, 0, 0.35, 1), width 0.4s cubic-bezier(0.65, 0, 0.35, 1); }
 .eraser-target-button { position: relative; z-index: 1; display: flex; min-width: 0; min-height: 28px; align-items: center; justify-content: center; gap: 5px; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #3e4b53; font-size: 12px; }
-.eraser-target-button-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eraser-target-button-label { min-width: max-content; flex: 0 0 auto; overflow: visible; text-overflow: clip; white-space: nowrap; }
 .eraser-target-button:hover, .eraser-target-button:focus-visible { border-color: #078c98; background: #eef8f8; color: #007c89; }
 .eraser-target-button[aria-pressed="true"] { border-color: transparent; background: transparent; color: #006c77; font-weight: 600; }
 .tool-sidebar.is-collapsed .eraser-target-button-label { display: none; }
@@ -178,7 +178,7 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
   .object-manager-help { margin-bottom: 14px; }
 }
 @media (max-width: 620px) {
-  .map-canvas-shell { grid-template-columns: minmax(168px, 42vw) minmax(0, 1fr); }
+  .map-canvas-shell { grid-template-columns: minmax(220px, 42vw) minmax(0, 1fr); }
   .tool-sidebar-header { padding: 14px 12px 10px; }
   .tool-sidebar-body { padding: 10px 8px; }
   .tool-sidebar-button { gap: 7px; padding-inline: 7px; }

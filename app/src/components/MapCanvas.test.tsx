@@ -106,10 +106,14 @@ describe("MapCanvas", () => {
     expect(palette).not.toHaveClass("is-collapsed");
     expect(shell).not.toHaveClass("map-canvas-sidebar-collapsed");
     expect(screen.getByText("地形を描く")).toBeInTheDocument();
+    expect(screen.getByText("地形を描く")).toHaveClass("tool-sidebar-button-label");
     expect(screen.getByText("グラブ")).toBeInTheDocument();
+    expect(screen.getByText("シェイピング")).toHaveClass("tool-sidebar-button-label");
     expect(screen.getByRole("group", { name: "領域の色" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "消しゴムの対象" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "地形削除" })).toBeInTheDocument();
+    expect(screen.getByText("地形削除")).not.toHaveClass("sr-only");
+    expect(screen.getByText("領域削除")).not.toHaveClass("sr-only");
 
     fireEvent.click(closeButton);
 
