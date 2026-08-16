@@ -21,6 +21,7 @@ type RendererSyncOptions = {
   gridOptions: GridOptions;
   showCellGrid: boolean;
   cellGridOptions: CellGridOptions;
+  preview: boolean;
   drawingOptions: DrawingOptions;
   mapShapes: readonly MapShape[];
   cellAttributes: readonly CellAttributeSnapshot[];
@@ -42,6 +43,7 @@ export function useRendererSync({
   gridOptions,
   showCellGrid,
   cellGridOptions,
+  preview,
   drawingOptions,
   mapShapes,
   cellAttributes,
@@ -69,6 +71,7 @@ export function useRendererSync({
   useEffect(() => { adapterRef.current?.setGridOptions(gridOptions); }, [adapterRef, gridOptionsSignature]);
   useEffect(() => { adapterRef.current?.setCellGridVisible(showCellGrid); }, [adapterRef, showCellGrid]);
   useEffect(() => { adapterRef.current?.setCellGridOptions(cellGridOptions); }, [adapterRef, cellGridOptionsSignature]);
+  useEffect(() => { adapterRef.current?.setPresentationMode?.(preview); }, [adapterRef, preview]);
   useEffect(() => { adapterRef.current?.setDrawingOptions(drawingOptions); }, [adapterRef, drawingOptionsSignature]);
   // Apply transient grid read-model attributes before mode changes so a save that switches
   // to pan cannot expose a stale erase preview for one render.

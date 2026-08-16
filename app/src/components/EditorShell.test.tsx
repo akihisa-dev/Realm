@@ -15,12 +15,16 @@ vi.mock("./MapCanvas", () => ({
     onToolChange?: (tool: "terrain" | "region" | "erase" | "grab" | "shape") => void;
     onEraseTargetChange?: (target: "terrain" | "region") => void;
     onRegionColorChange?: (color: string) => void;
+    preview?: boolean;
+    onPreviewChange?: (preview: boolean) => void;
   }) => (
     <div role="region" aria-label="世界地図" data-mode={props.mode}>
       <output aria-label="保存中の図形数">{props.mapShapes?.length ?? 0}</output>
       <output aria-label="表示中の地形セル">{props.mapShapes?.flatMap((shape) => [...mapShapeCellIds(shape)]).sort().join(",")}</output>
       <output aria-label="選択中の地形セル">{props.selectedCellIds?.join(",")}</output>
       <output aria-label="共有太さ">{props.strokeRange ?? 0}</output>
+      <output aria-label="プレビューモード">{props.preview ? "閲覧専用" : "編集"}</output>
+      <button type="button" aria-label={props.preview ? "テスト編集画面に戻る" : "テストプレビューを表示"} onClick={() => props.onPreviewChange?.(!props.preview)}>テストプレビュー</button>
       <button type="button" onClick={() => props.onCellSelect?.(["1:1", "1:2"])}>テストセル描画</button>
       <button type="button" onClick={() => props.onCellSelect?.(["1:1"])}>テスト遅延セル操作</button>
       <button type="button" onClick={() => props.onToolChange?.("erase")}>テスト消しゴム</button>
@@ -61,6 +65,23 @@ it("keeps one header thickness control shared by drawing and erasing", async () 
   fireEvent.change(slider, { target: { value: "4" } });
   expect(slider).toHaveValue("4");
   expect(screen.getByRole("status", { name: "共有太さ" })).toHaveTextContent("4");
+});
+
+it("disables editing controls while the map preview is open", async () => {
+  const backend = new MemoryRealmBackend();
+  const snapshot = await backend.createProject({ path: "browser://preview.realmmap", name: "Preview" });
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テストプレビューを表示" }));
+
+  expect(screen.getByRole("status", { name: "プレビューモード" })).toHaveTextContent("閲覧専用");
+  expect(screen.getByRole("button", { name: "戻す" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "新しい領域" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "選択した領域を統合" })).toBeDisabled();
+
+  fireEvent.click(screen.getByRole("button", { name: "テスト編集画面に戻る" }));
+  expect(screen.getByRole("status", { name: "プレビューモード" })).toHaveTextContent("編集");
+  expect(screen.getByRole("button", { name: "新しい領域" })).toBeEnabled();
 });
 
 it("turns a temporary grid selection into one Polygon update", async () => {

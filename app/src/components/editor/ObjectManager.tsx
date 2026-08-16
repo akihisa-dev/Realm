@@ -1,4 +1,11 @@
 import { useState } from "react";
+import { ArrowsMerge } from "@phosphor-icons/react/dist/csr/ArrowsMerge";
+import { CaretDown } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { CaretRight } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
+import { PlusCircle } from "@phosphor-icons/react/dist/csr/PlusCircle";
+import { Scissors } from "@phosphor-icons/react/dist/csr/Scissors";
+import { X } from "@phosphor-icons/react/dist/csr/X";
 import type { RegionComponent, RegionObject } from "./regionObjects";
 
 type ObjectManagerProps = {
@@ -58,7 +65,7 @@ export function ObjectManager({
         </div>
         <div className="object-manager-header-actions">
           <span className="object-manager-count" aria-label={`領域${regions.length}個`}>{regions.length}</span>
-          <button className="object-manager-close" type="button" aria-label="右パネルを閉じる" onClick={onClose}>×</button>
+          <button className="object-manager-close" type="button" aria-label="右パネルを閉じる" title="右パネルを閉じる" onClick={onClose}><X aria-hidden="true" size={17} weight="bold" /></button>
         </div>
       </header>
 
@@ -68,8 +75,8 @@ export function ObjectManager({
       </div>
 
       <div className="object-manager-actions">
-        <button type="button" onClick={onStartNewRegion} disabled={disabled}>新しい領域</button>
-        <button type="button" onClick={onMergeRegions} disabled={disabled || selectedRegionIds.length < 2}>選択した領域を統合</button>
+        <button type="button" aria-label="新しい領域" title="新しい領域" onClick={onStartNewRegion} disabled={disabled}><PlusCircle aria-hidden="true" size={18} weight="bold" /></button>
+        <button type="button" aria-label="選択した領域を統合" title="選択した領域を統合" onClick={onMergeRegions} disabled={disabled || selectedRegionIds.length < 2}><ArrowsMerge aria-hidden="true" size={18} weight="bold" /></button>
       </div>
 
       <section className="object-manager-section" aria-labelledby="object-manager-regions-heading">
@@ -106,13 +113,14 @@ export function ObjectManager({
                       className="object-manager-expand"
                       type="button"
                       aria-label={`${region.label}の塊を${isExpanded ? "隠す" : "表示する"}`}
+                      title={`${region.label}の塊を${isExpanded ? "隠す" : "表示する"}`}
                       aria-expanded={isExpanded}
                       onClick={() => toggleExpanded(region.id)}
                     >
-                      {isExpanded ? "−" : "+"}
+                      {isExpanded ? <CaretDown aria-hidden="true" size={16} weight="bold" /> : <CaretRight aria-hidden="true" size={16} weight="bold" />}
                     </button>
-                    <button type="button" aria-label={`${region.label}に領域を追加`} onClick={() => onAddToRegion(region)} disabled={disabled || !canManage} title={canManage ? undefined : "永続IDのない旧形式の領域は、いったん描き直して管理できます。"}>
-                      追加
+                    <button type="button" aria-label={`${region.label}に領域を追加`} onClick={() => onAddToRegion(region)} disabled={disabled || !canManage} title={canManage ? `${region.label}に領域を追加` : "永続IDのない旧形式の領域は、いったん描き直して管理できます。"}>
+                      <Plus aria-hidden="true" size={16} weight="bold" />
                     </button>
                   </div>
                   {isExpanded ? (
@@ -123,8 +131,8 @@ export function ObjectManager({
                             <span>塊 {index + 1}</span>
                             <small>{component.cellIds.length}セル</small>
                           </button>
-                          <button type="button" aria-label={`${region.label}の塊${index + 1}を分離`} onClick={() => onSplitComponent(region, component)} disabled={disabled || !canManage || region.components.length < 2} title={region.components.length < 2 ? "複数の塊がある領域で使えます。" : undefined}>
-                            分離
+                          <button type="button" aria-label={`${region.label}の塊${index + 1}を分離`} onClick={() => onSplitComponent(region, component)} disabled={disabled || !canManage || region.components.length < 2} title={region.components.length < 2 ? "複数の塊がある領域で使えます。" : `${region.label}の塊${index + 1}を分離`}>
+                            <Scissors aria-hidden="true" size={16} weight="bold" />
                           </button>
                         </li>
                       ))}

@@ -1,4 +1,6 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
+import { Eye } from "@phosphor-icons/react/dist/csr/Eye";
+import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import {
   createRealmMapRenderer,
   type CellGridOptions,
@@ -39,6 +41,8 @@ type MapCanvasProps = {
   themeId?: MapThemeId;
   showGrid?: boolean;
   showCellGrid?: boolean;
+  preview?: boolean;
+  onPreviewChange?: (preview: boolean) => void;
   onDraw?: (geometry: GeoJsonGeometry) => void;
   onSelect?: (featureId: string | null) => void;
   onSelectFeatures?: (featureIds: readonly string[]) => void;
@@ -77,6 +81,8 @@ export function MapCanvas({
   themeId = DEFAULT_MAP_THEME_ID,
   showGrid = true,
   showCellGrid = false,
+  preview,
+  onPreviewChange,
   onDraw,
   onSelect,
   onSelectFeatures,
@@ -97,6 +103,14 @@ export function MapCanvas({
 }: MapCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<RealmMapRenderer | null>(null);
+  const [localPreview, setLocalPreview] = useState(false);
+  const isPreview = preview ?? localPreview;
+  const rendererMode = isPreview ? "pan" : mode;
+
+  const setPreview = (nextPreview: boolean): void => {
+    if (preview === undefined) setLocalPreview(nextPreview);
+    onPreviewChange?.(nextPreview);
+  };
 
   const {
     strokeRadius,
@@ -107,7 +121,9 @@ export function MapCanvas({
   } = usePaletteFlyouts({ hostRef, mode, strokeRange, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange });
   const effectivePaintRadius = mode === "cell-select" ? strokeRadius : 0;
   const effectiveRegionColor = regionColor ?? paletteRegionColor;
-  const mapHelp = mode === "pan"
+  const mapHelp = isPreview
+    ? "レンダリングプレビューを表示しています。編集はできません。ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
+    : mode === "pan"
     ? "ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
     : mode === "cell-erase"
       ? "六角セルを押したままなぞって地形または領域を消去します。消しゴムの調整で削除対象を切り替えられます。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。"
@@ -131,10 +147,11 @@ export function MapCanvas({
     gridOptions,
     showCellGrid,
     cellGridOptions,
+    preview: isPreview,
     drawingOptions,
     mapShapes,
     cellAttributes,
-    mode,
+    mode: rendererMode,
     selectedCellIds,
     effectivePaintRadius,
     eraseRadius,
@@ -154,10 +171,11 @@ export function MapCanvas({
     gridOptions,
     showCellGrid,
     cellGridOptions,
+    preview: isPreview,
     drawingOptions,
     mapShapes,
     cellAttributes,
-    mode,
+    mode: rendererMode,
     selectedCellIds,
     effectivePaintRadius,
     eraseRadius,
@@ -178,19 +196,30 @@ export function MapCanvas({
     onExporterReady,
   });
 
-  const modeClass = mode === "pan"
+  const modeClass = rendererMode === "pan"
     ? "map-canvas-mode-pan"
     : mode === "cell-erase"
       ? "map-canvas-mode-cell-erase"
       : mode === "cell-region" ? "map-canvas-mode-cell-region" : mode === "grab" ? "map-canvas-mode-grab" : mode === "shape" ? "map-canvas-mode-shape" : mode === "region" ? "map-canvas-mode-region" : "map-canvas-mode-cell-select";
   return (
-    <div className={`map-canvas-shell${sidebarOpen ? "" : " map-canvas-sidebar-collapsed"}`}>
+    <div className={`map-canvas-shell${isPreview ? " map-canvas-preview" : sidebarOpen ? "" : " map-canvas-sidebar-collapsed"}`}>
       <p id="map-help" className="sr-only">{mapHelp}</p>
-      {toolPalette}
+      {isPreview ? null : toolPalette}
       <div className="map-canvas-frame">
+        <button
+          className="map-preview-toggle"
+          type="button"
+          aria-label={isPreview ? "編集画面に戻る" : "レンダリングプレビューを表示"}
+          aria-pressed={isPreview}
+          title={isPreview ? "編集画面に戻る" : "レンダリングプレビューを表示"}
+          onClick={() => setPreview(!isPreview)}
+        >
+          {isPreview ? <PencilSimple aria-hidden="true" size={18} weight="bold" /> : <Eye aria-hidden="true" size={18} weight="bold" />}
+        </button>
+        {isPreview ? <span className="map-preview-status" role="status">閲覧専用</span> : null}
         <div
           ref={hostRef}
-          className={`map-canvas ${modeClass}${mode === "pan" ? "" : " map-canvas-draw"}${disabled ? " map-canvas-disabled" : ""}`}
+          className={`map-canvas ${modeClass}${rendererMode === "pan" ? "" : " map-canvas-draw"}${disabled ? " map-canvas-disabled" : ""}`}
           role="region"
           tabIndex={0}
           aria-label="世界地図"

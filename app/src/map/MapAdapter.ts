@@ -87,6 +87,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private cellAttributesById = new globalThis.Map<string, CellAttributeSnapshot[]>();
   private mapShapes: MapShape[] = [];
   private mapShapesControlled = false;
+  private presentationPreview = false;
   private selectedCellIds = new Set<string>();
   private hoveredCellIds = new Set<string>();
   private lastPointerCoordinate: [number, number] | null = null;
@@ -191,7 +192,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.terrainOutlineAnimator = new TerrainOutlineAnimator(target.ownerDocument.defaultView, (segments, phase) => {
       this.terrainOutlineSource.clear();
       if (segments.length > 0) this.terrainOutlineSource.addFeature(new Feature({ geometry: new MultiLineString(segments) }));
-      this.terrainOutlineLayer.setVisible(phase === "transition");
+      this.terrainOutlineLayer.setVisible(!this.presentationPreview && phase === "transition");
       this.terrainSmoothLayer.setVisible(phase === "complete");
     });
     this.cellRegion = new CellRegionController(target.ownerDocument.defaultView, (feature) => this.featureStyle(feature));
@@ -349,8 +350,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   setCellGridVisible(visible: boolean): void {
-    this.layers.cellGridLayer.setVisible(visible);
-    this.layers.terrainCellGridLayer.setVisible(visible);
+    this.layers.setCellGridVisible(visible);
   }
 
   setCellGridOptions(options: CellGridOptions): void {
@@ -391,6 +391,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   setMode(mode: RealmMapMode): void {
+    const effectiveMode = this.presentationPreview ? "pan" : mode;
     this.temporaryPan = false;
     this.draw = this.disposePointerInteraction(this.draw); this.paint = this.disposePointerInteraction(this.paint);
     this.paintLastPoint = null; this.paintStrokeSelection.clear(); this.paintSelectionBeforeStroke = []; this.eraser = this.disposePointerInteraction(this.eraser);
@@ -401,28 +402,28 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
     if (this.regionShape) { this.map.removeInteraction(this.regionShape.interaction); this.regionShape.dispose(); this.regionShape = null; }
     this.lassoPoints = [];
-    const isCellMode = mode === "cell-select" || mode === "cell-erase";
+    const isCellMode = effectiveMode === "cell-select" || effectiveMode === "cell-erase";
     const wasCellMode = this.activeMode === "cell-select" || this.activeMode === "cell-erase";
-    if ((!isCellMode || mode !== this.activeMode) && wasCellMode) this.setSelectedCells([]);
+    if ((!isCellMode || effectiveMode !== this.activeMode) && wasCellMode) this.setSelectedCells([]);
     this.setHoveredCells([]);
     this.grabHover.clear();
-    this.activeMode = mode;
-    this.modify.setActive(mode === "pan");
-    this.translate.setActive(mode === "pan");
-    this.selection.setActive(mode === "pan");
-    this.lasso.setActive(mode === "pan");
-    this.cellLayer.setVisible(true);
-    this.setNavigationActive(mode === "pan");
+    this.activeMode = effectiveMode;
+    this.modify.setActive(effectiveMode === "pan" && !this.presentationPreview);
+    this.translate.setActive(effectiveMode === "pan" && !this.presentationPreview);
+    this.selection.setActive(effectiveMode === "pan" && !this.presentationPreview);
+    this.lasso.setActive(effectiveMode === "pan" && !this.presentationPreview);
+    this.cellLayer.setVisible(!this.presentationPreview);
+    this.setNavigationActive(effectiveMode === "pan");
     this.refreshHoveredCells();
     this.refreshGrabHover();
-    if (mode === "grab") this.grab = new MapShapeGrabController({
+    if (effectiveMode === "grab") this.grab = new MapShapeGrabController({
       shapes: () => this.mapShapes,
       hitTolerance: () => Math.max(0.15, (this.map.getView().getResolution() ?? 1) * 8),
       setPreview: (shapes) => this.setMapShapePreview(shapes),
       emit: (shapes) => { for (const listener of this.mapShapeEditListeners) listener({ shapes }); },
       onInvalid: () => { for (const listener of this.errorListeners) listener("feature_outside_world"); },
     });
-    if (mode === "erase") {
+    if (effectiveMode === "erase") {
       this.setSelected(null);
       this.eraser = new PointerInteraction({
         handleDownEvent: (event) => {
@@ -474,8 +475,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.map.addInteraction(this.paint);
       return;
     }
-    if (mode === "pan") return;
-    if (mode === "cell-region") {
+    if (effectiveMode === "pan") return;
+    if (effectiveMode === "cell-region") {
       this.draw = this.cellRegion.createDraw(
         (cellIds) => { for (const listener of this.cellSelectListeners) listener(cellIds); },
         (code) => { for (const listener of this.errorListeners) listener(code); },
@@ -483,12 +484,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.map.addInteraction(this.draw);
       return;
     }
-    if (mode === "grab") {
+    if (effectiveMode === "grab") {
       this.setSelected(null);
       this.map.addInteraction(this.grab!.interaction);
       return;
     }
-    if (mode === "shape") {
+    if (effectiveMode === "shape") {
       this.setSelected(null);
       this.regionShape = new RegionShapeController({
         shapes: () => this.mapShapes,
@@ -498,12 +499,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.map.addInteraction(this.regionShape.interaction);
       return;
     }
-    const drawType = drawTypeForMode(mode);
-    const drawingFeatureType = mode === "polygon-hole" ? "terrain" : mode === "label-path" ? "boundary" : mode;
+    const drawType = drawTypeForMode(effectiveMode);
+    const drawingFeatureType = effectiveMode === "polygon-hole" ? "terrain" : effectiveMode === "label-path" ? "boundary" : effectiveMode;
     this.draw = new MiddleButtonSafeDraw({ type: drawType, style: this.featureStyle(new Feature({ featureType: drawingFeatureType, name: "", properties: {} })) });
     // Lines and areas follow the pointer continuously from press to release.
     // Point features remain a single click because they have no path to trace.
-    this.draw.setFreehand(this.drawTypeUsesFreehand(mode));
+    this.draw.setFreehand(this.drawTypeUsesFreehand(effectiveMode));
     this.draw.on("drawend", (event) => {
       const geometry = event.feature.getGeometry();
       if (!geometry) return;
@@ -568,6 +569,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       event.preventDefault();
       return;
     }
+    if (this.presentationPreview) return;
     if (event.code === "Space" && this.activeMode !== "pan" && !this.temporaryPan) {
       this.cancelPaintStroke();
       this.temporaryPan = true;
@@ -893,7 +895,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellLayer.changed();
   }
 
-  /** Stores canonical Polygon rows and renders their presentation-only smooth geometry. */
+  /** Stores canonical Polygon rows and renders exact editing geometry by default. */
   setMapShapes(shapes: readonly MapShape[]): void {
     this.mapShapesControlled = true;
     this.mapShapes = cloneMapShapes(shapes);
@@ -901,10 +903,29 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.refreshGrabHover();
   }
 
+  /** Switches between exact editing geometry and renderer-only smooth preview. */
+  setPresentationMode(preview: boolean): void {
+    this.presentationPreview = preview;
+    if (preview) this.handlePointerCancel();
+    if (preview && this.activeMode !== "pan") this.setMode("pan");
+    if (preview) {
+      this.setSelectedFeatures([]);
+      this.lassoPoints = [];
+      this.lassoAdditive = false;
+    }
+    this.modify.setActive(this.activeMode === "pan" && !preview);
+    this.translate.setActive(this.activeMode === "pan" && !preview);
+    this.selection.setActive(this.activeMode === "pan" && !preview);
+    this.lasso.setActive(this.activeMode === "pan" && !preview);
+    this.layers.setPresentationMode(preview);
+    if (this.mapShapesControlled) this.setMapShapePreview(null);
+    else this.setCellAttributes([...this.cellAttributesById.values()].flat());
+  }
+
   /** Renders a continuous edit preview without changing the canonical shapes. */
   private setMapShapePreview(shapes: readonly MapShape[] | null): void {
     const renderedShapes = shapes === null ? this.mapShapes : shapes;
-    const { terrainCount, regionCount } = renderCanonicalMapShapes(renderedShapes, this.terrainSmoothSource, this.regionSmoothSource, shapes === null);
+    const { terrainCount, regionCount } = renderCanonicalMapShapes(renderedShapes, this.terrainSmoothSource, this.regionSmoothSource, shapes === null && this.presentationPreview);
     this.terrainOutlineLayer.setVisible(false);
     this.terrainSmoothLayer.setVisible(terrainCount > 0);
     this.regionSmoothLayer.setVisible(regionCount > 0);
@@ -943,7 +964,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
       terrainSmoothSource: this.terrainSmoothSource,
       regionSmoothSource: this.regionSmoothSource,
       regionFallbackColor: mapTheme(this.activeThemeId, this.themeOverrides).region,
-      renderSmoothShapes: !this.mapShapesControlled,
+      renderSmoothShapes: !this.mapShapesControlled && this.presentationPreview,
+      renderShapes: !this.mapShapesControlled,
     });
     this.terrainOutlineAnimator.update(terrainCellIds);
     this.cellRegion.animateChanges(previous, renderedByCell, (id) => this.getCellFeature(id));

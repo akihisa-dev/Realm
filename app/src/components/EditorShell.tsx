@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowClockwise } from "@phosphor-icons/react/dist/csr/ArrowClockwise";
+import { ArrowCounterClockwise } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
+import { Stack } from "@phosphor-icons/react/dist/csr/Stack";
 import { errorMessage, type CellAttributeSnapshot, type MapShape, type MapShapeEdit, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { DEFAULT_ERASE_TARGET, eraseTargetDefinition, type EraseTarget } from "./editor/eraseTargets";
@@ -29,6 +32,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [objectManagerOpen, setObjectManagerOpen] = useState(true);
   const [strokeRange, setStrokeRange] = useState(CELL_PAINT_RANGE_MIN);
   const [zoom, setZoom] = useState(1);
+  const [previewMode, setPreviewMode] = useState(false);
   const activeToolRef = useRef<Tool>("terrain");
   const eraseTargetRef = useRef<EraseTarget>(DEFAULT_ERASE_TARGET);
   const {
@@ -45,6 +49,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     busy,
     onSaved,
     onProjectChanged: () => {
+      setPreviewMode(false);
       setSelectedCellIds([]);
       setSelectedRegionIds([]);
       setSelectedComponentId(null);
@@ -202,12 +207,12 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       const redo = key === "y" || (key === "z" && event.shiftKey);
       const undo = key === "z" && !event.shiftKey;
       if (event.metaKey || event.ctrlKey) {
-        if (locked || (!undo && !redo) || (undo ? !viewedSnapshot.canUndo : !viewedSnapshot.canRedo)) return;
+        if (locked || previewMode || (!undo && !redo) || (undo ? !viewedSnapshot.canUndo : !viewedSnapshot.canRedo)) return;
         event.preventDefault();
         void run(() => redo ? backend.redoProject() : backend.undoProject(), redo ? "操作を進められませんでした。" : "操作を戻せませんでした。");
         return;
       }
-      if (locked || event.altKey || event.shiftKey) return;
+      if (locked || previewMode || event.altKey || event.shiftKey) return;
       if (key === "c" || key === "z") {
         event.preventDefault();
         selectTool("terrain");
@@ -224,7 +229,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [backend, locked, viewedSnapshot.canRedo, viewedSnapshot.canUndo]);
+  }, [backend, locked, previewMode, viewedSnapshot.canRedo, viewedSnapshot.canUndo]);
 
   return (
     <main className="editor-shell" aria-label="Realm地形編集画面">
@@ -245,9 +250,9 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
           <output htmlFor="editor-stroke-range">{strokeRange}セル</output>
         </div>
         <nav aria-label="編集履歴">
-          <button type="button" onClick={() => { void run(() => backend.undoProject(), "操作を戻せませんでした。"); }} disabled={locked || !viewedSnapshot.canUndo}>戻す</button>
-          <button type="button" onClick={() => { void run(() => backend.redoProject(), "操作を進められませんでした。"); }} disabled={locked || !viewedSnapshot.canRedo}>進む</button>
-          <button className="object-manager-toggle" type="button" aria-label={objectManagerOpen ? "オブジェクトマネージャーを閉じる" : "オブジェクトマネージャーを開く"} aria-pressed={objectManagerOpen} onClick={() => setObjectManagerOpen((current) => !current)}>オブジェクト</button>
+          <button type="button" aria-label="戻す" title="戻す" onClick={() => { void run(() => backend.undoProject(), "操作を戻せませんでした。"); }} disabled={locked || previewMode || !viewedSnapshot.canUndo}><ArrowCounterClockwise aria-hidden="true" size={17} weight="bold" /></button>
+          <button type="button" aria-label="進む" title="進む" onClick={() => { void run(() => backend.redoProject(), "操作を進められませんでした。"); }} disabled={locked || previewMode || !viewedSnapshot.canRedo}><ArrowClockwise aria-hidden="true" size={17} weight="bold" /></button>
+          <button className="object-manager-toggle" type="button" aria-label={objectManagerOpen ? "オブジェクトマネージャーを閉じる" : "オブジェクトマネージャーを開く"} title={objectManagerOpen ? "オブジェクトマネージャーを閉じる" : "オブジェクトマネージャーを開く"} aria-pressed={objectManagerOpen} onClick={() => setObjectManagerOpen((current) => !current)}><Stack aria-hidden="true" size={17} weight="bold" /></button>
         </nav>
       </header>
       <div className={`editor-body${objectManagerOpen ? "" : " object-manager-is-closed"}`}>
@@ -273,6 +278,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             onToolChange={selectTool}
             onEraseTargetChange={selectEraseTarget}
             onRegionColorChange={changeRegionColor}
+            preview={previewMode}
+            onPreviewChange={setPreviewMode}
             onError={(code) => setError(mapErrorMessage(code, activeToolRef.current === "region" || (activeToolRef.current === "erase" && eraseTargetRef.current === "region") ? "region" : "terrain"))}
             onZoomChange={setZoom}
             strokeRange={strokeRange}
@@ -286,7 +293,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             selectedRegionIds={selectedRegionIds}
             selectedComponentId={selectedComponentId}
             regionPaintTargetId={regionPaintTargetId}
-            disabled={locked}
+            disabled={locked || previewMode}
             onSelectRegion={selectRegionObject}
             onSelectionChange={selectRegionObjects}
             onSelectComponent={selectRegionComponent}

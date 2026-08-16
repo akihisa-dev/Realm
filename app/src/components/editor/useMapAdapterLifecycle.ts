@@ -27,6 +27,7 @@ export type MapAdapterLifecycleOptions = {
   gridOptions: GridOptions;
   showCellGrid: boolean;
   cellGridOptions: CellGridOptions;
+  preview: boolean;
   drawingOptions: DrawingOptions;
   mapShapes: readonly MapShape[];
   cellAttributes: readonly CellAttributeSnapshot[];
@@ -68,6 +69,7 @@ export function useMapAdapterLifecycle({
   gridOptions,
   showCellGrid,
   cellGridOptions,
+  preview,
   drawingOptions,
   mapShapes,
   cellAttributes,
@@ -152,6 +154,7 @@ export function useMapAdapterLifecycle({
     adapter.setGridOptions(gridOptions);
     adapter.setCellGridVisible(showCellGrid);
     adapter.setCellGridOptions(cellGridOptions);
+    adapter.setPresentationMode?.(preview);
     adapter.setMode(mode);
     adapter.setDrawingOptions(drawingOptions);
     adapter.setMapShapes?.(mapShapes);

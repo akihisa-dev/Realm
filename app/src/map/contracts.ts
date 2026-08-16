@@ -39,6 +39,8 @@ export interface RealmMapRenderer {
   setGridOptions(options: GridOptions): void;
   setCellGridVisible(visible: boolean): void;
   setCellGridOptions(options: CellGridOptions): void;
+  /** Switches between exact editing geometry and renderer-only preview geometry. */
+  setPresentationMode?(preview: boolean): void;
   setAssets(assetUrls: Readonly<Record<string, string>>): void;
   setLayerVisibility(featureType: FeatureType, visible: boolean): void;
   setMode(mode: RealmMapMode): void;

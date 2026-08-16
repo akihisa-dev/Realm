@@ -6,7 +6,7 @@ import { cellIdsToPolygonGeometries } from "../shared/mapShapeGeometry";
 import type { MapShapeGeometry } from "../backend";
 
 describe("RealmMapAdapter canonical map shapes", () => {
-  it("renders saved terrain with a smooth outline and regions as smooth polygons", () => {
+  it("renders saved terrain and regions with exact grid geometry by default", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
@@ -21,17 +21,23 @@ describe("RealmMapAdapter canonical map shapes", () => {
     ]);
 
     expect(terrainLayer.getSource()?.getFeatures()).toHaveLength(1);
-    expect(terrainLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(MultiLineString);
+    expect(terrainLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(Polygon);
     expect(regionLayer.getSource()?.getFeatures()).toHaveLength(1);
     expect(regionLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(Polygon);
-    expect((regionLayer.getSource()?.getFeatures()[0]?.getGeometry() as Polygon).getCoordinates()[0]!.length).toBeGreaterThan(regionGeometry.coordinates[0]!.length);
+    expect((regionLayer.getSource()?.getFeatures()[0]?.getGeometry() as Polygon).getCoordinates()).toEqual(regionGeometry.coordinates);
     expect((adapter.getMap().getLayers().item(2) as VectorLayer).getSource()?.getFeatures()).toHaveLength(0);
+
+    adapter.setPresentationMode(true);
+    expect(terrainLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(MultiLineString);
+    expect((regionLayer.getSource()?.getFeatures()[0]?.getGeometry() as Polygon).getCoordinates()[0]!.length).toBeGreaterThan(regionGeometry.coordinates[0]!.length);
+    expect(terrainLayer.getVisible()).toBe(true);
+    expect((adapter.getMap().getLayers().item(2) as VectorLayer).getVisible()).toBe(false);
 
     adapter.dispose();
     host.remove();
   });
 
-  it("keeps terrain and region outlines identical when they cover the same cells", () => {
+  it("keeps terrain and region outlines identical in the rendered preview", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
@@ -40,6 +46,7 @@ describe("RealmMapAdapter canonical map shapes", () => {
       { id: "11111111-1111-4111-8111-111111111111", layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry },
       { id: "22222222-2222-4222-8222-222222222222", layer: "region", regionId: "33333333-3333-4333-8333-333333333333", value: "#2468AC", geometryVersion: 1, snapGridVersion: 2, geometry },
     ]);
+    adapter.setPresentationMode(true);
 
     const terrain = (adapter.getMap().getLayers().item(8) as VectorLayer).getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString;
     const region = (adapter.getMap().getLayers().item(7) as VectorLayer).getSource()?.getFeatures()[0]?.getGeometry() as Polygon;
@@ -49,7 +56,7 @@ describe("RealmMapAdapter canonical map shapes", () => {
     host.remove();
   });
 
-  it("keeps holes and disconnected region parts when smoothing canonical shapes", () => {
+  it("keeps holes and disconnected region parts when rendering the preview", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
@@ -71,6 +78,7 @@ describe("RealmMapAdapter canonical map shapes", () => {
         geometry,
       })),
     ]);
+    adapter.setPresentationMode(true);
 
     const terrainFeature = ((adapter.getMap().getLayers().item(8) as VectorLayer).getSource()?.getFeatures() ?? [])[0];
     expect(terrainFeature?.getGeometry()).toBeInstanceOf(MultiLineString);

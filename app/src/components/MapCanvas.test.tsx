@@ -17,6 +17,7 @@ const createPaletteRenderer = (): RealmMapRenderer => ({
   setGridOptions: vi.fn(),
   setCellGridVisible: vi.fn(),
   setCellGridOptions: vi.fn(),
+  setPresentationMode: vi.fn(),
   setAssets: vi.fn(),
   setLayerVisibility: vi.fn(),
   setMode: vi.fn(),
@@ -117,6 +118,33 @@ describe("MapCanvas", () => {
     expect(palette).not.toHaveClass("is-collapsed");
     expect(shell).not.toHaveClass("map-canvas-sidebar-collapsed");
     expect(screen.getByRole("button", { name: "地図ツールパレットを閉じる" })).toBeInTheDocument();
+  });
+
+  it("switches to an icon-only renderer preview and back to editing", () => {
+    const renderer = createPaletteRenderer();
+    render(<MapCanvas mode="cell-select" showCellGrid onZoomChange={vi.fn()} createRenderer={() => renderer} />);
+
+    const map = screen.getByRole("region", { name: "世界地図" });
+    const previewButton = screen.getByRole("button", { name: "レンダリングプレビューを表示" });
+    expect(previewButton).toHaveAttribute("aria-pressed", "false");
+    expect(map).toHaveClass("map-canvas-mode-cell-select");
+
+    fireEvent.click(previewButton);
+
+    expect(renderer.setPresentationMode).toHaveBeenLastCalledWith(true);
+    expect(renderer.setMode).toHaveBeenLastCalledWith("pan");
+    expect(screen.getByRole("button", { name: "編集画面に戻る" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("閲覧専用");
+    expect(screen.queryByRole("complementary", { name: "地図ツールパレット" })).not.toBeInTheDocument();
+    expect(screen.getByText("レンダリングプレビューを表示しています。編集はできません。ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。")).toBeInTheDocument();
+    expect(map).toHaveClass("map-canvas-mode-pan");
+
+    fireEvent.click(screen.getByRole("button", { name: "編集画面に戻る" }));
+
+    expect(renderer.setPresentationMode).toHaveBeenLastCalledWith(false);
+    expect(renderer.setMode).toHaveBeenLastCalledWith("cell-select");
+    expect(screen.getByRole("button", { name: "レンダリングプレビューを表示" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("complementary", { name: "地図ツールパレット" })).toBeInTheDocument();
   });
 
   it("cleans each adapter instance exactly once across StrictMode effect replay", () => {

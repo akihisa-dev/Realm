@@ -160,7 +160,7 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
               onClick={selectPaintTool}
             >
               <Mountains aria-hidden="true" size={17} weight="bold" />
-              <span>地形を描く</span>
+              <span className="sr-only">地形を描く</span>
             </button>
           </div>
 
@@ -177,8 +177,7 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
               onClick={openRegionFlyout}
             >
               <Hexagon aria-hidden="true" size={17} weight="fill" color={effectiveRegionColor} />
-              <span>領域</span>
-              <span className="tool-sidebar-button-detail">色</span>
+              <span className="sr-only">領域</span>
             </button>
             {regionFlyoutOpen ? (
             <div id={REGION_FLYOUT_ID} className="tool-flyout tool-flyout-region" role="group" aria-label="領域の色">
@@ -215,8 +214,7 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
               onClick={openEraseFlyout}
             >
               <Eraser aria-hidden="true" size={17} weight="bold" />
-              <span>消しゴム</span>
-              <span className="tool-sidebar-button-detail">対象</span>
+              <span className="sr-only">消しゴム</span>
             </button>
             {eraseFlyoutOpen ? (
             <div id={ERASE_FLYOUT_ID} className="tool-flyout tool-flyout-erase" role="group" aria-label="消しゴムの対象">
@@ -229,10 +227,13 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
                       className="eraser-target-button"
                       key={target.id}
                       type="button"
+                      aria-label={target.label}
                       aria-pressed={eraseTarget === target.id}
+                      title={target.label}
                       onClick={() => selectEraseTarget(target.id)}
                     >
-                      {target.label}
+                      {target.id === "terrain" ? <Mountains aria-hidden="true" size={16} weight="bold" /> : <Hexagon aria-hidden="true" size={16} weight="fill" />}
+                      <span className="sr-only">{target.label}</span>
                     </button>
                   ))}
                 </div>
@@ -244,13 +245,13 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
           <div className="tool-sidebar-item">
             <button className={`tool-sidebar-button${mode === "grab" ? " is-active" : ""}`} type="button" aria-label="グラブ" aria-pressed={mode === "grab"} title="グラブ" onClick={() => selectSimpleTool("grab")}>
               <HandGrabbing aria-hidden="true" size={17} weight="bold" />
-              <span>グラブ</span>
+              <span className="sr-only">グラブ</span>
             </button>
           </div>
           <div className="tool-sidebar-item">
             <button className={`tool-sidebar-button${mode === "shape" ? " is-active" : ""}`} type="button" aria-label="シェイピング" aria-pressed={mode === "shape"} title="シェイピング" onClick={() => selectSimpleTool("shape")}>
               <Magnet aria-hidden="true" size={17} weight="bold" />
-              <span>シェイピング</span>
+              <span className="sr-only">シェイピング</span>
             </button>
           </div>
         </div>

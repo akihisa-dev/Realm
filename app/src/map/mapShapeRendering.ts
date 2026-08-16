@@ -6,7 +6,7 @@ import VectorSource from "ol/source/Vector";
 import type { CellAttributeSnapshot, MapShape, Position } from "../backend";
 import { connectedCellComponents } from "./regionGrab";
 import { mapShapeCellIds } from "../shared/mapShapeGeometry";
-import { smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments, terrainCellCenters } from "./terrainOutline";
+import { exactCellBoundaryPolygons, exactCellBoundaryRings, smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments, terrainCellCenters } from "./terrainOutline";
 
 export const cloneMapShapes = (shapes: readonly MapShape[]): MapShape[] => shapes.map((shape) => ({
   ...shape,
@@ -20,7 +20,7 @@ export const renderCanonicalMapShapes = (
   shapes: readonly MapShape[],
   terrainSource: VectorSource,
   regionSource: VectorSource,
-  renderSmoothShapes = true,
+  renderSmoothShapes = false,
 ): { terrainCount: number; regionCount: number } => {
   terrainSource.clear();
   regionSource.clear();
@@ -65,6 +65,7 @@ type RenderTransientCellGeometryOptions = {
   regionSmoothSource: VectorSource;
   regionFallbackColor: string;
   renderSmoothShapes: boolean;
+  renderShapes?: boolean;
 };
 
 /** Rebuilds renderer-only geometry derived from the transient cell read model. */
@@ -77,6 +78,7 @@ export const renderTransientCellGeometry = ({
   regionSmoothSource,
   regionFallbackColor,
   renderSmoothShapes,
+  renderShapes = true,
 }: RenderTransientCellGeometryOptions): Set<string> => {
   const terrainCellIds = [...attributes.entries()]
     .filter(([, values]) => values.some(({ attribute }) => attribute === "terrain"))
@@ -87,9 +89,9 @@ export const renderTransientCellGeometry = ({
   terrainCellGridSource.clear();
   const centers = terrainCellCenters(terrainCellIds);
   if (centers.length > 0) terrainCellGridSource.addFeature(new Feature({ geometry: new MultiPoint(centers) }));
-  if (renderSmoothShapes) {
+  if (renderShapes) {
     terrainSmoothSource.clear();
-    const terrainRings = smoothCellBoundaryRings(terrainCellIds);
+    const terrainRings = renderSmoothShapes ? smoothCellBoundaryRings(terrainCellIds) : exactCellBoundaryRings(terrainCellIds);
     if (terrainRings.length > 0) terrainSmoothSource.addFeature(new Feature({ geometry: new MultiLineString(terrainRings) }));
     regionSmoothSource.clear();
     const regionIdsByIdentity = new globalThis.Map<string, { color: string; ids: string[]; identity: string }>();
@@ -104,7 +106,7 @@ export const renderTransientCellGeometry = ({
       regionIdsByIdentity.set(key, entry);
     }
     for (const { color, ids, identity } of regionIdsByIdentity.values()) for (const component of connectedCellComponents(ids)) {
-      const polygons = smoothCellBoundaryPolygons(component);
+      const polygons = renderSmoothShapes ? smoothCellBoundaryPolygons(component) : exactCellBoundaryPolygons(component);
       for (const polygon of polygons) regionSmoothSource.addFeature(new Feature({ geometry: new Polygon(polygon), regionColor: color, regionIdentity: identity }));
     }
   }

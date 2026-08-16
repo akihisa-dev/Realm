@@ -56,6 +56,8 @@ export class MapLayerRegistry {
   private graticule: Graticule;
   private gridOptions: GridOptions = { ...DEFAULT_GRID_OPTIONS };
   private gridVisible = true;
+  private cellGridVisible = false;
+  private presentationPreview = false;
   private regionSmoothHiddenIdentity: string | null = null;
 
   constructor(options: MapLayerRegistryOptions) {
@@ -82,13 +84,16 @@ export class MapLayerRegistry {
     this.cellLayer = new VectorLayer({ source: this.cellSource, style: this.cellStyle, visible: true });
     this.terrainOutlineLayer = new VectorLayer({
       source: this.terrainOutlineSource,
-      style: () => new Style({ stroke: new Stroke({ color: mapTheme(options.themeId(), options.themeOverrides()).landInk, width: 1.6 }) }),
+      style: () => new Style({ stroke: new Stroke({ color: mapTheme(options.themeId(), options.themeOverrides()).landInk, width: 1.6, lineJoin: "miter", lineCap: "butt" }) }),
       visible: false,
       zIndex: 7,
     });
     this.terrainSmoothLayer = new VectorLayer({
       source: this.terrainSmoothSource,
-      style: () => new Style({ stroke: new Stroke({ color: mapTheme(options.themeId(), options.themeOverrides()).landInk, width: 1.8, lineJoin: "round", lineCap: "round" }) }),
+      style: () => {
+        const preview = this.presentationPreview;
+        return new Style({ stroke: new Stroke({ color: mapTheme(options.themeId(), options.themeOverrides()).landInk, width: preview ? 1.8 : 1.6, lineJoin: preview ? "round" : "miter", lineCap: preview ? "round" : "butt" }) });
+      },
       visible: false,
       zIndex: 8,
     });
@@ -97,7 +102,8 @@ export class MapLayerRegistry {
       style: (feature) => {
         if (this.regionSmoothHiddenIdentity !== null && feature.get("regionIdentity") === this.regionSmoothHiddenIdentity) return [];
         const color = String(feature.get("regionColor"));
-        return new Style({ fill: new Fill({ color: colorWithOpacity(color, 0.2) }), stroke: new Stroke({ color: colorWithOpacity(color, 0.78), width: 1.1, lineJoin: "round", lineCap: "round" }) });
+        const preview = this.presentationPreview;
+        return new Style({ fill: new Fill({ color: colorWithOpacity(color, 0.2) }), stroke: new Stroke({ color: colorWithOpacity(color, 0.78), width: preview ? 1.1 : 1, lineJoin: preview ? "round" : "miter", lineCap: preview ? "round" : "butt" }) });
       },
       zIndex: 6,
     });
@@ -137,14 +143,31 @@ export class MapLayerRegistry {
     this.cellLayer.changed();
     this.terrainOutlineLayer.changed();
     this.terrainSmoothLayer.changed();
+    this.regionSmoothLayer.changed();
     this.graticule.changed();
     this.gridLayer.changed();
   }
 
   setGridVisible(visible: boolean): void {
     this.gridVisible = visible;
-    this.graticule.setVisible(visible && this.gridOptions.kind === "graticule");
-    this.gridLayer.setVisible(visible && this.gridOptions.kind !== "graticule");
+    this.graticule.setVisible(visible && !this.presentationPreview && this.gridOptions.kind === "graticule");
+    this.gridLayer.setVisible(visible && !this.presentationPreview && this.gridOptions.kind !== "graticule");
+  }
+
+  setCellGridVisible(visible: boolean): void {
+    this.cellGridVisible = visible;
+    this.cellGridLayer.setVisible(visible && !this.presentationPreview);
+    this.terrainCellGridLayer.setVisible(visible && !this.presentationPreview);
+  }
+
+  setPresentationMode(preview: boolean): void {
+    this.presentationPreview = preview;
+    this.cellLayer.setVisible(!preview);
+    this.terrainOutlineLayer.setVisible(false);
+    this.setGridVisible(this.gridVisible);
+    this.setCellGridVisible(this.cellGridVisible);
+    this.terrainSmoothLayer.changed();
+    this.regionSmoothLayer.changed();
   }
 
   setGridOptions(map: Map, options: GridOptions): void {
