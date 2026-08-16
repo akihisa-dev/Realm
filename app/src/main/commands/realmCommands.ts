@@ -38,7 +38,7 @@ export class RealmCommands implements RealmBackend {
   readonly libraryDirectory: string; private readonly libraryIdentity: LibraryDirectoryIdentity; private session: OpenProjectSession | null = null;
   constructor(options: RealmCommandsOptions) { this.libraryIdentity = validateLibraryDirectory(options.libraryDirectory); this.libraryDirectory = this.libraryIdentity.path; }
   private assertLibrary(): void { assertLibraryDirectory(this.libraryIdentity); }
-  private current(): OpenProjectSession { this.assertLibrary(); if (!this.session) throw new RealmError("no_open_project", "No project is open."); return this.session; }
+  private current(): OpenProjectSession { this.assertLibrary(); if (!this.session) throw new RealmError("no_open_project", "No project is open."); this.session.ensureCurrent(); return this.session; }
   private setSession(session: OpenProjectSession): RealmSnapshot {
     this.session?.close();
     this.session = session;

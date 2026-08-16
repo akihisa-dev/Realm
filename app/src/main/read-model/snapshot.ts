@@ -9,6 +9,7 @@ import { corrupt } from "../domain/errors";
 
 function json(value: unknown, label: string): unknown { try { return JSON.parse(String(value)); } catch { throw corrupt("A project contains invalid " + label + "."); } }
 export function projectSnapshot(session: OpenProjectSession): RealmSnapshot {
+  session.ensureCurrent();
   const world = session.database.prepare("SELECT id,name,settings_json AS settingsJson FROM world LIMIT 1").get() as Record<string, unknown> | undefined;
   if (!world) throw corrupt("The project does not contain a world record.");
   const features = (session.database.prepare("SELECT id,feature_type AS featureType,name,geometry_json AS geometryJson,properties_json AS propertiesJson FROM features ORDER BY feature_type,name,id").all() as Record<string, unknown>[]).map((row) => {

@@ -118,6 +118,42 @@ describe("Electron storage parity: path, snapshots, migrations and transfer", ()
     validated.close();
   });
 
+  it("rejects same-inode external content changes before normal reads and updates", async () => {
+    const directory = fixtureDirectory();
+    const commands = new RealmCommands({ libraryDirectory: directory });
+    const initial = await commands.createProject({ name: "Session identity" });
+    const before = sourceIdentity(initial.path);
+    const writer = new DatabaseSync(initial.path);
+    try { writer.prepare("UPDATE world SET name=?").run("External content"); } finally { writer.close(); }
+    const after = sourceIdentity(initial.path);
+    expect(after.main.dev).toBe(before.main.dev);
+    expect(after.main.ino).toBe(before.main.ino);
+    expect(after.main.digest).not.toBe(before.main.digest);
+
+    await expect(commands.saveProject({ name: "Must not overwrite" })).rejects.toMatchObject({ code: "invalid_path" });
+    await expect(commands.getOpenProject()).rejects.toMatchObject({ code: "invalid_path" });
+
+    const check = new DatabaseSync(initial.path, { readOnly: true });
+    try { expect(check.prepare("SELECT name FROM world").get()).toEqual({ name: "External content" }); } finally { check.close(); }
+    await commands.closeProject();
+  });
+
+  it("rejects an externally replaced open path before normal reads and updates", async () => {
+    const directory = fixtureDirectory();
+    const commands = new RealmCommands({ libraryDirectory: directory });
+    const initial = await commands.createProject({ name: "Path identity" });
+    const moved = initial.path + ".moved";
+    const foreign = Buffer.from("foreign replacement");
+    renameSync(initial.path, moved);
+    writeFileSync(initial.path, foreign);
+
+    await expect(commands.saveProject({ name: "Must not overwrite" })).rejects.toMatchObject({ code: "invalid_path" });
+    await expect(commands.getOpenProject()).rejects.toMatchObject({ code: "invalid_path" });
+    expect(readFileSync(initial.path)).toEqual(foreign);
+
+    await commands.closeProject();
+  });
+
   it("rejects managed create, open, and import after library replacement", async () => {
     const createDirectory = fixtureDirectory();
     const createCommands = new RealmCommands({ libraryDirectory: createDirectory });
@@ -280,21 +316,34 @@ describe("Electron storage parity: transactional CRUD and session history", () =
     const commands = new RealmCommands({ libraryDirectory: directory });
     const initial = await commands.createProject({ name: "Rollback" });
     const path = initial.path;
+    const libraryId = basename(path, ".realmmap");
     const reject = (name: string, table: string): void => {
       const db = new DatabaseSync(path);
       try { db.exec(`CREATE TRIGGER ${name} BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT, 'synthetic storage failure'); END;`); } finally { db.close(); }
     };
     const drop = (name: string): void => { const db = new DatabaseSync(path); try { db.exec(`DROP TRIGGER ${name}`); } finally { db.close(); } };
-    reject("reject_feature", "features");
-    await expect(commands.createFeature(featureInput)).rejects.toThrow();
+    const withTrigger = async (name: string, table: string, operation: () => Promise<void>): Promise<void> => {
+      await commands.closeProject();
+      reject(name, table);
+      try {
+        await commands.openProject({ libraryId });
+        await operation();
+      } finally {
+        await commands.closeProject();
+        drop(name);
+      }
+    };
+    await withTrigger("reject_feature", "features", async () => {
+      await expect(commands.createFeature(featureInput)).rejects.toThrow();
+    });
     let check = new DatabaseSync(path, { readOnly: true }); expect(Number((check.prepare("SELECT COUNT(*) AS count FROM features").get() as Record<string, unknown>).count)).toBe(0); check.close();
-    drop("reject_feature");
-    reject("reject_shape", "map_shapes");
-    await expect(commands.updateMapShapes({ shapes: [terrainShape(["1:1", "2:2"])] })).rejects.toThrow();
-    expect((await commands.getOpenProject())?.mapShapes).toEqual([]);
-    drop("reject_shape");
-    reject("reject_asset", "assets");
-    await expect(commands.importAsset({ mime: "image/png", bytes: png, width: 1, height: 1, metadata: {} })).rejects.toThrow();
+    await withTrigger("reject_shape", "map_shapes", async () => {
+      await expect(commands.updateMapShapes({ shapes: [terrainShape(["1:1", "2:2"])] })).rejects.toThrow();
+      expect((await commands.getOpenProject())?.mapShapes).toEqual([]);
+    });
+    await withTrigger("reject_asset", "assets", async () => {
+      await expect(commands.importAsset({ mime: "image/png", bytes: png, width: 1, height: 1, metadata: {} })).rejects.toThrow();
+    });
     check = new DatabaseSync(path, { readOnly: true }); expect(Number((check.prepare("SELECT COUNT(*) AS count FROM assets").get() as Record<string, unknown>).count)).toBe(0); check.close();
     await commands.closeProject();
   });
