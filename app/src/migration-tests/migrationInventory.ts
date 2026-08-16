@@ -172,10 +172,10 @@ export const migrationInventory = [
   {
     id: "renderer-lifecycle",
     area: "renderer",
-    observable: "Map adapter handles pointer cancellation, wheel zoom, middle-button pan, resize, and idempotent disposal.",
+    observable: "Map adapter handles pointer cancellation, wheel zoom, middle- and right-button pan, resize, and idempotent disposal.",
     baselineEvidence: [
       "MapAdapter pointer-exit/external-release/lost-capture/blur cancellation",
-      "MapAdapter wheel zoom and middle-button drag pan",
+      "MapAdapter wheel zoom and middle- and right-button drag pan",
       "MapAdapter fit recomputation on resize",
       "MapAdapter listener cleanup and idempotent disposal",
     ],

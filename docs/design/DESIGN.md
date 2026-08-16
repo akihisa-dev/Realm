@@ -26,7 +26,7 @@ Selecting `シェイピング` activates a click-to-shape interaction: for the c
 
 The editor uses one native overlay title bar with `戻す`, `進む`, and an object-manager toggle, a dominant OpenLayers canvas, a persistent left map tool sidebar, and a closable right-side object manager. No primary rail, floating map buttons, or bottom zoom bar is shown. Do not draw a second set of macOS traffic lights in React. Default zoom and center are part of the map adapter contract and must not be persisted as project data.
 
-The move tool pans the viewpoint with a primary-button drag. A middle-button drag pans in every tool without changing the active tool, and Space plus a primary-button drag provides the same temporary navigation path. Viewpoint movement remains constrained to the fixed editing world so the grid cannot be dragged aside to expose empty canvas. Wheel rotation zooms the canvas.
+The move tool pans the viewpoint with a primary-button drag. A middle- or right-button drag pans in every tool without changing the active tool, and Space plus a primary-button drag provides the same temporary navigation path. The right-button context menu is suppressed on the map so a right-button drag remains a navigation gesture. Viewpoint movement remains constrained to the fixed editing world so the grid cannot be dragged aside to expose empty canvas. Wheel rotation zooms the canvas.
 
 The canvas cursor reflects the active operation: `grab` for move/navigation and the explicit terrain or region boundary-grab tool, a crosshair for terrain or region drawing, and a small eraser cursor for layer removal. An explicitly disabled canvas uses `not-allowed`; OpenLayers' `grab`/`grabbing` feedback remains the highest-priority state while a pan drag is active.
 

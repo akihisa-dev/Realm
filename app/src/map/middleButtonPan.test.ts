@@ -6,13 +6,16 @@ import { describe, expect, it, vi } from "vitest";
 import { RealmMapAdapter } from "./MapAdapter";
 import type { RealmMapMode } from "./contracts";
 
-const middleButtonModes: RealmMapMode[] = [
+const panButtonModes: RealmMapMode[] = [
   "pan", "cell-select", "cell-region", "grab", "shape", "cell-erase", "erase",
   "terrain", "forest", "river", "coastline", "country", "region", "boundary", "city", "town", "polygon-hole", "label-path",
 ];
 
-describe("middle-button map pan", () => {
-  it("moves the view without starting a tool gesture in every mode", () => {
+describe("secondary-button map pan", () => {
+  it.each([
+    { button: 1, buttons: 4, label: "middle" },
+    { button: 2, buttons: 2, label: "right" },
+  ])("moves the view without starting a tool gesture with the $label button in every mode", ({ button, buttons }) => {
     const host = document.createElement("div");
     host.style.width = "640px";
     host.style.height = "480px";
@@ -40,14 +43,14 @@ describe("middle-button map pan", () => {
     try {
       const dragPans = map.getInteractions().getArray().filter((item): item is DragPan => item instanceof DragPan);
       expect(dragPans).toHaveLength(2);
-      for (const mode of middleButtonModes) {
+      for (const mode of panButtonModes) {
         adapter.setMode(mode);
         adapter.resetView();
         const before = map.getView().getCenter();
-        const down = new MouseEvent("pointerdown", { button: 1, buttons: 4, clientX: 100, clientY: 100 });
-        const drag = new MouseEvent("pointermove", { button: 1, buttons: 4, clientX: 120, clientY: 100 });
-        const secondDrag = new MouseEvent("pointermove", { button: 1, buttons: 4, clientX: 140, clientY: 100 });
-        const up = new MouseEvent("pointerup", { button: 1, buttons: 0, clientX: 140, clientY: 100 });
+        const down = new MouseEvent("pointerdown", { button, buttons, clientX: 100, clientY: 100 });
+        const drag = new MouseEvent("pointermove", { button, buttons, clientX: 120, clientY: 100 });
+        const secondDrag = new MouseEvent("pointermove", { button, buttons, clientX: 140, clientY: 100 });
+        const up = new MouseEvent("pointerup", { button, buttons: 0, clientX: 140, clientY: 100 });
         dispatch(MapBrowserEventType.POINTERDOWN, down, [down]);
         dispatch(MapBrowserEventType.POINTERDRAG, drag, [drag]);
         dispatch(MapBrowserEventType.POINTERDRAG, secondDrag, [secondDrag]);
@@ -62,7 +65,10 @@ describe("middle-button map pan", () => {
     }
   });
 
-  it("keeps primary-button region drawing freehand while ignoring middle-button down", () => {
+  it.each([
+    { button: 1, buttons: 4, label: "middle" },
+    { button: 2, buttons: 2, label: "right" },
+  ])("keeps primary-button region drawing freehand while ignoring $label-button down", ({ button, buttons }) => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
@@ -73,11 +79,11 @@ describe("middle-button map pan", () => {
         adapter.setMode(mode);
         const draw = map.getInteractions().getArray().find((interaction) => interaction instanceof Draw) as Draw;
         expect(draw.getFreehand(), `mode: ${mode}`).toBe(true);
-        const middle = new MouseEvent("pointerdown", { button: 1, buttons: 4 });
-        const middleEvent = new MapBrowserEvent(MapBrowserEventType.POINTERDOWN, map, middle as never, false, undefined, [middle] as never);
-        middleEvent.pixel = [100, 100];
-        middleEvent.coordinate = [0, 0];
-        expect(draw.handleEvent(middleEvent)).toBe(true);
+        const secondary = new MouseEvent("pointerdown", { button, buttons });
+        const secondaryEvent = new MapBrowserEvent(MapBrowserEventType.POINTERDOWN, map, secondary as never, false, undefined, [secondary] as never);
+        secondaryEvent.pixel = [100, 100];
+        secondaryEvent.coordinate = [0, 0];
+        expect(draw.handleEvent(secondaryEvent)).toBe(true);
 
         const primary = new MouseEvent("pointerdown", { button: 0, buttons: 1 });
         const primaryEvent = new MapBrowserEvent(MapBrowserEventType.POINTERDOWN, map, primary as never, false, undefined, [primary] as never);

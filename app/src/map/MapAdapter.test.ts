@@ -469,7 +469,7 @@ describe("RealmMapAdapter", () => {
     }
   });
 
-  it("keeps middle-button drag pan available in every tool mode", () => {
+  it("keeps middle- and right-button drag pan available in every tool mode", () => {
     const host = document.createElement("div");
     host.style.width = "640px";
     host.style.height = "480px";
@@ -483,6 +483,8 @@ describe("RealmMapAdapter", () => {
       interaction as unknown as { condition_: (event: unknown) => boolean }
     ).condition_(middleButtonEvent));
     expect(middleDragPan).toBeDefined();
+    const rightButtonEvent = { originalEvent: new MouseEvent("pointerdown", { button: 2 }) } as never;
+    expect((middleDragPan as unknown as { condition_: (event: unknown) => boolean }).condition_(rightButtonEvent)).toBe(true);
 
     const primaryDragPan = dragPans.find((interaction) => interaction !== middleDragPan);
     adapter.setMode("cell-select");
@@ -493,6 +495,7 @@ describe("RealmMapAdapter", () => {
     adapter.setMode("pan");
     expect(primaryDragPan?.getActive()).toBe(true);
     expect(middleDragPan?.getActive()).toBe(true);
+    expect(host.dispatchEvent(new MouseEvent("contextmenu", { button: 2, bubbles: true, cancelable: true }))).toBe(false);
     adapter.dispose();
     host.remove();
   });

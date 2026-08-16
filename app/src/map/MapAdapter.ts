@@ -823,7 +823,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
   };
 
   private readonly handleContextMenu = (event: MouseEvent): void => {
-    const hadGesture = Boolean(this.draw) || this.lassoPoints.length > 0;
     if (this.draw) {
       const vertexDrawing = this.drawingGesture === "vertices"
         && this.activeMode !== "pan" && this.activeMode !== "cell-select" && this.activeMode !== "cell-region" && this.activeMode !== "cell-erase" && this.activeMode !== "erase"
@@ -835,7 +834,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.lassoPoints = [];
       this.lassoAdditive = false;
     }
-    if (hadGesture) event.preventDefault();
+    event.preventDefault();
   };
 
   private setNavigationActive(active: boolean): void {
