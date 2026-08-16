@@ -79,6 +79,42 @@ describe("MapShapeGrabController", () => {
     controller.dispose();
   });
 
+  it("previews only the affected grid cells for a boundary pull before pointerup", () => {
+    const original = shape("terrain", [
+      "30:30", "31:30", "32:30",
+      "30:31", "31:31", "32:31",
+      "30:32", "31:32", "32:32",
+    ], "33333333-3333-4333-8333-333333333333");
+    const ring = original.geometry.coordinates[0]!;
+    const target: [number, number] = [ring[0]![0] + 8, ring[0]![1] + 8];
+    let current: MapShape[] = [original];
+    const previews: (readonly MapShape[] | null)[] = [];
+    const commits: MapShape[][] = [];
+    const controller = new MapShapeGrabController({
+      shapes: () => current,
+      hitTolerance: () => 0.1,
+      setPreview: (next) => previews.push(next),
+      emit: (next) => { commits.push(next); current = next; },
+    });
+    const interaction = interactionOf(controller);
+    expect(interaction.handleDownEvent(event(ring[0]!))).toBe(true);
+    interaction.handleDragEvent(event(target));
+
+    const preview = previews.at(-1)?.[0];
+    expect(preview).toBeDefined();
+    const previewCells = mapShapeCellIds(preview!);
+    expect(previewCells).toContain("35:35");
+    expect(previewCells).not.toContain("29:29");
+    expect(previewCells).not.toContain("29:30");
+    expect(previewCells).not.toContain("30:29");
+    expect(commits).toHaveLength(0);
+
+    interaction.handleUpEvent(event(target));
+    expect(commits).toHaveLength(1);
+    expect(mapShapeCellIds(commits[0]![0]!)).toEqual(previewCells);
+    controller.dispose();
+  });
+
   it("uses exact vertex and edge hits and cancels without emitting", () => {
     const original = shape("terrain", ["10:10"], "22222222-2222-4222-8222-222222222222");
     const ring = original.geometry.coordinates[0]!;

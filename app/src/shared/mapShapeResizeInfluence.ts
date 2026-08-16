@@ -12,6 +12,11 @@ import type { MapShapeGeometry, Position } from "./realmContract";
 
 const EPSILON = 1e-8;
 const radius = 180 / (1.5 * MAP_SHAPE_GRID_ROWS + 0.5);
+const firstCellCenter = mapShapeCellCenter({ row: 0, column: 0 });
+const columnStep = mapShapeCellCenter({ row: 0, column: 1 })[0] - firstCellCenter[0];
+const rowStep = mapShapeCellCenter({ row: 1, column: 0 })[1] - firstCellCenter[1];
+
+type CellBounds = { minX: number; maxX: number; minY: number; maxY: number };
 
 const ringArea = (ring: readonly Position[]): number => {
   let area = 0;
@@ -106,14 +111,67 @@ const geometryTouchesCell = (preview: MapShapeGeometry, cellPolygon: readonly Po
   });
 };
 
-const cellsTouchingPreview = (preview: MapShapeGeometry): Set<string> => {
-  const cells = new Set<string>();
-  for (let row = 0; row < MAP_SHAPE_GRID_ROWS; row += 1) {
-    for (let column = 0; column < MAP_SHAPE_GRID_COLUMNS; column += 1) {
-      const cellPolygon = mapShapeCellPolygon({ row, column });
-      if (cellPolygon && geometryTouchesCell(preview, cellPolygon)) cells.add(`${column}:${row}`);
+const boundsForGeometries = (geometries: readonly MapShapeGeometry[], padding: number): CellBounds | null => {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const geometry of geometries) {
+    for (const ring of geometry.coordinates) {
+      for (const [x, y] of ring) {
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
     }
   }
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) return null;
+  return { minX: minX - padding, maxX: maxX + padding, minY: minY - padding, maxY: maxY + padding };
+};
+
+const boundsForSegments = (segments: readonly [Position, Position][], padding: number): CellBounds | null => {
+  const points = segments.flat();
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const [x, y] of points) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) return null;
+  return { minX: minX - padding, maxX: maxX + padding, minY: minY - padding, maxY: maxY + padding };
+};
+
+const forEachCellInBounds = (bounds: CellBounds, visit: (row: number, column: number) => void): void => {
+  const firstRow = Math.max(0, Math.floor((bounds.minY - firstCellCenter[1]) / rowStep) - 1);
+  const lastRow = Math.min(MAP_SHAPE_GRID_ROWS - 1, Math.ceil((bounds.maxY - firstCellCenter[1]) / rowStep) + 1);
+  for (let row = firstRow; row <= lastRow; row += 1) {
+    const rowOffset = row % 2 === 0 ? 0 : columnStep / 2;
+    const firstColumn = Math.max(0, Math.floor((bounds.minX - firstCellCenter[0] - rowOffset) / columnStep) - 1);
+    const lastColumn = Math.min(MAP_SHAPE_GRID_COLUMNS - 1, Math.ceil((bounds.maxX - firstCellCenter[0] - rowOffset) / columnStep) + 1);
+    for (let column = firstColumn; column <= lastColumn; column += 1) visit(row, column);
+  }
+};
+
+const cellsAddedByPreview = (
+  original: MapShapeGeometry,
+  preview: MapShapeGeometry,
+  originalCells: ReadonlySet<string>,
+): Set<string> => {
+  const cells = new Set<string>();
+  const bounds = boundsForGeometries([original, preview], radius * 2);
+  if (!bounds) return cells;
+  forEachCellInBounds(bounds, (row, column) => {
+    const id = `${column}:${row}`;
+    const cellPolygon = mapShapeCellPolygon({ row, column });
+    if (originalCells.has(id) || !cellPolygon) return;
+    if (geometryTouchesCell(preview, cellPolygon) && !geometryTouchesCell(original, cellPolygon)) cells.add(id);
+  });
   return cells;
 };
 
@@ -162,7 +220,7 @@ const connectedComponents = (cells: Set<string>): Set<string>[] => {
   return components;
 };
 
-const connectCellComponents = (cells: Set<string>): Set<string> => {
+const connectCellComponents = (cells: Set<string>, allowedCells: ReadonlySet<string> = cells): Set<string> => {
   let connected = new Set(cells);
   while (true) {
     const components = connectedComponents(connected);
@@ -177,6 +235,7 @@ const connectCellComponents = (cells: Set<string>): Set<string> => {
       if (!current) continue;
       for (const neighbor of componentNeighbors(current).sort((left, right) => cellId(left).localeCompare(cellId(right)))) {
         const neighborId = cellId(neighbor);
+        if (!allowedCells.has(neighborId)) continue;
         if (parent.has(neighborId)) continue;
         parent.set(neighborId, queue[index]!);
         queue.push(neighborId);
@@ -200,14 +259,16 @@ const cellsNearMovedBoundary = (
   const segments = movedBoundarySegments(original, preview);
   if (influenceDistance <= EPSILON || segments.length === 0) return new Set();
   const cells = new Set<string>();
-  for (let row = 0; row < MAP_SHAPE_GRID_ROWS; row += 1) {
-    for (let column = 0; column < MAP_SHAPE_GRID_COLUMNS; column += 1) {
-      const id = `${column}:${row}`;
-      if (originalCells.has(id)) continue;
-      const center = mapShapeCellCenter({ row, column });
-      if (segments.some(([start, end]) => distanceToSegment(center, start, end) <= influenceDistance)) cells.add(id);
-    }
-  }
+  const bounds = boundsForSegments(segments, influenceDistance + radius);
+  if (!bounds) return cells;
+  forEachCellInBounds(bounds, (row, column) => {
+    const id = `${column}:${row}`;
+    if (originalCells.has(id)) return;
+    const center = mapShapeCellCenter({ row, column });
+    const cellPolygon = mapShapeCellPolygon({ row, column });
+    if (!cellPolygon || geometryTouchesCell(original, cellPolygon) || !geometryTouchesCell(preview, cellPolygon)) return;
+    if (segments.some(([start, end]) => distanceToSegment(center, start, end) <= influenceDistance)) cells.add(id);
+  });
   return cells;
 };
 
@@ -224,11 +285,12 @@ export const normalizeSoftResizeMapShapeGeometry = (
   const displacement = maxResizeDisplacement(original, preview);
   if (previewArea < originalArea || displacement <= radius * 0.75) return base;
   const originalCells = mapShapeCellIds({ geometry: original });
-  const cells = connectCellComponents(new Set([
+  const candidateCells = new Set([
     ...originalCells,
     ...mapShapeCellIds({ geometry: baseGeometry }),
-    ...cellsTouchingPreview(preview),
+    ...cellsAddedByPreview(original, preview, originalCells),
     ...cellsNearMovedBoundary(originalCells, original, preview, displacement),
-  ]));
+  ]);
+  const cells = connectCellComponents(candidateCells, candidateCells);
   return cells.size > 0 ? cellIdsToPolygonGeometries(cells) : base;
 };

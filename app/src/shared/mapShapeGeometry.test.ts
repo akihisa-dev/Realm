@@ -79,7 +79,7 @@ describe("grid-snapped continuous map shapes", () => {
     const original = terrain(["30:30", "31:30", "32:30", "30:31", "31:31", "32:31", "30:32", "31:32", "32:32"]);
     const ring = original.geometry.coordinates[0]!;
     const preview = resizeMapShapeGeometry(original.geometry, { kind: "vertex", ringIndex: 0, vertexIndex: 0, distance: 0 }, ring[0]!, [ring[0]![0] + 8, ring[0]![1] + 8]);
-    const normalized = normalizeResizedMapShapeGeometry(original.geometry, preview);
+    const normalized = normalizeSoftResizeMapShapeGeometry(original.geometry, preview);
     const cells = mapShapeCellIds({ geometry: normalized[0]! });
 
     for (const cell of ["30:30", "31:30", "32:30", "30:31", "31:31", "32:31", "30:32", "31:32", "32:32"]) expect(cells).toContain(cell);
@@ -87,6 +87,19 @@ describe("grid-snapped continuous map shapes", () => {
     expect(cells).not.toContain("29:29");
     expect(cells).not.toContain("29:30");
     expect(cells).not.toContain("30:29");
+  });
+
+  it("shrinks only the pulled corner", () => {
+    const original = terrain(["30:30", "31:30", "32:30", "30:31", "31:31", "32:31", "30:32", "31:32", "32:32"]);
+    const ring = original.geometry.coordinates[0]!;
+    const center: [number, number] = [ring.reduce((sum, [x]) => sum + x, 0) / ring.length, ring.reduce((sum, [, y]) => sum + y, 0) / ring.length];
+    const point = ring[0]!;
+    const target: [number, number] = [center[0] + (point[0] - center[0]) * 0.25, center[1] + (point[1] - center[1]) * 0.25];
+    const preview = resizeMapShapeGeometry(original.geometry, { kind: "vertex", ringIndex: 0, vertexIndex: 0, distance: 0 }, point, target);
+    const normalized = normalizeSoftResizeMapShapeGeometry(original.geometry, preview);
+    const cells = mapShapeCellIds({ geometry: normalized[0]! });
+    expect(cells).not.toContain("32:31");
+    for (const cell of ["30:30", "31:30", "32:30", "30:31", "31:31", "30:32", "31:32", "32:32"]) expect(cells).toContain(cell);
   });
 
   it("stores one Polygon for one connected surface and reconstructs transient cells", () => {

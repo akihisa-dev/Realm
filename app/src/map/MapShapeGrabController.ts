@@ -34,8 +34,9 @@ const translate = (shapes: readonly MapShape[], ids: ReadonlySet<string>, offset
 const equalShapes = (left: readonly MapShape[], right: readonly MapShape[]): boolean => JSON.stringify(left) === JSON.stringify(right);
 
 /**
- * Edits canonical map shapes as a continuous renderer-only preview. The only
- * outward mutation is the single normalized commit emitted on pointerup.
+ * Edits canonical map shapes as a renderer-only preview. Boundary pulls show
+ * the same grid impact that will be committed; the only outward mutation is
+ * the single normalized commit emitted on pointerup.
  */
 export class MapShapeGrabController {
   readonly interaction: PointerInteraction;
@@ -122,7 +123,15 @@ export class MapShapeGrabController {
         ? { ...shape, geometry: resizeMapShapeGeometry(shape.geometry, target, start, position) }
         : cloneShapes([shape])[0]!);
     this.previewShapes = next;
-    this.options.setPreview(next);
+    const renderedPreview = this.editKind === "resize"
+      ? next.map((shape) => {
+        if (shape.id !== target.shapeId) return shape;
+        const originalShape = this.baseShapes.find((candidate) => candidate.id === shape.id);
+        const geometry = originalShape ? normalizeSoftResizeMapShapeGeometry(originalShape.geometry, shape.geometry)[0] : undefined;
+        return geometry ? { ...shape, geometry } : shape;
+      })
+      : next;
+    this.options.setPreview(renderedPreview);
   }
 
   private reset(): void {
