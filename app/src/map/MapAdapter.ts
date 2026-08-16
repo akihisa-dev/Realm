@@ -2,7 +2,6 @@ import Feature from "ol/Feature";
 import Map from "ol/Map";
 import type BaseEvent from "ol/events/Event";
 import View from "ol/View";
-import type Graticule from "ol/layer/Graticule";
 import MultiLineString from "ol/geom/MultiLineString";
 import Polygon from "ol/geom/Polygon";
 import Draw from "ol/interaction/Draw";
@@ -13,12 +12,6 @@ import * as SelectModule from "ol/interaction/Select";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import MouseWheelZoom from "ol/interaction/MouseWheelZoom";
-import VectorLayer from "ol/layer/Vector";
-import VectorSource from "ol/source/Vector";
-import CircleStyle from "ol/style/Circle";
-import Fill from "ol/style/Fill";
-import Stroke from "ol/style/Stroke";
-import Style from "ol/style/Style";
 import { primaryAction, singleClick } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
@@ -28,12 +21,10 @@ import { CELL_PAINT_RADII, WORLD_EXTENT, cellIdsWithinPaintPath as gridCellIdsWi
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
 import { MAX_SMOOTHING_PASSES, refineDrawnGeometry } from "./drawingGeometry";
 import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
-import { createCellStyle, createFeatureStyle } from "./styles";
 import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId, type ThemeOverrides } from "./themes";
 import { assertGeometryWithinWorld } from "./geometryGuard";
 import { TerrainOutlineAnimator } from "./terrainOutlineAnimator";
 import { CellRegionController } from "./CellRegionController";
-import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
 import { selectFeatureIdsWithinLasso } from "./lassoSelection";
 import { exportMapRaster } from "./mapRasterExporter";
 import { MapShapeGrabController } from "./MapShapeGrabController";
@@ -41,10 +32,10 @@ import { RegionShapeController } from "./RegionShapeController";
 import { GrabHoverController } from "./GrabHoverController";
 import { cloneMapShapes, renderCanonicalMapShapes, renderTransientCellGeometry } from "./mapShapeRendering";
 import { hitTestMapShapes } from "../shared/mapShapeGeometry";
-import { nudgeGeometry, resolutionForFillingExtent, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
-import { colorWithOpacity, DEFAULT_CELL_GRID_OPTIONS, OUTSIDE_GRID_LINE_DASH, OUTSIDE_GRID_OPACITY, TERRAIN_GRID_OPACITY, terrainGridDotRadius } from "./mapAdapterPresentation";
+import { nudgeGeometry, resolutionForFillingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
 import { MiddleButtonDragPan, MiddleButtonSafeDraw } from "./middleButtonPan";
 import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
+import { MapLayerRegistry } from "./mapLayerRegistry";
 export type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellPaintSize } from "./gridGeometry";
 export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, availableViewportSize, cellCenterWithinWorld, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
@@ -66,35 +57,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private themeOverrides: ThemeOverrides = {};
   private readonly hiddenFeatureTypes = new Set<RealmFeature["featureType"]>();
   private assetUrls: Readonly<Record<string, string>> = {};
-  private readonly featureSource = new VectorSource({ wrapX: false });
-  private graticule: Graticule;
-  private readonly featureLayer: VectorLayer;
-  private readonly featureStyle = createFeatureStyle(() => this.activeThemeId, (featureType) => featureType === undefined || !this.hiddenFeatureTypes.has(featureType), (assetId) => this.assetUrls[assetId], () => this.themeOverrides);
-  private readonly cellSource = new VectorSource({ wrapX: false });
-  private readonly cellLayer: VectorLayer;
-  private readonly terrainOutlineSource = new VectorSource({ wrapX: false });
-  private readonly terrainOutlineLayer: VectorLayer;
-  private readonly terrainSmoothSource = new VectorSource({ wrapX: false });
-  private readonly terrainSmoothLayer: VectorLayer;
-  private readonly regionSmoothSource = new VectorSource({ wrapX: false });
-  private readonly regionSmoothLayer: VectorLayer;
-  private regionSmoothHiddenIdentity: string | null = null;
+  private readonly layers: MapLayerRegistry;
   private readonly terrainOutlineAnimator: TerrainOutlineAnimator;
   private readonly cellRegion: CellRegionController;
-  private readonly cellGridSource = new VectorSource({ wrapX: false });
-  private readonly fixedCellGridLines = fixedCellGridLines();
-  private readonly cellGridStroke = new Stroke({ color: colorWithOpacity(DEFAULT_CELL_GRID_OPTIONS.color, OUTSIDE_GRID_OPACITY), width: DEFAULT_CELL_GRID_OPTIONS.width, lineDash: OUTSIDE_GRID_LINE_DASH, lineCap: "round" });
-  private readonly cellGridLayer: VectorLayer;
-  private readonly terrainCellGridSource = new VectorSource({ wrapX: false });
-  private readonly terrainCellGridDot = new CircleStyle({
-    radius: terrainGridDotRadius(DEFAULT_CELL_GRID_OPTIONS.width),
-    fill: new Fill({ color: colorWithOpacity(DEFAULT_CELL_GRID_OPTIONS.color, TERRAIN_GRID_OPACITY) }),
-  });
-  private readonly terrainCellGridLayer: VectorLayer;
-  private readonly gridSource = new VectorSource({ wrapX: false });
-  private readonly gridStroke = new Stroke({ color: DEFAULT_GRID_OPTIONS.color, width: DEFAULT_GRID_OPTIONS.width });
-  private readonly gridLayer = new VectorLayer({ source: this.gridSource, style: new Style({ stroke: this.gridStroke }), zIndex: -10, visible: false });
-  private readonly cellStyle = createCellStyle(() => this.activeThemeId, () => this.themeOverrides);
   private readonly selection: SelectModule.default;
   private readonly modify: Modify;
   private readonly translate: Translate;
@@ -108,8 +73,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private drawingSnapAngleDegrees: number | null = null;
   private modifierSnapAngleDegrees: number | null = null;
   private modifierStraighten = false;
-  private gridOptions: GridOptions = { ...DEFAULT_GRID_OPTIONS };
-  private gridVisible = true;
   private cellPaintRadius: number = CELL_PAINT_RADII.medium;
   private cellEraseRadius = 0;
   private paint: CancelablePointerInteraction | null = null;
@@ -145,6 +108,21 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private lassoAdditive = false;
   private suppressSelectionUntil = 0;
   private disposed = false;
+
+  private get featureSource() { return this.layers.featureSource; }
+  private get featureLayer() { return this.layers.featureLayer; }
+  private get featureStyle() { return this.layers.featureStyle; }
+  private get cellSource() { return this.layers.cellSource; }
+  private get cellLayer() { return this.layers.cellLayer; }
+  private get terrainOutlineSource() { return this.layers.terrainOutlineSource; }
+  private get terrainOutlineLayer() { return this.layers.terrainOutlineLayer; }
+  private get terrainSmoothSource() { return this.layers.terrainSmoothSource; }
+  private get terrainSmoothLayer() { return this.layers.terrainSmoothLayer; }
+  private get regionSmoothSource() { return this.layers.regionSmoothSource; }
+  private get regionSmoothLayer() { return this.layers.regionSmoothLayer; }
+  private get cellGridSource() { return this.layers.cellGridSource; }
+  private get terrainCellGridSource() { return this.layers.terrainCellGridSource; }
+  private get fixedCellGridLines() { return this.layers.fixedCellGridLines; }
 
   private readonly handleSelection = (): void => { this.emitSelection(); };
   private disposePointerInteraction<T extends PointerInteraction>(interaction: T | null): null {
@@ -204,6 +182,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   constructor({ target }: MapAdapterOptions) {
     this.target = target;
+    this.layers = new MapLayerRegistry({
+      themeId: () => this.activeThemeId,
+      themeOverrides: () => this.themeOverrides,
+      featureVisible: (featureType) => featureType === undefined || !this.hiddenFeatureTypes.has(featureType),
+      assetUrl: (assetId) => assetId === undefined ? undefined : this.assetUrls[assetId],
+    });
     this.terrainOutlineAnimator = new TerrainOutlineAnimator(target.ownerDocument.defaultView, (segments, phase) => {
       this.terrainOutlineSource.clear();
       if (segments.length > 0) this.terrainOutlineSource.addFeature(new Feature({ geometry: new MultiLineString(segments) }));
@@ -212,36 +196,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     });
     this.cellRegion = new CellRegionController(target.ownerDocument.defaultView, (feature) => this.featureStyle(feature));
     this.target.style.background = mapTheme(this.activeThemeId).canvas;
-    this.graticule = createGraticule(this.gridOptions);
-
-    this.featureLayer = new VectorLayer({ source: this.featureSource, style: this.featureStyle });
-    this.cellLayer = new VectorLayer({ source: this.cellSource, style: this.cellStyle, visible: true });
     this.grabHover = new GrabHoverController({ attributes: () => this.cellAttributesById, getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id), changed: () => this.cellLayer.changed(), setTargetState: (active) => this.target.classList.toggle("map-canvas-grab-target", active) });
-    this.terrainOutlineLayer = new VectorLayer({
-      source: this.terrainOutlineSource,
-      style: () => new Style({ stroke: new Stroke({ color: mapTheme(this.activeThemeId, this.themeOverrides).landInk, width: 1.6 }) }),
-      visible: false,
-      zIndex: 7,
-    });
-    this.terrainSmoothLayer = new VectorLayer({ source: this.terrainSmoothSource, style: () => new Style({ stroke: new Stroke({ color: mapTheme(this.activeThemeId, this.themeOverrides).landInk, width: 1.8, lineJoin: "round", lineCap: "round" }) }), visible: false, zIndex: 8 });
-    this.regionSmoothLayer = new VectorLayer({ source: this.regionSmoothSource, style: (feature) => {
-      if (this.regionSmoothHiddenIdentity !== null && feature.get("regionIdentity") === this.regionSmoothHiddenIdentity) return [];
-      const color = String(feature.get("regionColor"));
-      return new Style({ fill: new Fill({ color: colorWithOpacity(color, 0.2) }), stroke: new Stroke({ color: colorWithOpacity(color, 0.78), width: 1.1, lineJoin: "round", lineCap: "round" }) });
-    }, zIndex: 6 });
-    this.cellGridSource.addFeature(new Feature({ geometry: new MultiLineString(this.fixedCellGridLines) }));
-    this.cellGridLayer = new VectorLayer({
-      source: this.cellGridSource,
-      style: new Style({ stroke: this.cellGridStroke }),
-      visible: false,
-      zIndex: 4,
-    });
-    this.terrainCellGridLayer = new VectorLayer({
-      source: this.terrainCellGridSource,
-      style: new Style({ image: this.terrainCellGridDot }),
-      visible: false,
-      zIndex: 4,
-    });
     this.selection = new SelectModule.default({
       layers: [this.featureLayer],
       multi: true,
@@ -290,7 +245,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
     this.map = new Map({
       target,
-      layers: [this.graticule, this.featureLayer, this.cellLayer, this.gridLayer, this.cellGridLayer, this.terrainCellGridLayer, this.terrainOutlineLayer, this.regionSmoothLayer, this.terrainSmoothLayer],
+      layers: this.layers.mapLayers,
       view: new View({
         projection: "EPSG:4326",
         center: [0, 0],
@@ -376,65 +331,30 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.activeThemeId = themeId;
     this.target.style.background = mapTheme(themeId, this.themeOverrides).canvas;
     this.target.dataset.mapTheme = themeId;
-    this.featureLayer.changed();
-    this.cellLayer.changed();
-    this.terrainOutlineLayer.changed();
-    this.terrainSmoothLayer.changed();
+    this.layers.invalidateTheme();
   }
 
   setThemeOverrides(overrides: ThemeOverrides): void {
     this.themeOverrides = validateThemeOverrides(overrides);
     this.target.style.background = mapTheme(this.activeThemeId, this.themeOverrides).canvas;
-    this.featureLayer.changed();
-    this.cellLayer.changed();
-    this.terrainOutlineLayer.changed();
-    this.terrainSmoothLayer.changed();
-    this.graticule.changed();
-    this.gridLayer.changed();
+    this.layers.invalidateTheme();
   }
 
   setGridVisible(visible: boolean): void {
-    this.gridVisible = visible;
-    this.graticule.setVisible(visible && this.gridOptions.kind === "graticule");
-    this.gridLayer.setVisible(visible && this.gridOptions.kind !== "graticule");
+    this.layers.setGridVisible(visible);
   }
 
   setGridOptions(options: GridOptions): void {
-    if (options.kind !== "graticule" && options.kind !== "square" && options.kind !== "hex") throw new Error("Grid kind must be graticule, square, or hex.");
-    if (!/^#[\da-f]{6}$/i.test(options.color)) throw new Error("Grid color must be a #RRGGBB value.");
-    if (!Number.isFinite(options.width) || options.width < 0.25 || options.width > 4) throw new Error("Grid width must be between 0.25 and 4.");
-    if (!Number.isFinite(options.spacingDegrees) || options.spacingDegrees < 2 || options.spacingDegrees > 45) throw new Error("Grid spacing must be between 2 and 45 degrees.");
-    this.gridOptions = { ...options };
-    this.gridStroke.setColor(options.color);
-    this.gridStroke.setWidth(options.width);
-    this.gridSource.clear();
-    if (options.kind === "square") this.gridSource.addFeatures(boundedSquareGrid(options.spacingDegrees));
-    if (options.kind === "hex") this.gridSource.addFeatures(boundedHexGrid(options.spacingDegrees));
-    this.gridLayer.changed();
-    if (options.kind === "graticule") {
-      const previous = this.graticule;
-      this.graticule = createGraticule(options);
-      this.map.removeLayer(previous);
-      this.map.getLayers().insertAt(0, this.graticule);
-      previous.dispose();
-    }
-    this.setGridVisible(this.gridVisible);
+    this.layers.setGridOptions(this.map, options);
   }
 
   setCellGridVisible(visible: boolean): void {
-    this.cellGridLayer.setVisible(visible);
-    this.terrainCellGridLayer.setVisible(visible);
+    this.layers.cellGridLayer.setVisible(visible);
+    this.layers.terrainCellGridLayer.setVisible(visible);
   }
 
   setCellGridOptions(options: CellGridOptions): void {
-    if (!/^#[\da-f]{6}$/i.test(options.color)) throw new Error("Cell grid color must be a #RRGGBB value.");
-    if (!Number.isFinite(options.width) || options.width < 0.25 || options.width > 4) throw new Error("Cell grid width must be between 0.25 and 4.");
-    this.cellGridStroke.setColor(colorWithOpacity(options.color, OUTSIDE_GRID_OPACITY));
-    this.cellGridStroke.setWidth(options.width);
-    this.terrainCellGridDot.getFill()?.setColor(colorWithOpacity(options.color, TERRAIN_GRID_OPACITY));
-    this.terrainCellGridDot.setRadius(terrainGridDotRadius(options.width));
-    this.cellGridLayer.changed();
-    this.terrainCellGridLayer.changed();
+    this.layers.setCellGridOptions(options);
   }
 
   setAssets(assetUrls: Readonly<Record<string, string>>): void {
@@ -984,7 +904,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
   /** Renders a continuous edit preview without changing the canonical shapes. */
   private setMapShapePreview(shapes: readonly MapShape[] | null): void {
     const renderedShapes = shapes === null ? this.mapShapes : shapes;
-    this.regionSmoothHiddenIdentity = null;
     const { terrainCount, regionCount } = renderCanonicalMapShapes(renderedShapes, this.terrainSmoothSource, this.regionSmoothSource, shapes === null);
     this.terrainOutlineLayer.setVisible(false);
     this.terrainSmoothLayer.setVisible(terrainCount > 0);
@@ -1172,20 +1091,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.errorListeners.clear();
     this.selection.getFeatures().clear();
     this.terrainOutlineAnimator.dispose();
-    this.featureSource.clear();
-    this.cellSource.clear();
-    this.terrainOutlineSource.clear();
-    this.map.removeLayer(this.terrainOutlineLayer);
-    this.terrainSmoothSource.clear();
-    this.map.removeLayer(this.terrainSmoothLayer);
-    this.regionSmoothSource.clear();
-    this.map.removeLayer(this.regionSmoothLayer);
-    this.gridSource.clear();
-    this.map.removeLayer(this.gridLayer);
-    this.cellGridSource.clear();
-    this.map.removeLayer(this.cellGridLayer);
-    this.terrainCellGridSource.clear();
-    this.map.removeLayer(this.terrainCellGridLayer);
+    this.layers.dispose(this.map);
     this.cellFeatures.clear();
     this.cellAttributesById.clear();
     this.mapShapes = [];
