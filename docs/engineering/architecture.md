@@ -41,6 +41,8 @@ Map-shape validation derives each shape's grid-cell set once and reuses it for l
 
 Map-shape commands now own their request validation, canonical snapshot lookup, transactional replacement, and history checkpointing in `app/src/main/commands/mapShapeCommands.ts`; `RealmCommands` remains the public backend adapter and session/library owner. UUID normalization is shared by command domains through `app/src/main/domain/identifiers.ts`, so feature, asset, and map-shape IDs use one boundary rule.
 
+Asset commands use the same boundary: `app/src/main/commands/assetCommands.ts` owns asset validation, BLOB reads, reference checks, transactional import/delete, and asset-specific history capture. The public adapter only resolves the current session and returns the resulting read model.
+
 ## Safety invariants
 
 - Resolve the app-data directory in the Electron main process, address library entries by validated UUID, and validate user-selected import/export paths; never concatenate user input into SQL or filesystem paths.
