@@ -3,6 +3,7 @@ import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
 import { SlidersHorizontal } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { HandGrabbing } from "@phosphor-icons/react/dist/csr/HandGrabbing";
 import { Magnet } from "@phosphor-icons/react/dist/csr/Magnet";
+import packageJson from "../../../package.json";
 import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
 import { DEFAULT_ERASE_TARGET, ERASE_TARGETS, type EraseTarget } from "./eraseTargets";
 
@@ -128,7 +129,10 @@ export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, on
   const toolPalette: ReactNode = (
     <aside ref={paletteRef} className="tool-sidebar" aria-label="地図ツールパレット">
       <div className="tool-sidebar-header">
-        <p className="tool-sidebar-kicker">Realm</p>
+        <p className="tool-sidebar-kicker">
+          <span>Realm</span>
+          <span className="tool-sidebar-version" aria-label={`バージョン ${packageJson.version}`}>{packageJson.version}</span>
+        </p>
         <h2>地図ツール</h2>
       </div>
       <div className="tool-sidebar-body">

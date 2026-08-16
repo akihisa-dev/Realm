@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import packageJson from "../../package.json";
 import type { RealmFeature } from "../backend";
 import { cellPaintRadiusForRange, type RealmMapRenderer } from "../map/MapAdapter";
 import { MapCanvas } from "./MapCanvas";
@@ -43,6 +44,15 @@ const createPaletteRenderer = (): RealmMapRenderer => ({
 });
 
 describe("MapCanvas", () => {
+  it("shows the current app version beside the Realm name", () => {
+    const renderer = createPaletteRenderer();
+    render(<MapCanvas onZoomChange={vi.fn()} createRenderer={() => renderer} />);
+
+    const version = screen.getByLabelText(`バージョン ${packageJson.version}`);
+    expect(version).toHaveTextContent(packageJson.version);
+    expect(version.parentElement).toHaveClass("tool-sidebar-kicker");
+  });
+
   it("selects one of ten circular region colors through an accessible flyout", () => {
     const renderer = createPaletteRenderer();
     const onToolChange = vi.fn();
