@@ -94,21 +94,15 @@ export function MapCanvas({
   createRenderer = createRealmMapRenderer,
   onExporterReady,
 }: MapCanvasProps) {
-  const shellRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<RealmMapRenderer | null>(null);
 
   const {
     paintRange,
     eraseRadius,
-    radialPalette,
-    handleContextMenu,
-    handleShellPointerDown,
-    paintRangeFlyout,
-    eraseFlyout,
-    regionFlyout,
+    toolPalette,
     regionColor: paletteRegionColor,
-  } = usePaletteFlyouts({ shellRef, hostRef, mode, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange });
+  } = usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange });
   const paintRadius = cellPaintRadiusForRange(paintRange);
   const effectivePaintRadius = mode === "cell-select" ? paintRadius : 0;
   const effectiveRegionColor = regionColor ?? paletteRegionColor;
@@ -189,12 +183,9 @@ export function MapCanvas({
       ? "map-canvas-mode-cell-erase"
       : mode === "cell-region" ? "map-canvas-mode-cell-region" : mode === "grab" ? "map-canvas-mode-grab" : mode === "shape" ? "map-canvas-mode-shape" : mode === "region" ? "map-canvas-mode-region" : "map-canvas-mode-cell-select";
   return (
-    <div
-      ref={shellRef}
-      className="map-canvas-shell"
-      onPointerDown={handleShellPointerDown}
-    >
+    <div className="map-canvas-shell">
       <p id="map-help" className="sr-only">{mapHelp}</p>
+      {toolPalette}
       <div className="map-canvas-frame">
         <div
           ref={hostRef}
@@ -203,14 +194,9 @@ export function MapCanvas({
           tabIndex={0}
           aria-label="世界地図"
           aria-describedby="map-help"
-          onContextMenu={handleContextMenu}
         />
         <span className={`map-texture map-texture-${themeId}`} aria-hidden="true" />
       </div>
-      {radialPalette}
-      {paintRangeFlyout}
-      {eraseFlyout}
-      {regionFlyout}
     </div>
   );
 }
