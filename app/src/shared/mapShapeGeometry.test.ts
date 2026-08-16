@@ -108,6 +108,12 @@ describe("grid-snapped continuous map shapes", () => {
     expect(mapShapeCellIds(retracted[0]!)).toEqual(new Set(["5:5"]));
   });
 
+  it("does not rebuild unrelated canonical shapes during a cell edit", () => {
+    const original = terrain(["5:5", "6:5", "7:5", "7:6", "7:7", "6:7", "5:7"]);
+    const next = applyGridSelectionToMapShapes([original], { cellIds: ["20:20"], layer: "terrain", value: "terrain" });
+    expect(next.find((shape) => shape.id === original.id)?.geometry).toEqual(original.geometry);
+  });
+
   it("does not turn out-of-world edge cells into empty Polygon shapes", () => {
     expect(() => applyGridSelectionToMapShapes([], { cellIds: ["127:30"], layer: "terrain", value: "terrain" })).toThrow("セルを選択してください。");
   });

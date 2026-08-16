@@ -553,7 +553,7 @@ const geometryForCells = (cells: Set<string>): MapShapeGeometry => {
   return geometry;
 };
 
-const shapesFromGroups = (groups: readonly CellGroup[], existing: readonly MapShape[]): MapShape[] => {
+const shapesFromGroups = (groups: readonly CellGroup[], existing: readonly MapShape[], preserveUnchanged = false): MapShape[] => {
   const parts = shapeParts(existing);
   const usedIds = new Set<string>();
   const result: MapShape[] = [];
@@ -563,9 +563,12 @@ const shapesFromGroups = (groups: readonly CellGroup[], existing: readonly MapSh
         .map((part) => ({ ...part, overlap: [...component].filter((cell) => part.cells.has(cell)).length }))
         .filter((candidate) => candidate.overlap > 0)
         .sort((a, b) => b.overlap - a.overlap || a.shape.id.localeCompare(b.shape.id));
+      const unchanged = preserveUnchanged
+        ? candidates.find((candidate) => candidate.cells.size === component.size && [...component].every((cell) => candidate.cells.has(cell)))
+        : undefined;
       const id = candidates[0]?.shape.id ?? newId();
       usedIds.add(id);
-      result.push({ id, layer: group.layer, ...(group.regionId ? { regionId: group.regionId } : {}), value: group.value, geometryVersion: MAP_SHAPE_GEOMETRY_VERSION, snapGridVersion: MAP_SHAPE_GRID_VERSION, geometry: geometryForCells(component) });
+      result.push({ id, layer: group.layer, ...(group.regionId ? { regionId: group.regionId } : {}), value: group.value, geometryVersion: MAP_SHAPE_GEOMETRY_VERSION, snapGridVersion: MAP_SHAPE_GRID_VERSION, geometry: unchanged?.shape.geometry ?? geometryForCells(component) });
     }
   }
   return result.sort((a, b) => a.layer.localeCompare(b.layer) || (a.regionId ?? "").localeCompare(b.regionId ?? "") || a.id.localeCompare(b.id));
@@ -611,7 +614,7 @@ export const applyGridSelectionToMapShapes = (shapes: readonly MapShape[], input
       for (const cell of selected) region.cells.add(cell);
     }
   }
-  return shapesFromGroups(groups.filter((group) => group.cells.size > 0), shapes);
+  return shapesFromGroups(groups.filter((group) => group.cells.size > 0), shapes, true);
 };
 
 export const translateMapShapeGeometry = (geometry: MapShapeGeometry, offset: Position): MapShapeGeometry => ({

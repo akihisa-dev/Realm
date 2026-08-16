@@ -27,6 +27,10 @@ type RunOptions = {
   isCurrent?: () => boolean;
 };
 
+type CommitMapShapesOptions = {
+  normalize?: boolean;
+};
+
 export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellProps) {
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
   const [activeTool, setActiveTool] = useState<Tool>("terrain");
@@ -122,12 +126,12 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     if (mounted.current && viewedIdentity.current === identity && openSnapshot) setMapShapes(openSnapshot.mapShapes ?? []);
   };
 
-  const commitMapShapes = (next: readonly MapShape[], fallback: string): void => {
+  const commitMapShapes = (next: readonly MapShape[], fallback: string, options: CommitMapShapesOptions = {}): void => {
     if (locked) return;
     let shapes: MapShape[];
     try {
       const copied = next.map((shape) => ({ ...shape, geometry: { type: "Polygon" as const, coordinates: shape.geometry.coordinates.map((ring) => ring.map(([x, y]) => [x, y] as [number, number])) } }));
-      shapes = normalizeMapShapes(copied);
+      shapes = options.normalize === false ? copied : normalizeMapShapes(copied);
     } catch (cause) {
       setError(errorMessage(cause, fallback));
       return;
@@ -208,17 +212,20 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       : undefined;
     const regionId = tool === "region" ? targetRegion?.persistentId ?? crypto.randomUUID() : undefined;
     const clearRegion = tool === "erase" && attribute === "terrain";
-    const fallback = attribute === "region" ? "セル選択から領域を更新できませんでした。" : "セル選択から地形を更新できませんでした。";
+    const fallback = "変更を保存できませんでした。変更は保存されていません。";
     let next: MapShape[];
     try {
       next = applyGridSelectionToMapShapes(mapShapes, { cellIds: nextIds, layer: attribute, value, ...(regionId ? { regionId } : {}), ...(clearRegion ? { clearRegion: true } : {}) });
     } catch (cause) {
       setSelectedCellIds([]);
+      if (cause instanceof Error && cause.message === "セルを選択してください。") return;
       setError(errorMessage(cause, fallback));
       return;
     }
     setSelectedCellIds([]);
-    commitMapShapes(next, fallback);
+    // Cell selection already rebuilds complete, grid-snapped Polygon rows.
+    // Do not reinterpret unrelated existing shapes a second time here.
+    commitMapShapes(next, fallback, { normalize: false });
   };
   const commitShapeEdit = (edit: MapShapeEdit): void => {
     commitMapShapes(edit.shapes, activeToolRef.current === "shape" ? "領域を地形に合わせられませんでした。" : "図形を更新できませんでした。");
