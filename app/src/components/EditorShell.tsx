@@ -7,6 +7,7 @@ import { mergeRegionShapes, splitRegionComponentShapes } from "./editor/editorMa
 import { deriveRegionObjects, type RegionComponent, type RegionObject } from "./editor/regionObjects";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { mapErrorMessage } from "../locales/ja";
+import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN } from "../map/MapAdapter";
 import { applyGridSelectionToMapShapes, deriveMapGridCells } from "../shared/mapShapeGeometry";
 
 type Tool = "terrain" | "region" | "erase" | "grab" | "shape";
@@ -26,6 +27,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [regionPaintTargetId, setRegionPaintTargetId] = useState<string | null>(null);
   const [objectManagerOpen, setObjectManagerOpen] = useState(true);
+  const [strokeRange, setStrokeRange] = useState(CELL_PAINT_RANGE_MIN);
   const [zoom, setZoom] = useState(1);
   const activeToolRef = useRef<Tool>("terrain");
   const eraseTargetRef = useRef<EraseTarget>(DEFAULT_ERASE_TARGET);
@@ -227,6 +229,21 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   return (
     <main className="editor-shell" aria-label="Realm地形編集画面">
       <header className="editor-history" data-electron-drag-region="deep">
+        <div className="editor-thickness-control" role="group" aria-label="描画と削除の太さ">
+          <label htmlFor="editor-stroke-range">太さ</label>
+          <input
+            id="editor-stroke-range"
+            type="range"
+            min={CELL_PAINT_RANGE_MIN}
+            max={CELL_PAINT_RANGE_MAX}
+            step={1}
+            value={strokeRange}
+            aria-label="描画と削除の太さ"
+            aria-valuetext={`太さ${strokeRange}セル`}
+            onChange={(event) => setStrokeRange(Number(event.target.value))}
+          />
+          <output htmlFor="editor-stroke-range">{strokeRange}セル</output>
+        </div>
         <nav aria-label="編集履歴">
           <button type="button" onClick={() => { void run(() => backend.undoProject(), "操作を戻せませんでした。"); }} disabled={locked || !viewedSnapshot.canUndo}>戻す</button>
           <button type="button" onClick={() => { void run(() => backend.redoProject(), "操作を進められませんでした。"); }} disabled={locked || !viewedSnapshot.canRedo}>進む</button>
@@ -258,6 +275,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             onRegionColorChange={changeRegionColor}
             onError={(code) => setError(mapErrorMessage(code, activeToolRef.current === "region" || (activeToolRef.current === "erase" && eraseTargetRef.current === "region") ? "region" : "terrain"))}
             onZoomChange={setZoom}
+            strokeRange={strokeRange}
             zoom={zoom}
           />
           {error ? <p className="save-error" role="alert">{error}</p> : null}

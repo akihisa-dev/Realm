@@ -276,51 +276,32 @@ describe("MapCanvas", () => {
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "消しゴム" }).querySelector("svg")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "地形を描く（太さ調整）" }).querySelector("svg")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "地形を描く" }).querySelector("svg")).toBeInTheDocument();
     expect(screen.getByRole("toolbar", { name: "地図ツール" })).toBeInTheDocument();
     const onMapPointerDown = vi.fn();
     map.addEventListener("pointerdown", onMapPointerDown);
-    const rangeButton = screen.getByRole("button", { name: "地形を描く（太さ調整）" });
-    fireEvent.pointerEnter(rangeButton);
+    const terrainButton = screen.getByRole("button", { name: "地形を描く" });
+    fireEvent.pointerEnter(terrainButton);
     expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
-    fireEvent.click(rangeButton);
-    expect(document.querySelector(".tool-flyout")).toBeInTheDocument();
-    let rangeSlider = screen.getByRole("slider", { name: "描画範囲" });
-    expect(rangeSlider).toHaveAttribute("aria-valuetext", "描画範囲1セル");
-    fireEvent.pointerLeave(rangeButton);
-    expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
-    const rangeFlyout = screen.getByRole("group", { name: "描画範囲の調整" });
-    fireEvent.pointerEnter(rangeFlyout);
-    fireEvent.pointerDown(rangeFlyout);
-    fireEvent.change(rangeSlider, { target: { value: "3" } });
-    expect(rangeSlider).toHaveAttribute("aria-valuetext", "描画範囲3セル");
-    expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(0);
-    fireEvent.click(rangeButton);
+    fireEvent.click(terrainButton);
     expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
-    fireEvent.click(rangeButton);
-    expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
-    fireEvent.keyDown(rangeButton, { key: "Escape" });
-    expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
-    fireEvent.focus(rangeButton);
-    fireEvent.keyDown(rangeButton, { key: "Enter" });
-    fireEvent.click(rangeButton);
-    expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
-    rangeSlider = screen.getByRole("slider", { name: "描画範囲" });
-    rerender(<MapCanvas mode="cell-select" zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
-    expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(cellPaintRadiusForRange(3));
-    rerender(<MapCanvas mode="cell-erase" zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
-    expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(0);
-    const rangePopover = screen.getByRole("group", { name: "描画範囲の調整" });
-    fireEvent.pointerEnter(rangePopover);
-    expect(screen.getByRole("group", { name: "描画範囲の調整" })).toBeInTheDocument();
-    fireEvent.pointerDown(rangeSlider);
+    expect(screen.queryByRole("slider", { name: "描画と削除の太さ" })).not.toBeInTheDocument();
+    const eraserButton = screen.getByRole("button", { name: "消しゴム" });
+    fireEvent.click(eraserButton);
+    const eraseFlyout = screen.getByRole("group", { name: "消しゴムの対象" });
+    fireEvent.pointerEnter(eraseFlyout);
+    fireEvent.pointerDown(eraseFlyout);
     expect(onMapPointerDown).not.toHaveBeenCalled();
-    expect(screen.getByRole("complementary", { name: "地図ツールパレット" })).toBeInTheDocument();
     fireEvent.pointerDown(map, { button: 0 });
     expect(onMapPointerDown).not.toHaveBeenCalled();
-    fireEvent.click(rangeButton);
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "消しゴムの対象" })).not.toBeInTheDocument();
+    rerender(<MapCanvas mode="cell-select" strokeRange={3} zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
+    expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(cellPaintRadiusForRange(3));
+    rerender(<MapCanvas mode="cell-erase" strokeRange={3} zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
+    expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(0);
+    expect(renderer.setCellEraseRadius).toHaveBeenLastCalledWith(cellPaintRadiusForRange(3));
+    expect(screen.getByRole("complementary", { name: "地図ツールパレット" })).toBeInTheDocument();
     (drawListener as ((geometry: never) => void) | null)?.({} as never);
     (selectFeaturesListener as ((ids: readonly string[]) => void) | null)?.([]);
     (cellSelectListener as ((ids: readonly string[]) => void) | null)?.(["2:3"]);
@@ -379,7 +360,7 @@ describe("MapCanvas", () => {
     vi.useRealTimers();
   });
 
-  it("keeps eraser selection in the left sidebar and exposes thickness control", () => {
+  it("keeps eraser target selection in the left sidebar", () => {
     const renderer: RealmMapRenderer = {
       getZoom: vi.fn(() => 1), setZoom: vi.fn(), resetView: vi.fn(), setFeatures: vi.fn(), setTheme: vi.fn(), setThemeOverrides: vi.fn(),
       setGridVisible: vi.fn(), setGridOptions: vi.fn(), setCellGridVisible: vi.fn(), setCellGridOptions: vi.fn(), setAssets: vi.fn(), setLayerVisibility: vi.fn(),
@@ -391,12 +372,11 @@ describe("MapCanvas", () => {
     render(<MapCanvas onToolChange={onToolChange} onEraseTargetChange={onEraseTargetChange} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
     fireEvent.contextMenu(screen.getByRole("region", { name: "世界地図" }), { clientX: 100, clientY: 100 });
     const eraserButton = screen.getByRole("button", { name: "消しゴム" });
-    const paintButton = screen.getByRole("button", { name: "地形を描く（太さ調整）" });
     expect(eraserButton).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(eraserButton);
     expect(onToolChange).toHaveBeenCalledWith("erase");
     expect(eraserButton).toHaveAttribute("aria-expanded", "true");
-    const eraseFlyout = screen.getByRole("group", { name: "消しゴムの調整" });
+    const eraseFlyout = screen.getByRole("group", { name: "消しゴムの対象" });
     expect(eraseFlyout).toHaveClass("tool-flyout-erase");
     const eraseTargetGroup = screen.getByRole("group", { name: "削除対象" });
     expect(eraseTargetGroup).toBeInTheDocument();
@@ -418,11 +398,6 @@ describe("MapCanvas", () => {
     expect(terrainEraseButton).toHaveAttribute("aria-pressed", "false");
     expect(eraserTargetPill).toHaveStyle({ left: "84px", width: "80px" });
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
-    fireEvent.click(paintButton);
-    fireEvent.click(eraserButton);
-    expect(screen.getByRole("group", { name: "消しゴムの調整" })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("slider", { name: "消しゴムの太さ" }), { target: { value: "4" } });
-    expect(renderer.setCellEraseRadius).toHaveBeenLastCalledWith(cellPaintRadiusForRange(4));
   });
 
   it("exposes shaping as an accessible palette tool", () => {

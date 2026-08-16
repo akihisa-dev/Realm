@@ -1,15 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject, type ReactNode } from "react";
 import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
 import { Hexagon } from "@phosphor-icons/react/dist/csr/Hexagon";
-import { SlidersHorizontal } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { HandGrabbing } from "@phosphor-icons/react/dist/csr/HandGrabbing";
 import { Magnet } from "@phosphor-icons/react/dist/csr/Magnet";
+import { Mountains } from "@phosphor-icons/react/dist/csr/Mountains";
 import { SidebarSimple } from "@phosphor-icons/react/dist/csr/SidebarSimple";
 import packageJson from "../../../package.json";
-import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
+import { CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
 import { DEFAULT_ERASE_TARGET, ERASE_TARGETS, type EraseTarget } from "./eraseTargets";
 
-const PAINT_RANGE_FLYOUT_ID = "map-paint-range-flyout";
 const REGION_FLYOUT_ID = "map-region-flyout";
 const ERASE_FLYOUT_ID = "map-eraser-flyout";
 
@@ -29,6 +28,7 @@ export const REGION_COLORS = [
 export type PaletteFlyoutOptions = {
   hostRef: RefObject<HTMLDivElement | null>;
   mode: "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "region";
+  strokeRange?: number | undefined;
   regionColor?: string | undefined;
   onToolChange: ((tool: "terrain" | "region" | "erase" | "grab" | "shape") => void) | undefined;
   onEraseTargetChange: ((target: EraseTarget) => void) | undefined;
@@ -36,7 +36,7 @@ export type PaletteFlyoutOptions = {
 };
 
 export type PaletteFlyoutState = {
-  paintRange: number;
+  strokeRadius: number;
   eraseRadius: number;
   regionColor: string;
   sidebarOpen: boolean;
@@ -44,13 +44,10 @@ export type PaletteFlyoutState = {
 };
 
 /** Owns the collapsible left tool sidebar, icon rail, and transient controls. */
-export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
+export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANGE_MIN, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
   const paletteRef = useRef<HTMLElement>(null);
   const eraserTargetButtonsRef = useRef<HTMLDivElement>(null);
   const eraserTargetPillRef = useRef<HTMLSpanElement>(null);
-  const [paintRange, setPaintRange] = useState(CELL_PAINT_RANGE_MIN);
-  const [paintRangeFlyoutOpen, setPaintRangeFlyoutOpen] = useState(false);
-  const [eraseRange, setEraseRange] = useState(CELL_PAINT_RANGE_MIN);
   const [eraseTarget, setEraseTarget] = useState<EraseTarget>(DEFAULT_ERASE_TARGET);
   const [eraseFlyoutOpen, setEraseFlyoutOpen] = useState(false);
   const [regionFlyoutOpen, setRegionFlyoutOpen] = useState(false);
@@ -59,7 +56,6 @@ export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, on
   const effectiveRegionColor = regionColor ?? localRegionColor;
 
   const closeFlyouts = (): void => {
-    setPaintRangeFlyoutOpen(false);
     setEraseFlyoutOpen(false);
     setRegionFlyoutOpen(false);
   };
@@ -71,7 +67,7 @@ export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, on
     const handlePointerDown = (event: PointerEvent): void => {
       if (!(event.target instanceof window.Node)) return;
       if (paletteRef.current?.contains(event.target)) return;
-      if (!paintRangeFlyoutOpen && !eraseFlyoutOpen && !regionFlyoutOpen) return;
+      if (!eraseFlyoutOpen && !regionFlyoutOpen) return;
       closeFlyouts();
       if (hostRef.current?.contains(event.target)) {
         event.preventDefault();
@@ -84,7 +80,7 @@ export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, on
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("pointerdown", handlePointerDown, true);
     };
-  }, [eraseFlyoutOpen, hostRef, paintRangeFlyoutOpen, regionFlyoutOpen]);
+  }, [eraseFlyoutOpen, hostRef, regionFlyoutOpen]);
 
   useLayoutEffect(() => {
     const buttons = eraserTargetButtonsRef.current;
@@ -95,18 +91,15 @@ export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, on
     pill.style.width = `${activeButton.offsetWidth}px`;
   }, [eraseFlyoutOpen, eraseTarget]);
 
-  const openPaintRangeFlyout = (event: ReactMouseEvent<HTMLButtonElement>): void => {
+  const selectPaintTool = (event: ReactMouseEvent<HTMLButtonElement>): void => {
     onToolChange?.("terrain");
-    setPaintRangeFlyoutOpen((current) => !current);
-    setEraseFlyoutOpen(false);
-    setRegionFlyoutOpen(false);
+    closeFlyouts();
     event.stopPropagation();
   };
 
   const openRegionFlyout = (event: ReactMouseEvent<HTMLButtonElement>): void => {
     onToolChange?.("region");
     setRegionFlyoutOpen((current) => !current);
-    setPaintRangeFlyoutOpen(false);
     setEraseFlyoutOpen(false);
     event.stopPropagation();
   };
@@ -114,7 +107,6 @@ export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, on
   const openEraseFlyout = (event: ReactMouseEvent<HTMLButtonElement>): void => {
     onToolChange?.("erase");
     setEraseFlyoutOpen((current) => !current);
-    setPaintRangeFlyoutOpen(false);
     setRegionFlyoutOpen(false);
     event.stopPropagation();
   };
@@ -162,37 +154,14 @@ export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, on
             <button
               className={`tool-sidebar-button${mode === "cell-select" ? " is-active" : ""}`}
               type="button"
-              aria-label="地形を描く（太さ調整）"
+              aria-label="地形を描く"
               aria-pressed={mode === "cell-select"}
-              aria-haspopup="true"
-              aria-expanded={paintRangeFlyoutOpen}
-              aria-controls={PAINT_RANGE_FLYOUT_ID}
-              title="地形を描く（太さ調整）"
-              onClick={openPaintRangeFlyout}
+              title="地形を描く"
+              onClick={selectPaintTool}
             >
-              <SlidersHorizontal aria-hidden="true" size={17} weight="bold" />
+              <Mountains aria-hidden="true" size={17} weight="bold" />
               <span>地形を描く</span>
-              <span className="tool-sidebar-button-detail">太さ</span>
             </button>
-            {paintRangeFlyoutOpen ? (
-            <div id={PAINT_RANGE_FLYOUT_ID} className="tool-flyout tool-flyout-range" role="group" aria-label="描画範囲の調整">
-              <div className="tool-flyout-label-row">
-                <label htmlFor="map-paint-range">描画範囲</label>
-                <output htmlFor="map-paint-range">{paintRange}セル</output>
-              </div>
-              <input
-                id="map-paint-range"
-                type="range"
-                min={CELL_PAINT_RANGE_MIN}
-                max={CELL_PAINT_RANGE_MAX}
-                step={1}
-                value={paintRange}
-                aria-label="描画範囲"
-                aria-valuetext={`描画範囲${paintRange}セル`}
-                onChange={(event) => setPaintRange(Number(event.target.value))}
-              />
-            </div>
-            ) : null}
           </div>
 
           <div className="tool-sidebar-item">
@@ -247,10 +216,10 @@ export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, on
             >
               <Eraser aria-hidden="true" size={17} weight="bold" />
               <span>消しゴム</span>
-              <span className="tool-sidebar-button-detail">調整</span>
+              <span className="tool-sidebar-button-detail">対象</span>
             </button>
             {eraseFlyoutOpen ? (
-            <div id={ERASE_FLYOUT_ID} className="tool-flyout tool-flyout-erase" role="group" aria-label="消しゴムの調整">
+            <div id={ERASE_FLYOUT_ID} className="tool-flyout tool-flyout-erase" role="group" aria-label="消しゴムの対象">
               <div className="eraser-targets" role="group" aria-label="削除対象">
                 <span className="tool-flyout-label">削除対象</span>
                 <div ref={eraserTargetButtonsRef} className="eraser-target-buttons">
@@ -268,21 +237,6 @@ export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, on
                   ))}
                 </div>
               </div>
-              <div className="tool-flyout-label-row">
-                <label htmlFor="map-erase-range">消しゴムの太さ</label>
-                <output htmlFor="map-erase-range">{eraseRange}セル</output>
-              </div>
-              <input
-                id="map-erase-range"
-                type="range"
-                min={CELL_PAINT_RANGE_MIN}
-                max={CELL_PAINT_RANGE_MAX}
-                step={1}
-                value={eraseRange}
-                aria-label="消しゴムの太さ"
-                aria-valuetext={`消しゴムの太さ${eraseRange}セル`}
-                onChange={(event) => setEraseRange(Number(event.target.value))}
-              />
             </div>
             ) : null}
           </div>
@@ -306,8 +260,8 @@ export function usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, on
   );
 
   return {
-    paintRange,
-    eraseRadius: cellPaintRadiusForRange(eraseRange),
+    strokeRadius: cellPaintRadiusForRange(strokeRange),
+    eraseRadius: cellPaintRadiusForRange(strokeRange),
     regionColor: effectiveRegionColor,
     sidebarOpen,
     toolPalette,

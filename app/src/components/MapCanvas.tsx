@@ -1,6 +1,5 @@
 import { useRef } from "react";
 import {
-  cellPaintRadiusForRange,
   createRealmMapRenderer,
   type CellGridOptions,
   type DrawingOptions,
@@ -25,6 +24,7 @@ type MapCanvasProps = {
   zoom?: number;
   features?: RealmFeature[];
   mode?: TerrainMapMode;
+  strokeRange?: number;
   /** Prevents the mode cursor from suggesting an available editing action. */
   disabled?: boolean;
   selectedFeatureId?: string | null;
@@ -63,6 +63,7 @@ export function MapCanvas({
   zoom,
   features = [],
   mode = "pan",
+  strokeRange,
   disabled = false,
   selectedFeatureId = null,
   selectedFeatureIds,
@@ -98,14 +99,13 @@ export function MapCanvas({
   const adapterRef = useRef<RealmMapRenderer | null>(null);
 
   const {
-    paintRange,
+    strokeRadius,
     eraseRadius,
     toolPalette,
     regionColor: paletteRegionColor,
     sidebarOpen,
-  } = usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange });
-  const paintRadius = cellPaintRadiusForRange(paintRange);
-  const effectivePaintRadius = mode === "cell-select" ? paintRadius : 0;
+  } = usePaletteFlyouts({ hostRef, mode, strokeRange, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange });
+  const effectivePaintRadius = mode === "cell-select" ? strokeRadius : 0;
   const effectiveRegionColor = regionColor ?? paletteRegionColor;
   const mapHelp = mode === "pan"
     ? "ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"

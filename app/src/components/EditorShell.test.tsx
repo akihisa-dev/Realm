@@ -9,6 +9,7 @@ vi.mock("./MapCanvas", () => ({
     mapShapes?: readonly MapShape[];
     selectedCellIds?: readonly string[];
     mode?: string;
+    strokeRange?: number;
     onCellSelect?: (ids: readonly string[]) => void;
     onMapShapeEdit?: (edit: { shapes: MapShape[] }) => void;
     onToolChange?: (tool: "terrain" | "region" | "erase" | "grab" | "shape") => void;
@@ -19,6 +20,7 @@ vi.mock("./MapCanvas", () => ({
       <output aria-label="保存中の図形数">{props.mapShapes?.length ?? 0}</output>
       <output aria-label="表示中の地形セル">{props.mapShapes?.flatMap((shape) => [...mapShapeCellIds(shape)]).sort().join(",")}</output>
       <output aria-label="選択中の地形セル">{props.selectedCellIds?.join(",")}</output>
+      <output aria-label="共有太さ">{props.strokeRange ?? 0}</output>
       <button type="button" onClick={() => props.onCellSelect?.(["1:1", "1:2"])}>テストセル描画</button>
       <button type="button" onClick={() => props.onCellSelect?.(["1:1"])}>テスト遅延セル操作</button>
       <button type="button" onClick={() => props.onToolChange?.("erase")}>テスト消しゴム</button>
@@ -47,6 +49,18 @@ it("keeps the editor shell and object manager while rendering map_shapes", async
   expect(screen.getByRole("navigation", { name: "編集履歴" })).toBeInTheDocument();
   expect(screen.getByRole("complementary", { name: "オブジェクトマネージャー" })).toBeInTheDocument();
   expect(screen.getByRole("region", { name: "世界地図" })).toBeInTheDocument();
+});
+
+it("keeps one header thickness control shared by drawing and erasing", async () => {
+  const backend = new MemoryRealmBackend();
+  const snapshot = await backend.createProject({ path: "browser://thickness.realmmap", name: "Thickness" });
+  renderEditor(backend, snapshot);
+  const slider = screen.getByRole("slider", { name: "描画と削除の太さ" });
+  expect(slider).toHaveValue("1");
+  expect(screen.getByRole("status", { name: "共有太さ" })).toHaveTextContent("1");
+  fireEvent.change(slider, { target: { value: "4" } });
+  expect(slider).toHaveValue("4");
+  expect(screen.getByRole("status", { name: "共有太さ" })).toHaveTextContent("4");
 });
 
 it("turns a temporary grid selection into one Polygon update", async () => {
