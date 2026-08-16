@@ -1,7 +1,7 @@
 export type StorageBaseline = {
   reportVersion: 1;
-  schemaVersion: 11;
-  fixture: { features: number; shapes: number };
+  schemaVersion: 12;
+  fixture: { objects: number; shapes: number };
   samples: { warmup: number; repetitions: number };
   limitsMs: Record<string, number>;
   rowOperations: Record<string, number>;

@@ -74,12 +74,12 @@ export function deleteAssetsBatch(getSession: () => OpenProjectSession, input: D
   const session = getSession();
   const rows = ids.map((id) => session.database.prepare("SELECT id FROM assets WHERE id=?").get(id));
   if (rows.some((row) => !row)) throw new RealmError("not_found", "The asset was not found.");
-  const features = session.database.prepare("SELECT properties_json AS propertiesJson FROM features").all() as Record<string, unknown>[];
+  const objects = session.database.prepare("SELECT asset_id AS assetId,properties_json AS propertiesJson FROM objects").all() as Record<string, unknown>[];
   try {
-    if (ids.some((id) => features.some((row) => containsAsset(JSON.parse(String(row.propertiesJson)), id)))) throw new RealmError("asset_in_use", "The asset is still referenced by a feature.");
+    if (ids.some((id) => objects.some((row) => String(row.assetId ?? "") === id || containsAsset(JSON.parse(String(row.propertiesJson)), id)))) throw new RealmError("asset_in_use", "The asset is still referenced by an object.");
   } catch (error) {
     if (error instanceof RealmError) throw error;
-    throw new RealmError("corrupt_project", "A feature contains invalid properties.");
+    throw new RealmError("corrupt_project", "An object contains invalid properties.");
   }
   const before = captureState(session.database, { assetBytesFor: ids });
   transaction(session.database, () => {

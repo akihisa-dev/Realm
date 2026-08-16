@@ -1,16 +1,16 @@
 import type { MapShape } from "../../backend";
 import { cellIdsToPolygonGeometries, mapShapeCellIds } from "../../shared/mapShapeGeometry";
-import type { RegionComponent, RegionObject } from "./regionObjects";
+import type { RegionComponent, RegionEntry } from "./regionObjects";
 
 export type MergeRegionShapesResult =
-  | { kind: "merged"; shapes: MapShape[]; target: RegionObject }
+  | { kind: "merged"; shapes: MapShape[]; target: RegionEntry }
   | { kind: "legacy" }
   | null;
 
 /** Reassigns selected logical region parts to the first selected region. */
 export const mergeRegionShapes = (
   mapShapes: readonly MapShape[],
-  regions: readonly RegionObject[],
+  regions: readonly RegionEntry[],
 ): MergeRegionShapesResult => {
   if (regions.length < 2) return null;
   const target = regions[0];
@@ -26,7 +26,7 @@ export const mergeRegionShapes = (
 /** Splits one disconnected component into a new logical region. */
 export const splitRegionComponentShapes = (
   mapShapes: readonly MapShape[],
-  region: RegionObject,
+  region: RegionEntry,
   component: RegionComponent,
   newRegionId: string,
   createShapeId: () => string = () => crypto.randomUUID(),

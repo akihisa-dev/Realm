@@ -33,8 +33,44 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .editor-history button:hover:not(:disabled) { background: #f1f4f5; }
 .editor-preview-toggle[aria-pressed="true"] { background: #eef8f8; color: #006c77; }
 .editor-body { display: grid; grid-template-columns: minmax(0, 1fr) 296px; grid-template-rows: minmax(0, 1fr); min-height: 0; }
-.editor-body.object-manager-is-closed { grid-template-columns: minmax(0, 1fr); }
+.editor-body.layer-manager-is-closed { grid-template-columns: minmax(0, 1fr); }
 .map-region { position: relative; grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; background: #fff; }
+.layer-manager { display: flex; grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border-left: 1px solid #d6dadd; background: #fbfcfc; color: #292f35; }
+.layer-manager-header { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 14px; border-bottom: 1px solid #e3e7e9; background: #fff; }
+.layer-manager-kicker { margin: 0 0 3px; color: #6a7780; font-size: 11px; letter-spacing: .08em; }
+.layer-manager-header h2 { margin: 0; font-size: 15px; font-weight: 650; }
+.layer-manager-header button { display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #68757c; }
+.layer-manager-header button:hover { background: #eef8f8; color: #006c77; }
+.layer-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: 0 0 auto; gap: 2px; padding: 8px 10px 0; border-bottom: 1px solid #d6dadd; background: #fff; }
+.layer-tabs button { min-width: 0; padding: 9px 5px 10px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #68757c; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.layer-tabs button:hover:not(:disabled) { color: #006c77; background: #f2fbfb; }
+.layer-tabs button.is-active { border-bottom-color: #078c98; color: #006c77; }
+.layer-manager-content { min-height: 0; flex: 1 1 auto; overflow: auto; }
+.layer-panel { min-width: 0; padding: 16px 18px; }
+.layer-panel-section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; }
+.layer-panel-section-heading h3, .layer-panel-section-heading h4 { margin: 0; font-size: 13px; }
+.layer-panel-section-heading span { color: #68757c; font-size: 11px; }
+.layer-panel-help, .layer-panel-empty { margin: 0; color: #68757c; font-size: 11px; line-height: 1.6; }
+.layer-panel-empty { padding-top: 12px; }
+.layer-manager-content > .object-manager { grid-column: auto; grid-row: auto; min-height: 100%; overflow: visible; border-left: 0; background: transparent; }
+.object-kind-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 12px 0; }
+.object-kind-options button { min-height: 32px; padding: 6px 8px; border: 1px solid #cbd4d8; border-radius: 4px; background: #fff; color: #53616a; font-size: 12px; }
+.object-kind-options button:hover:not(:disabled) { border-color: #078c98; background: #f0fbfb; color: #006c77; }
+.object-kind-options button.is-active { border-color: #078c98; background: #d9f0f1; color: #006c77; font-weight: 650; }
+.object-label-field { display: grid; gap: 5px; margin-bottom: 10px; color: #68757c; font-size: 11px; }
+.object-label-field input { min-width: 0; padding: 7px 8px; border: 1px solid #cbd4d8; border-radius: 4px; background: #fff; color: #292f35; font-size: 12px; }
+.layer-primary-action { width: 100%; min-height: 34px; padding: 7px 10px; border: 1px solid #078c98; border-radius: 4px; background: #eef8f8; color: #006c77; font-size: 12px; font-weight: 650; }
+.layer-primary-action:hover:not(:disabled) { background: #d9f0f1; }
+.object-layer-panel > .layer-panel-section-heading:nth-of-type(2) { margin-top: 20px; padding-top: 14px; border-top: 1px solid #e3e7e9; }
+.layer-object-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.layer-object-list li { display: grid; grid-template-columns: minmax(0, 1fr) 30px; align-items: center; gap: 6px; min-width: 0; border: 1px solid #dce2e5; border-radius: 5px; background: #fff; }
+.layer-object-list li.is-selected { border-color: #078c98; box-shadow: 0 0 0 1px rgba(7, 140, 152, .12); }
+.layer-object-list li > button:first-child { display: grid; min-width: 0; gap: 2px; padding: 8px 9px; border: 0; background: transparent; text-align: left; }
+.layer-object-list li > button:first-child:hover { color: #006c77; }
+.layer-object-list strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; }
+.layer-object-list small { color: #68757c; font-size: 10px; }
+.layer-object-list li > button:last-child { display: grid; width: 28px; height: 28px; place-items: center; margin-right: 3px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #68757c; }
+.layer-object-list li > button:last-child:hover:not(:disabled) { background: #fff1f1; color: #991b1f; }
 .object-manager { display: flex; grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; flex-direction: column; overflow: auto; border-left: 1px solid #d6dadd; background: #fbfcfc; color: #292f35; }
 .object-manager-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 14px; border-bottom: 1px solid #e3e7e9; background: #fff; }
 .object-manager-header-actions { display: flex; align-items: center; gap: 8px; }
@@ -172,9 +208,11 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 }
 @media (max-width: 820px) {
   .editor-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(170px, 38vh); overflow: auto; }
-  .editor-body.object-manager-is-closed { grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+  .editor-body.layer-manager-is-closed { grid-template-rows: minmax(0, 1fr); overflow: hidden; }
   .map-region { grid-column: 1; grid-row: 1; min-height: 320px; }
+  .layer-manager { grid-column: 1; grid-row: 2; min-height: 170px; border-top: 1px solid #d6dadd; border-left: 0; }
   .object-manager { grid-column: 1; grid-row: 2; border-top: 1px solid #d6dadd; border-left: 0; }
+  .layer-manager-content > .object-manager { grid-column: auto; grid-row: auto; min-height: 100%; border-top: 0; }
   .object-manager-help { margin-bottom: 14px; }
 }
 @media (max-width: 620px) {

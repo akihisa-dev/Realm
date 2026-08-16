@@ -8,10 +8,15 @@ const MIN_POLYGON_AREA = 1e-8;
 const EPSILON = 1e-12;
 
 const geometryKind: Record<FeatureType, GeoJsonGeometry["type"]> = {
-  city: "Point", town: "Point", mountain: "Point", tree: "Point", symbol: "Point", label: "Point", scale: "Point",
+  city: "Point", text: "Point", town: "Point", mountain: "Point", tree: "Point", symbol: "Point", label: "Point", scale: "Point",
   river: "LineString", coastline: "LineString", boundary: "LineString", road: "LineString",
   terrain: "Polygon", forest: "Polygon", country: "Polygon", region: "Polygon", lake: "Polygon", overlay: "Polygon", frame: "Polygon",
 };
+
+/** Geometry validation for the layer-native object registry. */
+export function validateObjectGeometry(kind: "city" | "text" | "mountain" | "forest", geometry: unknown, strict = true): string {
+  return validateGeometry(kind === "text" ? "label" : kind, geometry, strict);
+}
 
 export function validateName(name: string): string {
   if (typeof name !== "string") throw invalid("A project or feature name is required.");

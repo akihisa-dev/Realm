@@ -6,13 +6,14 @@ import { basename, join } from "node:path";
 import { RealmCommands } from "./realmCommands";
 import { RealmError } from "../domain/errors";
 import { cellIdsToPolygonGeometries, mapShapeCellIds } from "../../shared/mapShapeGeometry";
-import type { MapShape } from "../../shared/realmContract";
+import type { MapObject, MapShape } from "../../shared/realmContract";
 
 const directory = (): string => mkdtempSync(join(tmpdir(), "realm-commands-"));
 const png = [137, 80, 78, 71, 13, 10, 26, 10, 0];
 const point: { type: "Point"; coordinates: [number, number] } = { type: "Point", coordinates: [1, 2] };
 const terrain = (cells: string[], id = "11111111-1111-4111-8111-111111111111"): MapShape => ({ id, layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: cellIdsToPolygonGeometries(cells)[0]! });
 const region = (cells: string[], regionId = "22222222-2222-4222-8222-222222222222", id = "33333333-3333-4333-8333-333333333333"): MapShape => ({ id, layer: "region", regionId, value: "#2468AC", geometryVersion: 1, snapGridVersion: 2, geometry: cellIdsToPolygonGeometries(cells)[0]! });
+const object = (kind: MapObject["kind"], id: string, geometry: MapObject["geometry"], label: string = kind): MapObject => ({ id, kind, label, geometry, properties: {}, zIndex: 0, locked: false });
 
 describe("RealmCommands user-visible operations", () => {
   it("creates, lists, saves, updates settings, and closes projects", async () => {
@@ -42,6 +43,10 @@ describe("RealmCommands user-visible operations", () => {
     const first = terrain(["2:2"]); const second = region(["5:5"]);
     let snapshot = await commands.createMapShapes({ shapes: [first, second] });
     expect(snapshot.mapShapes.map(({ id }) => id)).toEqual(expect.arrayContaining([first.id, second.id]));
+    snapshot = await commands.undoProject();
+    expect(snapshot.mapShapes).toEqual([]);
+    snapshot = await commands.redoProject();
+    expect(snapshot.mapShapes.map(({ id }) => id)).toEqual(expect.arrayContaining([first.id, second.id]));
     const expanded = { ...first, geometry: cellIdsToPolygonGeometries(["2:2", "3:2"])[0]! };
     snapshot = await commands.updateMapShapes({ shapes: [expanded, second] });
     const expandedSnapshot = snapshot.mapShapes.find(({ id }) => id === first.id);
@@ -63,6 +68,46 @@ describe("RealmCommands user-visible operations", () => {
     const overlapping = terrain(["2:2"], "44444444-4444-4444-8444-444444444444");
     await expect(commands.updateMapShapes({ shapes: [first, overlapping] })).rejects.toMatchObject({ code: "invalid_input" });
     expect(await commands.getOpenProject()).toEqual(before);
+    const invalidRegion: MapShape = { ...region(["5:5"], "55555555-5555-4555-8555-555555555555", "66666666-6666-4666-8666-666666666666"), value: "not-a-color" };
+    await expect(commands.updateMapShapes({ shapes: [first, invalidRegion] })).rejects.toMatchObject({ code: "invalid_input" });
+    expect(await commands.getOpenProject()).toEqual(before);
+  });
+
+  it("stores the three layers independently and edits only the object layer", async () => {
+    const commands = new RealmCommands({ libraryDirectory: directory() }); await commands.createProject({ name: "Three layers" });
+    const terrainShape = terrain(["2:2"]);
+    const regionShape = region(["2:2"]);
+    let snapshot = await commands.replaceTerrainLayer({ shapes: [{ id: terrainShape.id, geometry: terrainShape.geometry }] });
+    snapshot = await commands.replaceRegionLayer({ regions: [{ id: regionShape.regionId!, name: "Blue region", color: regionShape.value, shapes: [{ id: regionShape.id, geometry: regionShape.geometry }] }] });
+    const objects: MapObject[] = [
+      object("city", "44444444-4444-4444-8444-444444444444", point, "City"),
+      object("text", "55555555-5555-4555-8555-555555555555", point, "Text"),
+      object("mountain", "66666666-6666-4666-8666-666666666666", { type: "Point", coordinates: [10, 20] }, "Mountain"),
+      object("forest", "77777777-7777-4777-8777-777777777777", cellIdsToPolygonGeometries(["8:8", "9:8"])[0]!, "Forest"),
+    ];
+    snapshot = await commands.replaceObjectLayer({ objects });
+    expect(snapshot.layers.terrain).toHaveLength(1);
+    expect(snapshot.layers.regions).toEqual([{ id: regionShape.regionId, name: "Blue region", color: "#2468AC", shapes: [{ id: regionShape.id, geometry: regionShape.geometry }] }]);
+    expect(snapshot.layers.objects.map(({ kind }) => kind)).toEqual(["city", "text", "mountain", "forest"]);
+    expect(snapshot.mapShapes).toHaveLength(2);
+
+    const movedCity = { ...objects[0]!, geometry: { type: "Point" as const, coordinates: [11, 21] as [number, number] } };
+    snapshot = await commands.replaceObjectLayer({ objects: [movedCity, ...objects.slice(1, 3)] });
+    expect(snapshot.layers.objects).toHaveLength(3);
+    expect(snapshot.layers.objects.find(({ id }) => id === movedCity.id)?.geometry).toEqual(movedCity.geometry);
+    snapshot = await commands.undoProject();
+    expect(snapshot.layers.objects).toHaveLength(4);
+    expect(snapshot.layers.terrain).toHaveLength(1);
+    expect(snapshot.layers.regions).toHaveLength(1);
+    snapshot = await commands.redoProject();
+    expect(snapshot.layers.objects).toHaveLength(3);
+    await expect(commands.replaceTerrainLayer({ shapes: [terrainShape, { id: "88888888-8888-4888-8888-888888888888", geometry: terrainShape.geometry }] })).rejects.toMatchObject({ code: "invalid_input" });
+    const libraryId = basename(snapshot.path, ".realmmap");
+    await commands.closeProject();
+    snapshot = await commands.openProject({ libraryId });
+    expect(snapshot.layers.terrain).toHaveLength(1);
+    expect(snapshot.layers.regions[0]?.name).toBe("Blue region");
+    expect(snapshot.layers.objects).toHaveLength(3);
   });
 
   it("keeps the existing feature and artifact boundaries separate from map_shapes", async () => {
@@ -83,7 +128,7 @@ describe("RealmCommands user-visible operations", () => {
     snapshot = await commands.reviseFeaturesBatch({ features: [{ id: featureId, name: "Revised city", geometry: point, properties: { role: "revised" } }] });
     expect(snapshot.features[0]?.name).toBe("Revised city");
     snapshot = await commands.setFeaturesLocked({ ids: [featureId], locked: true });
-    expect(snapshot.features[0]?.properties.locked).toBe(true);
+    expect(snapshot.features[0]?.properties?.locked).toBe(true);
     await expect(commands.reviseFeature({ id: featureId, name: "Blocked", geometry: point })).rejects.toMatchObject({ code: "feature_locked" });
     snapshot = await commands.setFeaturesLocked({ ids: [featureId], locked: false });
     snapshot = await commands.deleteFeature({ id: featureId });

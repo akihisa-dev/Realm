@@ -32,22 +32,23 @@ describe("Electron native SQLite storage", () => {
     const directory = fixtureDirectory(); const commands = new RealmCommands({ libraryDirectory: directory });
     let snapshot = await commands.createProject({ name: "Synthetic" });
     expect(snapshot.formatVersion).toBe(CURRENT_SCHEMA_VERSION);
-    snapshot = await commands.createFeaturesBatch({ features: [{ featureType: "city", name: "A", geometry: { type: "Point", coordinates: [1, 2] } }, { featureType: "town", name: "B", geometry: { type: "Point", coordinates: [2, 3] } }] });
+    snapshot = await commands.createFeaturesBatch({ features: [{ featureType: "city", name: "A", geometry: { type: "Point", coordinates: [1, 2] } }, { featureType: "text", name: "B", geometry: { type: "Point", coordinates: [2, 3] } }] });
     expect(snapshot.featureCount).toBe(2); expect(snapshot.canUndo).toBe(true);
     snapshot = await commands.undoProject(); expect(snapshot.featureCount).toBe(0); expect(snapshot.canRedo).toBe(true);
     snapshot = await commands.redoProject(); expect(snapshot.featureCount).toBe(2);
-    await commands.updateMapShapes({ shapes: [{ id: "11111111-1111-4111-8111-111111111111", layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: cellIdsToPolygonGeometries(["0:0", "1:0"])[0]! }] });
+    snapshot = await commands.updateMapShapes({ shapes: [{ id: "11111111-1111-4111-8111-111111111111", layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: cellIdsToPolygonGeometries(["0:0", "1:0"])[0]! }] });
     const path = snapshot.path; const libraryId = basename(path, ".realmmap"); await commands.closeProject();
     const stored = new DatabaseSync(path, { readOnly: true });
     try {
-      expect(stored.prepare("SELECT grid_version AS gridVersion,grid_columns AS columns,grid_rows AS rows FROM cell_grid WHERE id=1").get()).toEqual({ gridVersion: 2, columns: 128, rows: 73 });
-      expect(Number((stored.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name='cell_attributes'").get() as { count: number }).count)).toBe(0);
-      expect(Number((stored.prepare("SELECT COUNT(*) AS count FROM map_shapes").get() as { count: number }).count)).toBe(1);
-      const shape = stored.prepare("SELECT id,layer,region_id AS regionId,value,geometry_version AS geometryVersion,snap_grid_version AS snapGridVersion,geometry_json AS geometryJson FROM map_shapes").get() as Record<string, unknown>;
-      expect(shape.layer).toBe("terrain"); expect(shape.regionId).toBeNull(); expect(shape.value).toBe("terrain"); expect(shape.geometryVersion).toBe(1); expect(shape.snapGridVersion).toBe(2);
+      expect(Number((stored.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('terrain_shapes','regions','region_shapes','objects')").get() as { count: number }).count)).toBe(4);
+      expect(Number((stored.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='table' AND name IN ('features','map_shapes','cell_grid','cell_attributes')").get() as { count: number }).count)).toBe(0);
+      expect(Number((stored.prepare("SELECT COUNT(*) AS count FROM terrain_shapes").get() as { count: number }).count)).toBe(1);
+      const shape = stored.prepare("SELECT id,geometry_json AS geometryJson FROM terrain_shapes").get() as Record<string, unknown>;
+      expect(shape.id).toBe("11111111-1111-4111-8111-111111111111");
       expect(JSON.parse(String(shape.geometryJson))).toMatchObject({ type: "Polygon" });
+      expect(Number((stored.prepare("SELECT COUNT(*) AS count FROM objects").get() as { count: number }).count)).toBe(2);
     } finally { stored.close(); }
-    snapshot = await commands.openProject({ libraryId }); expect(snapshot.featureCount).toBe(2); expect(snapshot.mapShapes).toHaveLength(1); expect(snapshot.canUndo).toBe(false);
+    snapshot = await commands.openProject({ libraryId }); expect(snapshot.featureCount).toBe(2); expect(snapshot.layers.objects).toHaveLength(2); expect(snapshot.layers.terrain).toHaveLength(1); expect(snapshot.mapShapes).toHaveLength(1); expect(snapshot.canUndo).toBe(false);
   });
 
   it("copies a WAL snapshot without changing source identity", async () => {

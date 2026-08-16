@@ -7,7 +7,7 @@ import {
   type RealmMapRenderer,
   type RealmMapRendererFactory,
 } from "../map/MapAdapter";
-import type { CellAttributeSnapshot, GeoJsonGeometry, MapShape, MapShapeEdit, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, GeoJsonGeometry, LayerId, MapShape, MapShapeEdit, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { ExportCanvasSize } from "../map/contracts";
 import type { MapErrorCode } from "../map/errors";
@@ -15,14 +15,14 @@ import { DEFAULT_MAP_THEME_ID, type MapThemeId, type ThemeOverrides } from "../m
 import { useMapAdapterLifecycle } from "./editor/useMapAdapterLifecycle";
 import { usePaletteFlyouts } from "./editor/usePaletteFlyouts";
 import { useRendererSync } from "./editor/useRendererSync";
-import type { EraseTarget } from "./editor/eraseTargets";
 
-export type TerrainMapMode = "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "region";
+export type TerrainMapMode = "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "region" | "erase" | "city" | "text" | "mountain" | "forest";
 
 type MapCanvasProps = {
   onZoomChange: (zoom: number) => void;
   zoom?: number;
   features?: RealmFeature[];
+  activeLayer?: LayerId;
   mode?: TerrainMapMode;
   strokeRange?: number;
   /** Prevents the mode cursor from suggesting an available editing action. */
@@ -45,8 +45,8 @@ type MapCanvasProps = {
   onSelectFeatures?: (featureIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
   onMapShapeEdit?: (edit: MapShapeEdit) => void;
-  onToolChange?: (tool: "terrain" | "region" | "erase" | "grab" | "shape") => void;
-  onEraseTargetChange?: (target: EraseTarget) => void;
+  onToolChange?: (tool: "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void;
+  onObjectKindChange?: (kind: "city" | "text" | "mountain" | "forest") => void;
   onRegionColorChange?: (color: string) => void;
   regionColor?: string;
   onModify?: (featureId: string, geometry: GeoJsonGeometry) => void;
@@ -63,6 +63,7 @@ export function MapCanvas({
   onZoomChange,
   zoom,
   features = [],
+  activeLayer = "terrain",
   mode = "pan",
   strokeRange,
   disabled = false,
@@ -85,7 +86,7 @@ export function MapCanvas({
   onCellSelect,
   onMapShapeEdit,
   onToolChange,
-  onEraseTargetChange,
+  onObjectKindChange,
   onRegionColorChange,
   regionColor,
   onModify,
@@ -108,15 +109,15 @@ export function MapCanvas({
     toolPalette,
     regionColor: paletteRegionColor,
     sidebarOpen,
-  } = usePaletteFlyouts({ hostRef, mode, strokeRange, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange });
+  } = usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange, regionColor, onToolChange, onObjectKindChange, onRegionColorChange });
   const effectivePaintRadius = mode === "cell-select" ? strokeRadius : 0;
   const effectiveRegionColor = regionColor ?? paletteRegionColor;
   const mapHelp = isPreview
     ? "レンダリングプレビューを表示しています。編集はできません。ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
     : mode === "pan"
     ? "ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
-    : mode === "cell-erase"
-      ? "六角セルを押したままなぞって地形または領域を消去します。消しゴムの調整で削除対象を切り替えられます。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。"
+      : mode === "cell-erase"
+      ? `${activeLayer === "terrain" ? "地形" : "領域"}だけを六角セル単位で消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。`
       : mode === "cell-region"
         ? "自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときはグラブに切り替えます。"
       : mode === "shape"
@@ -125,12 +126,17 @@ export function MapCanvas({
         ? "地形または領域の正確なPolygonの辺・頂点をつまみ、連続的に広げたり狭めたりできます。図形の内側をつまむと領域全体を移動します。グリッドへの吸着は離したときに行い、pointermove中は保存しません。pointercancel、Escape、フォーカス喪失で取り消せます。"
       : mode === "region"
         ? "領域の輪郭をドラッグして描きます。色を選んで保存できます。Escapeで取り消せます。"
+      : mode === "erase"
+        ? "選択中のオブジェクトだけをクリックして削除します。Escapeで削除を取り消せます。"
+      : mode === "city" || mode === "text" || mode === "mountain" || mode === "forest"
+        ? "地形や領域の上へオブジェクトを配置します。クリックで置き、Spaceまたは中ボタン・右ボタンで地図を移動できます。"
       : "六角グリッドを一時的な選択範囲として押したままなぞります。選択結果はPolygonへ変換して1回で保存します。ホイールを押したままドラッグすると地図を移動できます。Escapeで選択を取り消せます。";
   const controlledFeatureIds = selectedFeatureIds ?? (selectedFeatureId ? [selectedFeatureId] : []);
 
   useRendererSync({
     adapterRef,
     features,
+    activeLayer,
     themeId,
     themeOverrides,
     showGrid,
@@ -155,6 +161,7 @@ export function MapCanvas({
     createRenderer,
     zoom,
     features,
+    activeLayer,
     themeId,
     themeOverrides,
     showGrid,
@@ -190,7 +197,7 @@ export function MapCanvas({
     ? "map-canvas-mode-pan"
     : mode === "cell-erase"
       ? "map-canvas-mode-cell-erase"
-      : mode === "cell-region" ? "map-canvas-mode-cell-region" : mode === "grab" ? "map-canvas-mode-grab" : mode === "shape" ? "map-canvas-mode-shape" : mode === "region" ? "map-canvas-mode-region" : "map-canvas-mode-cell-select";
+      : mode === "cell-region" ? "map-canvas-mode-cell-region" : mode === "grab" ? "map-canvas-mode-grab" : mode === "shape" ? "map-canvas-mode-shape" : mode === "region" ? "map-canvas-mode-region" : mode === "erase" ? "map-canvas-mode-erase" : mode === "city" || mode === "text" || mode === "mountain" || mode === "forest" ? `map-canvas-mode-object-${mode}` : "map-canvas-mode-cell-select";
   return (
     <div className={`map-canvas-shell${isPreview ? " map-canvas-preview" : sidebarOpen ? "" : " map-canvas-sidebar-collapsed"}`}>
       <p id="map-help" className="sr-only">{mapHelp}</p>

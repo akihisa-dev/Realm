@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import type { CellAttributeSnapshot, GeoJsonGeometry, MapShape, MapShapeEdit, RealmFeature } from "../../backend";
+import type { CellAttributeSnapshot, GeoJsonGeometry, LayerId, MapShape, MapShapeEdit, RealmFeature } from "../../backend";
 import type { MapRaster } from "../../exportArtifacts";
 import type { ExportCanvasSize } from "../../map/contracts";
 import type {
@@ -21,6 +21,7 @@ export type MapAdapterLifecycleOptions = {
   createRenderer: RealmMapRendererFactory;
   zoom: number | undefined;
   features: RealmFeature[];
+  activeLayer: LayerId;
   themeId: MapThemeId;
   themeOverrides: ThemeOverrides;
   showGrid: boolean;
@@ -63,6 +64,7 @@ export function useMapAdapterLifecycle({
   createRenderer,
   zoom,
   features,
+  activeLayer,
   themeId,
   themeOverrides,
   showGrid,
@@ -148,6 +150,7 @@ export function useMapAdapterLifecycle({
     const stopErrorListener = adapter.onError((code) => onErrorRef.current?.(code));
 
     adapter.setFeatures(features);
+    adapter.setActiveLayer?.(activeLayer);
     adapter.setTheme(themeId);
     adapter.setThemeOverrides(themeOverrides);
     adapter.setGridVisible(showGrid);

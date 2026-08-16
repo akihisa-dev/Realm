@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { AssetManifest, FeatureProperties, MapShape, RealmFeature, RealmSnapshot } from "../../shared/realmContract";
-import { validateGeometry, validateProperties } from "../domain/geometry";
+import type { AssetManifest, FeatureProperties, MapObject, MapShape, RealmFeature, RealmSnapshot, Region, RegionShape, TerrainShape } from "../../shared/realmContract";
+import { validateObjectGeometry, validateProperties } from "../domain/geometry";
 import { MAX_ASSET_BYTES, MAX_ASSET_DIMENSION, validateAsset } from "../domain/assets";
 import { parseStoredSettings } from "../domain/settings";
 import { validateMapShapes } from "../../shared/mapShapeGeometry";
@@ -9,19 +9,12 @@ import { corrupt } from "../domain/errors";
 
 function json(value: unknown, label: string): unknown { try { return JSON.parse(String(value)); } catch { throw corrupt("A project contains invalid " + label + "."); } }
 type StoredAssetRow = Record<string, unknown>;
-
-const bytesFromRow = (value: unknown): number[] => {
-  if (value instanceof Uint8Array) return [...value];
-  if (Array.isArray(value)) return value;
-  return [];
-};
+const bytesFromRow = (value: unknown): number[] => value instanceof Uint8Array ? [...value] : Array.isArray(value) ? value : [];
 
 function assetManifest(row: StoredAssetRow, bytes?: number[]): AssetManifest {
   const sha256 = String(row.sha256).toLowerCase();
   const mime = String(row.mime).toLowerCase();
-  const width = Number(row.width);
-  const height = Number(row.height);
-  const byteLength = Number(row.byteLength);
+  const width = Number(row.width); const height = Number(row.height); const byteLength = Number(row.byteLength);
   const metadata = json(row.metadataJson, "asset metadata");
   try {
     if (bytes !== undefined) {
@@ -33,39 +26,53 @@ function assetManifest(row: StoredAssetRow, bytes?: number[]): AssetManifest {
     if (!["image/png", "image/jpeg", "image/webp"].includes(mime)) throw new Error("invalid asset mime");
     const checkedMetadata = validateProperties(metadata);
     return { id: String(row.id), sha256, mime, byteLength, width, height, metadata: checkedMetadata };
-  } catch {
-    throw corrupt("An asset contains invalid contents.");
+  } catch { throw corrupt("An asset contains invalid contents."); }
+}
+
+function readLayers(session: OpenProjectSession): { terrain: TerrainShape[]; regions: Region[]; objects: MapObject[]; mapShapes: MapShape[]; features: RealmFeature[] } {
+  const terrain = (session.database.prepare("SELECT id,geometry_json AS geometryJson FROM terrain_shapes ORDER BY id").all() as Record<string, unknown>[]).map((row): TerrainShape => ({ id: String(row.id), geometry: json(row.geometryJson, "terrain geometry") as TerrainShape["geometry"] }));
+  const regionRows = session.database.prepare("SELECT id,name,color FROM regions ORDER BY name,id").all() as Record<string, unknown>[];
+  const shapeRows = session.database.prepare("SELECT id,region_id AS regionId,geometry_json AS geometryJson FROM region_shapes ORDER BY region_id,id").all() as Record<string, unknown>[];
+  const shapesByRegion = new Map<string, RegionShape[]>();
+  for (const row of shapeRows) {
+    const regionId = String(row.regionId); const shapes = shapesByRegion.get(regionId) ?? [];
+    shapes.push({ id: String(row.id), geometry: json(row.geometryJson, "region geometry") as RegionShape["geometry"] }); shapesByRegion.set(regionId, shapes);
   }
+  const regions = regionRows.map((row): Region => ({ id: String(row.id), name: String(row.name), color: String(row.color), shapes: shapesByRegion.get(String(row.id)) ?? [] }));
+  if ([...shapesByRegion.keys()].some((id) => !regions.some((region) => region.id === id))) throw corrupt("A region shape refers to a missing region.");
+  const objects = (session.database.prepare("SELECT id,kind,label,geometry_json AS geometryJson,properties_json AS propertiesJson,z_index AS zIndex,locked,asset_id AS assetId FROM objects ORDER BY z_index,id").all() as Record<string, unknown>[]).map((row): MapObject => {
+    const geometry = json(row.geometryJson, "object geometry"); const properties = json(row.propertiesJson, "object properties");
+    const kind = String(row.kind) as MapObject["kind"];
+    try { validateObjectGeometry(kind, geometry, true); validateProperties(properties); } catch { throw corrupt("An object contains invalid geometry or properties."); }
+    return { id: String(row.id), kind, label: String(row.label), geometry: geometry as MapObject["geometry"], properties: properties as FeatureProperties, zIndex: Number(row.zIndex), locked: Number(row.locked) === 1, ...(row.assetId === null || row.assetId === undefined ? {} : { assetId: String(row.assetId) }) };
+  });
+  const mapShapes: MapShape[] = [
+    ...terrain.map((shape) => ({ id: shape.id, layer: "terrain" as const, value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: shape.geometry })),
+    ...regions.flatMap((region) => region.shapes.map((shape) => ({ id: shape.id, layer: "region" as const, regionId: region.id, value: region.color, geometryVersion: 1, snapGridVersion: 2, geometry: shape.geometry }))),
+  ];
+  try { validateMapShapes(mapShapes); } catch { throw corrupt("A terrain or region shape is invalid or overlaps another shape in its layer."); }
+  const features = objects.map((object): RealmFeature => ({ id: object.id, featureType: object.kind, name: object.label, geometry: object.geometry, properties: { ...object.properties, locked: object.locked, zIndex: object.zIndex, ...(object.assetId ? { assetId: object.assetId } : {}) } }));
+  return { terrain, regions, objects, mapShapes, features };
 }
 
 export function projectSnapshot(session: OpenProjectSession): RealmSnapshot {
   session.ensureCurrent();
   const world = session.database.prepare("SELECT id,name,settings_json AS settingsJson FROM world LIMIT 1").get() as Record<string, unknown> | undefined;
   if (!world) throw corrupt("The project does not contain a world record.");
-  const features = (session.database.prepare("SELECT id,feature_type AS featureType,name,geometry_json AS geometryJson,properties_json AS propertiesJson FROM features ORDER BY feature_type,name,id").all() as Record<string, unknown>[]).map((row) => {
-    const featureType = String(row.featureType) as RealmFeature["featureType"]; const geometry = json(row.geometryJson, "geometry"); const properties = json(row.propertiesJson, "properties");
-    try { validateGeometry(featureType, geometry, true); validateProperties(properties); } catch { throw corrupt("A feature contains invalid geometry or properties."); }
-    return { id: String(row.id), featureType, name: String(row.name), geometry: geometry as RealmFeature["geometry"], properties: properties as FeatureProperties };
-  });
-  const settings = parseStoredSettings(String(world.settingsJson));
+  const layers = readLayers(session);
   const assetRows = session.database.prepare("SELECT id,sha256,mime,length(bytes) AS byteLength,width,height,metadata_json AS metadataJson FROM assets ORDER BY id").all() as StoredAssetRow[];
   const needsAssetIntegrityCheck = !session.isAssetIntegrityVerified;
-  let bytesById = new Map<string, number[]>();
-  if (needsAssetIntegrityCheck) {
-    bytesById = new Map((session.database.prepare("SELECT id,bytes FROM assets ORDER BY id").all() as StoredAssetRow[]).map((row) => [String(row.id), bytesFromRow(row.bytes)]));
-  }
-  const assets = assetRows.map((row): AssetManifest => {
-    const id = String(row.id);
-    return assetManifest(row, needsAssetIntegrityCheck ? bytesById.get(id) ?? [] : undefined);
-  });
-  const mapShapes = (session.database.prepare("SELECT id,layer,region_id AS regionId,value,geometry_version AS geometryVersion,snap_grid_version AS snapGridVersion,geometry_json AS geometryJson FROM map_shapes ORDER BY layer,region_id,id").all() as Record<string, unknown>[]).map((row): MapShape => {
-    let geometry: unknown;
-    try { geometry = JSON.parse(String(row.geometryJson)); } catch { throw corrupt("A map shape contains invalid JSON."); }
-    return { id: String(row.id), layer: String(row.layer) as MapShape["layer"], ...(row.regionId === null || row.regionId === undefined ? {} : { regionId: String(row.regionId) }), value: String(row.value), geometryVersion: Number(row.geometryVersion), snapGridVersion: Number(row.snapGridVersion), geometry: geometry as MapShape["geometry"] };
-  });
-  try { validateMapShapes(mapShapes); } catch { throw corrupt("A map shape is invalid or overlaps another shape."); }
+  const bytesById = needsAssetIntegrityCheck
+    ? new Map((session.database.prepare("SELECT id,bytes FROM assets ORDER BY id").all() as StoredAssetRow[]).map((row) => [String(row.id), bytesFromRow(row.bytes)]))
+    : new Map<string, number[]>();
+  const assets = assetRows.map((row): AssetManifest => assetManifest(row, needsAssetIntegrityCheck ? bytesById.get(String(row.id)) ?? [] : undefined));
   if (needsAssetIntegrityCheck) session.markAssetIntegrityVerified();
-  return { formatVersion: 11, path: session.path, world: { id: String(world.id), name: String(world.name) }, settings, features, mapShapes, assets, featureCount: features.length, canUndo: session.canUndo, canRedo: session.canRedo };
+  return {
+    formatVersion: 12, path: session.path, world: { id: String(world.id), name: String(world.name) },
+    layers: { terrain: layers.terrain, regions: layers.regions, objects: layers.objects }, assets,
+    settings: parseStoredSettings(String(world.settingsJson)), canUndo: session.canUndo, canRedo: session.canRedo,
+    features: layers.features, mapShapes: layers.mapShapes, featureCount: layers.objects.length,
+  };
 }
 
 export function rawDatabase(session: OpenProjectSession): DatabaseSync { return session.database; }

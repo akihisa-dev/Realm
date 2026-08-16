@@ -1,8 +1,8 @@
 {
   "reportVersion": 1,
-  "schemaVersion": 11,
+  "schemaVersion": 12,
   "fixture": {
-    "features": 96,
+    "objects": 96,
     "shapes": 1
   },
   "samples": {

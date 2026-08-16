@@ -2,7 +2,7 @@
 
 This directory freezes the observable contract that the Electron storage and
 renderer must match. `migrationInventory.ts` retains historical test references
-as evidence while the current implementation is characterized by the schema 11
+as evidence while the current implementation is characterized by the schema 12
 SQLite and renderer suites. `migrationSnapshot.ts` provides a deterministic
 comparison for synthetic golden snapshots; SQLite row order and JSON object key
 order do not affect the result. Source hash and sidecar identity are compared
@@ -18,7 +18,7 @@ pnpm test
 ```
 
 Storage tests under this directory create their own temporary database, compare
-the current shape-based snapshot to the synthetic golden, and assert
+the current layer-based snapshot to the synthetic golden, and assert
 `compareSourceIdentity` after import/rejection. GUI startup is not part of this
 gate; renderer behavior remains covered by the existing jsdom/OpenLayers unit
 tests listed in the inventory.

@@ -4,18 +4,17 @@ import { ArrowCounterClockwise } from "@phosphor-icons/react/dist/csr/ArrowCount
 import { Eye } from "@phosphor-icons/react/dist/csr/Eye";
 import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { Stack } from "@phosphor-icons/react/dist/csr/Stack";
-import { errorMessage, type CellAttributeSnapshot, type MapShape, type MapShapeEdit, type RealmBackend, type RealmSnapshot } from "../backend";
+import { errorMessage, type CellAttributeSnapshot, type LayerId, type MapObject, type MapShape, type MapShapeEdit, type ObjectKind, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
-import { DEFAULT_ERASE_TARGET, eraseTargetDefinition, type EraseTarget } from "./editor/eraseTargets";
-import { ObjectManager } from "./editor/ObjectManager";
+import { LayerManager } from "./editor/LayerManager";
 import { mergeRegionShapes, splitRegionComponentShapes } from "./editor/editorMapOperations";
-import { deriveRegionObjects, type RegionComponent, type RegionObject } from "./editor/regionObjects";
+import { deriveRegionEntries, type RegionComponent, type RegionEntry } from "./editor/regionObjects";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { mapErrorMessage } from "../locales/ja";
 import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN } from "../map/MapAdapter";
 import { applyGridSelectionToMapShapes, deriveMapGridCells } from "../shared/mapShapeGeometry";
 
-type Tool = "terrain" | "region" | "erase" | "grab" | "shape";
+type Tool = "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape";
 
 type EditorShellProps = {
   snapshot: RealmSnapshot;
@@ -26,17 +25,20 @@ type EditorShellProps = {
 
 export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellProps) {
   const [activeTool, setActiveTool] = useState<Tool>("terrain");
+  const [activeLayer, setActiveLayer] = useState<LayerId>("terrain");
+  const [objectKind, setObjectKind] = useState<ObjectKind>("city");
+  const [objectLabel, setObjectLabel] = useState("新しい都市");
+  const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
   const [regionColor, setRegionColor] = useState("#7A6FA8");
   const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
   const [selectedRegionIds, setSelectedRegionIds] = useState<string[]>([]);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [regionPaintTargetId, setRegionPaintTargetId] = useState<string | null>(null);
-  const [objectManagerOpen, setObjectManagerOpen] = useState(true);
+  const [layerManagerOpen, setLayerManagerOpen] = useState(true);
   const [strokeRange, setStrokeRange] = useState(CELL_PAINT_RANGE_MIN);
   const [zoom, setZoom] = useState(1);
   const [previewMode, setPreviewMode] = useState(false);
   const activeToolRef = useRef<Tool>("terrain");
-  const eraseTargetRef = useRef<EraseTarget>(DEFAULT_ERASE_TARGET);
   const {
     viewedSnapshot,
     mapShapes,
@@ -57,18 +59,25 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       setSelectedRegionIds([]);
       setSelectedComponentId(null);
       setRegionPaintTargetId(null);
+      setSelectedObjectIds([]);
     },
     onOperationSettled: () => setSelectedCellIds([]),
   });
   const cellAttributes = useMemo(() => deriveMapGridCells(mapShapes) as CellAttributeSnapshot[], [mapShapes]);
-  const regionObjects = useMemo(() => deriveRegionObjects(cellAttributes), [cellAttributes]);
+  const regionEntries = useMemo(() => {
+    const persisted = new Map(viewedSnapshot.layers.regions.map((region) => [region.id, region]));
+    return deriveRegionEntries(cellAttributes).map((region) => {
+      const saved = region.persistentId ? persisted.get(region.persistentId) : undefined;
+      return saved ? { ...region, label: saved.name === "領域" ? region.label : saved.name, color: saved.color } : region;
+    });
+  }, [cellAttributes, viewedSnapshot.layers.regions]);
 
   useEffect(() => {
-    const knownIds = new Set(regionObjects.map((region) => region.id));
+    const knownIds = new Set(regionEntries.map((region) => region.id));
     setSelectedRegionIds((current) => current.filter((id) => knownIds.has(id)));
     setRegionPaintTargetId((current) => current && knownIds.has(current) ? current : null);
-    setSelectedComponentId((current) => current && regionObjects.some((region) => region.components.some((component) => component.id === current)) ? current : null);
-  }, [regionObjects]);
+    setSelectedComponentId((current) => current && regionEntries.some((region) => region.components.some((component) => component.id === current)) ? current : null);
+  }, [regionEntries]);
 
   const settings = viewedSnapshot.settings;
   const cellGridOptions = useMemo(() => ({ color: settings.gridColor, width: settings.gridWidth }), [settings.gridColor, settings.gridWidth]);
@@ -79,29 +88,35 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     setActiveTool(tool);
   };
 
-  const selectEraseTarget = (target: EraseTarget) => {
-    eraseTargetRef.current = target;
+  const selectLayer = (layer: LayerId): void => {
+    setActiveLayer(layer);
+    setSelectedCellIds([]);
+    setSelectedRegionIds([]);
+    setSelectedComponentId(null);
+    setRegionPaintTargetId(null);
+    setSelectedObjectIds([]);
+    selectTool(layer === "terrain" ? "terrain" : layer === "region" ? "region" : "object");
   };
 
   useEffect(() => {
     if (editingLocked) setSelectedCellIds([]);
   }, [activeTool, editingLocked]);
 
-  const selectRegionObject = (region: RegionObject): void => {
+  const selectRegion = (region: RegionEntry): void => {
     setSelectedRegionIds([region.id]);
     setSelectedComponentId(null);
     setSelectedCellIds(region.cellIds);
   };
 
-  const selectRegionObjects = (regionIds: readonly string[]): void => {
+  const selectRegions = (regionIds: readonly string[]): void => {
     const ids = [...new Set(regionIds)];
-    const cells = [...new Set(regionObjects.filter((region) => ids.includes(region.id)).flatMap((region) => region.cellIds))];
+    const cells = [...new Set(regionEntries.filter((region) => ids.includes(region.id)).flatMap((region) => region.cellIds))];
     setSelectedRegionIds(ids);
     setSelectedComponentId(null);
     setSelectedCellIds(cells);
   };
 
-  const selectRegionComponent = (region: RegionObject, component: RegionComponent): void => {
+  const selectRegionComponent = (region: RegionEntry, component: RegionComponent): void => {
     setSelectedRegionIds([region.id]);
     setSelectedComponentId(component.id);
     setSelectedCellIds(component.cellIds);
@@ -115,7 +130,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     selectTool("region");
   };
 
-  const addToRegion = (region: RegionObject): void => {
+  const addToRegion = (region: RegionEntry): void => {
     if (!region.persistentId) return;
     setRegionPaintTargetId(region.id);
     setRegionColor(region.color);
@@ -144,17 +159,14 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       setSelectedCellIds([]);
       return;
     }
-    const attribute = tool === "region"
-      ? "region"
-      : tool === "erase"
-        ? eraseTargetDefinition(eraseTargetRef.current).attribute
-        : "terrain";
-    const value = tool === "terrain" ? "terrain" : tool === "region" ? regionColor : null;
-    const targetRegion = tool === "region" && regionPaintTargetId
-      ? regionObjects.find((region) => region.id === regionPaintTargetId)
+    if (activeLayer === "object") { setSelectedCellIds([]); return; }
+    const attribute = activeLayer;
+    const value = tool === "erase" ? null : activeLayer === "terrain" ? "terrain" : tool === "region" ? regionColor : null;
+    const targetRegion = activeLayer === "region" && tool === "region" && regionPaintTargetId
+      ? regionEntries.find((region) => region.id === regionPaintTargetId)
       : undefined;
-    const regionId = tool === "region" ? targetRegion?.persistentId ?? crypto.randomUUID() : undefined;
-    const clearRegion = tool === "erase" && attribute === "terrain";
+    const regionId = activeLayer === "region" ? targetRegion?.persistentId ?? crypto.randomUUID() : undefined;
+    const clearRegion = false;
     const fallback = "変更を保存できませんでした。変更は保存されていません。";
     let next: MapShape[];
     try {
@@ -168,14 +180,15 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     setSelectedCellIds([]);
     // Cell selection already rebuilds complete, grid-snapped Polygon rows.
     // Do not reinterpret unrelated existing shapes a second time here.
-    commitMapShapes(next, fallback, { normalize: false });
+    commitMapShapes(next, fallback, { normalize: false, layer: activeLayer === "region" ? "region" : "terrain" });
   };
   const commitShapeEdit = (edit: MapShapeEdit): void => {
-    commitMapShapes(edit.shapes, activeToolRef.current === "shape" ? "領域を地形に合わせられませんでした。" : "図形を更新できませんでした。", { normalize: false });
+    const untouched = mapShapes.filter((shape) => shape.layer !== activeLayer);
+    commitMapShapes([...untouched, ...edit.shapes], activeToolRef.current === "shape" ? "領域を地形に合わせられませんでした。" : "図形を更新できませんでした。", { normalize: false, layer: activeLayer === "region" ? "region" : "terrain" });
   };
 
   const mergeRegions = (): void => {
-    const regions = selectedRegionIds.map((id) => regionObjects.find((region) => region.id === id)).filter((region): region is RegionObject => region !== undefined);
+    const regions = selectedRegionIds.map((id) => regionEntries.find((region) => region.id === id)).filter((region): region is RegionEntry => region !== undefined);
     const result = mergeRegionShapes(mapShapes, regions);
     if (!result) return;
     if (result.kind === "legacy") {
@@ -188,10 +201,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     setRegionPaintTargetId(target.id);
     setRegionColor(target.color);
     setSelectedCellIds([]);
-    commitMapShapes(shapes, "領域を統合できませんでした。", { normalize: false });
+    commitMapShapes(shapes, "領域を統合できませんでした。", { normalize: false, layer: "region" });
   };
 
-  const splitRegionComponent = (region: RegionObject, component: RegionComponent): void => {
+  const splitRegionComponent = (region: RegionEntry, component: RegionComponent): void => {
     const newRegionId = crypto.randomUUID();
     const next = splitRegionComponentShapes(mapShapes, region, component, newRegionId);
     if (!next) return;
@@ -199,8 +212,31 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     setSelectedComponentId(null);
     setRegionPaintTargetId(null);
     setSelectedCellIds([]);
-    commitMapShapes(next, "領域の塊を分離できませんでした。", { normalize: false });
+    commitMapShapes(next, "領域の塊を分離できませんでした。", { normalize: false, layer: "region" });
   };
+
+  const currentObjects = viewedSnapshot.layers.objects;
+  const startObjectDraw = (): void => { selectLayer("object"); selectTool("object"); };
+  const createObject = (geometry: MapObject["geometry"]): void => {
+    if (editingLocked || activeLayer !== "object") return;
+    const fallback = "オブジェクトを保存できませんでした。";
+    const object: MapObject = { id: crypto.randomUUID(), kind: objectKind, label: objectLabel.trim() || (objectKind === "city" ? "都市" : objectKind === "text" ? "テキスト" : objectKind === "forest" ? "森" : "山"), geometry, properties: {}, zIndex: currentObjects.length, locked: false };
+    void run(() => backend.replaceObjectLayer({ objects: [...currentObjects, object] }), fallback);
+  };
+  const selectObjects = (ids: readonly string[]): void => { setSelectedObjectIds([...new Set(ids)]); };
+  const modifyObjects = (changes: readonly { id: string; geometry: MapObject["geometry"] }[]): void => {
+    if (activeLayer !== "object" || editingLocked) return;
+    const byId = new Map(changes.map((change) => [change.id, change.geometry]));
+    const objects = currentObjects.map((object) => byId.has(object.id) ? { ...object, geometry: byId.get(object.id)! } : object);
+    void run(() => backend.replaceObjectLayer({ objects }), "オブジェクトを移動できませんでした。");
+  };
+  const eraseObjects = (ids: readonly string[]): void => {
+    if (activeLayer !== "object" || editingLocked) return;
+    const selected = new Set(ids);
+    void run(() => backend.replaceObjectLayer({ objects: currentObjects.filter((object) => !selected.has(object.id)) }), "オブジェクトを削除できませんでした。");
+  };
+  const selectObjectFromPanel = (id: string): void => { selectLayer("object"); setActiveTool("select"); activeToolRef.current = "select"; setSelectedObjectIds([id]); };
+  const deleteObjectFromPanel = (id: string): void => { eraseObjects([id]); };
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -218,7 +254,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       if (editingLocked || previewMode || event.altKey || event.shiftKey) return;
       if (key === "c" || key === "z") {
         event.preventDefault();
-        selectTool("terrain");
+        selectTool(activeLayer === "region" ? "region" : activeLayer === "object" ? "object" : "terrain");
       } else if (key === "e" || key === "x") {
         event.preventDefault();
         selectTool("erase");
@@ -232,7 +268,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [backend, editingLocked, locked, previewMode, viewedSnapshot.canRedo, viewedSnapshot.canUndo]);
+  }, [activeLayer, backend, editingLocked, locked, previewMode, viewedSnapshot.canRedo, viewedSnapshot.canUndo]);
 
   return (
     <main className="editor-shell" aria-label="Realm地形編集画面">
@@ -258,55 +294,71 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
           </button>
           <button type="button" aria-label="戻す" title="戻す" onClick={() => { void run(() => backend.undoProject(), "操作を戻せませんでした。"); }} disabled={locked || previewMode || !viewedSnapshot.canUndo}><ArrowCounterClockwise aria-hidden="true" size={17} weight="bold" /></button>
           <button type="button" aria-label="進む" title="進む" onClick={() => { void run(() => backend.redoProject(), "操作を進められませんでした。"); }} disabled={locked || previewMode || !viewedSnapshot.canRedo}><ArrowClockwise aria-hidden="true" size={17} weight="bold" /></button>
-          <button className="object-manager-toggle" type="button" aria-label={objectManagerOpen ? "オブジェクトマネージャーを閉じる" : "オブジェクトマネージャーを開く"} title={objectManagerOpen ? "オブジェクトマネージャーを閉じる" : "オブジェクトマネージャーを開く"} aria-pressed={objectManagerOpen} onClick={() => setObjectManagerOpen((current) => !current)}><Stack aria-hidden="true" size={17} weight="bold" /></button>
+          <button className="layer-manager-toggle" type="button" aria-label={layerManagerOpen ? "レイヤー管理パネルを閉じる" : "レイヤー管理パネルを開く"} title={layerManagerOpen ? "レイヤー管理パネルを閉じる" : "レイヤー管理パネルを開く"} aria-pressed={layerManagerOpen} onClick={() => setLayerManagerOpen((current) => !current)}><Stack aria-hidden="true" size={17} weight="bold" /></button>
         </nav>
       </header>
-      <div className={`editor-body${objectManagerOpen ? "" : " object-manager-is-closed"}`}>
+      <div className={`editor-body${layerManagerOpen ? "" : " layer-manager-is-closed"}`}>
         <section className="map-region" aria-label="地形編集領域">
           <MapCanvas
-            // Compatibility region objects remain in snapshots but are not
-            // rendered or created by the cell-region editor.
-            features={[]}
+            features={viewedSnapshot.features}
+            activeLayer={activeLayer}
             mapShapes={mapShapes}
-            mode={editingLocked ? "pan" : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "cell-region" : activeTool === "grab" ? "grab" : activeTool === "shape" ? "shape" : "cell-select"}
+            mode={editingLocked || previewMode ? "pan" : activeLayer === "object" ? activeTool === "erase" ? "erase" : activeTool === "select" ? "pan" : objectKind : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "cell-region" : activeTool === "grab" ? "grab" : activeTool === "shape" ? "shape" : "cell-select"}
             disabled={busy}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}
             themeId={settings.themeId}
             themeOverrides={settings.themeOverrides}
             showGrid={false}
-            showCellGrid
+            showCellGrid={activeLayer !== "object"}
             cellGridOptions={cellGridOptions}
             gridOptions={gridOptions}
             onCellSelect={applyCellSelection}
             onMapShapeEdit={commitShapeEdit}
+            onDraw={createObject}
+            selectedFeatureIds={selectedObjectIds}
+            onSelectFeatures={selectObjects}
+            onModifyFeatures={modifyObjects}
+            onEraseFeatures={eraseObjects}
             regionColor={regionColor}
             onToolChange={selectTool}
-            onEraseTargetChange={selectEraseTarget}
+            onObjectKindChange={(kind) => { setObjectKind(kind); selectLayer("object"); selectTool("object"); }}
             onRegionColorChange={changeRegionColor}
             preview={previewMode}
-            onError={(code) => setError(mapErrorMessage(code, activeToolRef.current === "region" || (activeToolRef.current === "erase" && eraseTargetRef.current === "region") ? "region" : "terrain"))}
+            onError={(code) => setError(mapErrorMessage(code, activeLayer === "region" ? "region" : "terrain"))}
             onZoomChange={setZoom}
             strokeRange={strokeRange}
             zoom={zoom}
           />
           {error ? <p className="save-error" role="alert">{error}</p> : null}
         </section>
-        {objectManagerOpen ? (
-          <ObjectManager
-            regions={regionObjects}
+        {layerManagerOpen ? (
+          <LayerManager
+            activeLayer={activeLayer}
+            onLayerChange={selectLayer}
+            onClose={() => setLayerManagerOpen(false)}
+            disabled={locked || previewMode}
+            terrainCount={viewedSnapshot.layers.terrain.length}
+            regions={regionEntries}
             selectedRegionIds={selectedRegionIds}
             selectedComponentId={selectedComponentId}
             regionPaintTargetId={regionPaintTargetId}
-            disabled={locked || previewMode}
-            onSelectRegion={selectRegionObject}
-            onSelectionChange={selectRegionObjects}
+            onSelectRegion={selectRegion}
+            onSelectionChange={selectRegions}
             onSelectComponent={selectRegionComponent}
             onStartNewRegion={startNewRegion}
             onAddToRegion={addToRegion}
             onMergeRegions={mergeRegions}
             onSplitComponent={splitRegionComponent}
-            onClose={() => setObjectManagerOpen(false)}
+            objects={currentObjects}
+            selectedObjectIds={selectedObjectIds}
+            objectKind={objectKind}
+            objectLabel={objectLabel}
+            onObjectKindChange={(kind) => { setObjectKind(kind); selectLayer("object"); selectTool("object"); }}
+            onObjectLabelChange={setObjectLabel}
+            onStartObjectDraw={startObjectDraw}
+            onSelectObject={selectObjectFromPanel}
+            onDeleteObject={deleteObjectFromPanel}
           />
         ) : null}
       </div>

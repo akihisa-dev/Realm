@@ -28,7 +28,7 @@ describe("ObjectManager", () => {
   it("shows the logical region and its disconnected chunks", () => {
     const callbacks = renderManager();
 
-    expect(screen.getByRole("complementary", { name: "オブジェクトマネージャー" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "領域レイヤー管理" })).toBeInTheDocument();
     expect(screen.getByText("2個の塊・3セル")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "領域 1の塊を表示する" }));
     expect(screen.getByRole("button", { name: "領域 1の塊1を分離" })).toBeInTheDocument();
@@ -38,5 +38,13 @@ describe("ObjectManager", () => {
     expect(callbacks.onSelectionChange).toHaveBeenCalledWith([regionId]);
     fireEvent.click(screen.getByRole("button", { name: "領域 1に領域を追加" }));
     expect(callbacks.onAddToRegion).toHaveBeenCalledWith(regions[0]);
+  });
+
+  it("disables every region selection control while editing is locked", () => {
+    render(<ObjectManager regions={regions} selectedRegionIds={[]} selectedComponentId={null} regionPaintTargetId={null} disabled onSelectRegion={vi.fn()} onSelectionChange={vi.fn()} onSelectComponent={vi.fn()} onStartNewRegion={vi.fn()} onAddToRegion={vi.fn()} onMergeRegions={vi.fn()} onSplitComponent={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: /領域 1 2個の塊・3セル/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "領域 1の塊を表示する" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "領域 1を統合対象にする" })).toBeDisabled();
   });
 });

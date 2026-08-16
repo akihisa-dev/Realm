@@ -6,25 +6,26 @@ import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
 import { PlusCircle } from "@phosphor-icons/react/dist/csr/PlusCircle";
 import { Scissors } from "@phosphor-icons/react/dist/csr/Scissors";
 import { X } from "@phosphor-icons/react/dist/csr/X";
-import type { RegionComponent, RegionObject } from "./regionObjects";
+import type { RegionComponent, RegionEntry } from "./regionObjects";
 
-type ObjectManagerProps = {
-  regions: readonly RegionObject[];
+export type RegionPanelProps = {
+  regions: readonly RegionEntry[];
   selectedRegionIds: readonly string[];
   selectedComponentId: string | null;
   regionPaintTargetId: string | null;
   disabled?: boolean;
-  onSelectRegion: (region: RegionObject) => void;
+  onSelectRegion: (region: RegionEntry) => void;
   onSelectionChange: (regionIds: readonly string[]) => void;
-  onSelectComponent: (region: RegionObject, component: RegionComponent) => void;
+  onSelectComponent: (region: RegionEntry, component: RegionComponent) => void;
   onStartNewRegion: () => void;
-  onAddToRegion: (region: RegionObject) => void;
+  onAddToRegion: (region: RegionEntry) => void;
   onMergeRegions: () => void;
-  onSplitComponent: (region: RegionObject, component: RegionComponent) => void;
+  onSplitComponent: (region: RegionEntry, component: RegionComponent) => void;
   onClose: () => void;
+  embedded?: boolean;
 };
 
-export function ObjectManager({
+export function RegionPanel({
   regions,
   selectedRegionIds,
   selectedComponentId,
@@ -38,7 +39,8 @@ export function ObjectManager({
   onMergeRegions,
   onSplitComponent,
   onClose,
-}: ObjectManagerProps) {
+  embedded = false,
+}: RegionPanelProps) {
   const [expandedRegionIds, setExpandedRegionIds] = useState<Set<string>>(() => new Set());
   const selected = new Set(selectedRegionIds);
   const toggleSelection = (regionId: string) => {
@@ -57,17 +59,17 @@ export function ObjectManager({
   };
 
   return (
-    <aside className="object-manager" aria-label="オブジェクトマネージャー">
-      <header className="object-manager-header">
+    <section className="object-manager region-panel" aria-label="領域レイヤー管理">
+      {!embedded ? <header className="object-manager-header">
         <div>
-          <p className="object-manager-kicker">オブジェクト</p>
-          <h2>オブジェクトマネージャー</h2>
+          <p className="object-manager-kicker">領域レイヤー</p>
+          <h2>領域管理</h2>
         </div>
         <div className="object-manager-header-actions">
           <span className="object-manager-count" aria-label={`領域${regions.length}個`}>{regions.length}</span>
           <button className="object-manager-close" type="button" aria-label="右パネルを閉じる" title="右パネルを閉じる" onClick={onClose}><X aria-hidden="true" size={17} weight="bold" /></button>
         </div>
-      </header>
+      </header> : null}
 
       <div className="object-manager-target" role="status" aria-label="領域の描画先">
         <span>描画先</span>
@@ -102,7 +104,7 @@ export function ObjectManager({
                       onChange={() => toggleSelection(region.id)}
                       disabled={disabled}
                     />
-                    <button className="object-manager-object" type="button" aria-pressed={isSelected} onClick={() => onSelectRegion(region)}>
+                    <button className="object-manager-object" type="button" aria-pressed={isSelected} onClick={() => onSelectRegion(region)} disabled={disabled}>
                       <span className="object-manager-color" aria-hidden="true" style={{ backgroundColor: region.color }} />
                       <span className="object-manager-object-copy">
                         <strong>{region.label}</strong>
@@ -116,6 +118,7 @@ export function ObjectManager({
                       title={`${region.label}の塊を${isExpanded ? "隠す" : "表示する"}`}
                       aria-expanded={isExpanded}
                       onClick={() => toggleExpanded(region.id)}
+                      disabled={disabled}
                     >
                       {isExpanded ? <CaretDown aria-hidden="true" size={16} weight="bold" /> : <CaretRight aria-hidden="true" size={16} weight="bold" />}
                     </button>
@@ -127,7 +130,7 @@ export function ObjectManager({
                     <ul className="object-manager-components">
                       {region.components.map((component, index) => (
                         <li key={component.id} className="object-manager-component-row">
-                          <button className="object-manager-component" type="button" aria-pressed={selectedComponentId === component.id} onClick={() => onSelectComponent(region, component)}>
+                          <button className="object-manager-component" type="button" aria-pressed={selectedComponentId === component.id} onClick={() => onSelectComponent(region, component)} disabled={disabled}>
                             <span>塊 {index + 1}</span>
                             <small>{component.cellIds.length}セル</small>
                           </button>
@@ -146,6 +149,10 @@ export function ObjectManager({
       </section>
 
       <p className="object-manager-help">同じ領域に複数の離れた塊をまとめられます。2つ以上を選ぶと、1つの領域として統合できます。</p>
-    </aside>
+    </section>
   );
 }
+
+/** @deprecated Regions are managed by RegionPanel; keep this alias for older renderer tests. */
+export const ObjectManager = RegionPanel;
+export type ObjectManagerProps = RegionPanelProps;

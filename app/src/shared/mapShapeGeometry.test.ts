@@ -107,8 +107,8 @@ describe("grid-snapped continuous map shapes", () => {
     validateMapShapes([shape]);
     expect(mapShapeCellIds(shape)).toEqual(new Set(["1:1", "2:1"]));
     expect(deriveMapGridCells([shape])).toEqual([
-      { cellId: "1:1", attribute: "terrain", value: "terrain" },
-      { cellId: "2:1", attribute: "terrain", value: "terrain" },
+      { cellId: "1:1", layer: "terrain", attribute: "terrain", value: "terrain" },
+      { cellId: "2:1", layer: "terrain", attribute: "terrain", value: "terrain" },
     ]);
   });
 

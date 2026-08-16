@@ -1,18 +1,19 @@
 # Realm
 
-Realm is a local terrain-drawing application for macOS on Apple Silicon. It keeps the current editable terrain of each world in an app-managed library rather than a cloud account or a generated dataset.
+Realm is a local three-layer map editor for macOS on Apple Silicon. It keeps each world's current terrain, regions, and objects in an app-managed library rather than a cloud account or a generated dataset.
 
 > Status: initial 0.1 series development
 
 ## What Realm stores
 
-Realm uses one SQLite database per world inside its app-managed library. Each database contains the terrain map's editable source data, including:
+Realm uses one SQLite database per world inside its app-managed library. Each database contains the map's editable source data, including:
 
-- manually painted terrain cells on a fixed hexagonal grid;
+- manually painted terrain polygons on a fixed hexagonal grid;
+- independent region polygons and their colors;
+- objects such as cities, text, forests, and mountains placed above the terrain and regions;
 - project-local canvas, palette, grid, and export settings;
-- compatibility rows from older Realm versions, which are preserved but are not shown or edited by the hex terrain editor.
 
-The database remains local. Terrain edits are automatically saved without asking the user to manage a project file. The editor is intentionally limited to move, draw, erase, undo, and redo; the current interface has no startup or transfer-import screen. Realm does not generate geography, create settlements or political objects, synchronize to a cloud service, or require a hosted account.
+The database remains local. Layer edits are automatically saved without asking the user to manage a project file. The current interface has no startup or transfer-import screen. Realm does not generate geography, synchronize to a cloud service, or require a hosted account. Older `.realmmap` formats are rejected without automatic migration.
 
 ## Platform and stack
 
@@ -53,6 +54,6 @@ Security reports must not contain secrets or exploit details in a public issue. 
 
 ## Japanese
 
-Realmは、Apple Silicon搭載macOS向けのローカル地形描画アプリです。六角形グリッドのセルを手動で塗り、その境界から地図を形作ります。編集画面は移動・描画・消去・戻す・進むに限定し、地形はアプリ内ライブラリへ自動保存します。森林、水系、道路、政治領域、集落、記号、ラベル、地理の自動生成、クラウド同期は編集機能として提供しません。
+Realmは、Apple Silicon搭載macOS向けのローカル3層地図エディタです。地形、領域、地形や領域の上に置く都市・テキスト・森・山を別々に編集し、アプリ内ライブラリへ自動保存します。地理の自動生成、クラウド同期、旧形式からの自動移行は行いません。
 
 詳細な正本は[文書索引](docs/INDEX.md)から参照してください。Realmはowner-ledで運用し、AGPL-3.0-or-laterで公開します。

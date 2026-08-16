@@ -1,12 +1,13 @@
 import type { CellAttributeSnapshot } from "../../backend";
 import { connectedCellComponents } from "../../map/regionGrab";
+import { cellAttributeLayer } from "../../shared/realmContract";
 
 export type RegionComponent = {
   id: string;
   cellIds: string[];
 };
 
-export type RegionObject = {
+export type RegionEntry = {
   id: string;
   persistentId: string | null;
   label: string;
@@ -14,6 +15,8 @@ export type RegionObject = {
   cellIds: string[];
   components: RegionComponent[];
 };
+/** @deprecated Use RegionEntry; regions are not objects. */
+export type RegionObject = RegionEntry;
 
 const DEFAULT_REGION_COLOR = "#7A6FA8";
 
@@ -27,11 +30,11 @@ const displayColor = (value: string): string => /^#[\da-f]{6}$/iu.test(value) ? 
 
 const isPersistentRegionId = (value: string | undefined): value is string => value !== undefined && value.trim().length > 0;
 
-/** Derives logical region objects and their disconnected six-neighbor components. */
-export const deriveRegionObjects = (attributes: readonly CellAttributeSnapshot[]): RegionObject[] => {
+/** Derives logical regions and their disconnected six-neighbor components. */
+export const deriveRegionEntries = (attributes: readonly CellAttributeSnapshot[]): RegionEntry[] => {
   const grouped = new Map<string, { persistentId: string | null; color: string; cellIds: Set<string> }>();
   for (const attribute of attributes) {
-    if (attribute.attribute !== "region") continue;
+    if (cellAttributeLayer(attribute) !== "region") continue;
     const identity = attribute.regionId?.trim() || attribute.value.trim();
     if (!identity) continue;
     const current = grouped.get(identity) ?? {
@@ -53,3 +56,6 @@ export const deriveRegionObjects = (attributes: readonly CellAttributeSnapshot[]
     .sort((left, right) => compareCellIds(left.cellIds[0] ?? "", right.cellIds[0] ?? "") || left.id.localeCompare(right.id))
     .map((region, index) => ({ ...region, label: `領域 ${index + 1}` }));
 };
+
+/** @deprecated Use deriveRegionEntries; regions are not objects. */
+export const deriveRegionObjects = deriveRegionEntries;

@@ -9,6 +9,7 @@ import Style from "ol/style/Style";
 import Text from "ol/style/Text";
 import type { CellAttributeSnapshot, FeatureType } from "../backend";
 import { canonicalValueSignature } from "../canonicalValue";
+import { cellAttributeLayer } from "../shared/realmContract";
 import { DEFAULT_MAP_THEME_ID, mapTheme, type MapThemeId, type ThemeOverrides } from "./themes";
 
 export const MAP_LABEL_FONT = '12px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif';
@@ -549,7 +550,7 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
   const cellStyles = new WeakMap<object, CachedStyle>();
   return (feature: FeatureLike): Style | Style[] | undefined => {
     const attributes = feature.get("attributes") as CellAttributeSnapshot[] | undefined;
-    const has = (attribute: CellAttributeSnapshot["attribute"]): boolean => attributes?.some((item) => item.attribute === attribute) ?? false;
+    const has = (attribute: CellAttributeSnapshot["attribute"]): boolean => attributes?.some((item) => cellAttributeLayer(item) === attribute) ?? false;
     const selected = feature.get("selected") === true;
     const preview = feature.get("preview") === true;
     const paintPreview = feature.get("paintPreview") === true;
@@ -563,7 +564,7 @@ export const createCellStyle = (getThemeId: () => MapThemeId = () => DEFAULT_MAP
     const themeId = getThemeId();
     const overrides = getThemeOverrides();
     const theme = mapTheme(themeId, overrides);
-    const regionValue = attributes?.find((item) => item.attribute === "region")?.value;
+    const regionValue = attributes?.find((item) => cellAttributeLayer(item) === "region")?.value;
     const persistedRegionColor = typeof regionValue === "string" && /^#[\da-f]{6}$/i.test(regionValue) ? regionValue : theme.region;
     const regionAnimationOpacity = typeof feature.get("regionAnimationOpacity") === "number" && Number.isFinite(feature.get("regionAnimationOpacity"))
       ? Math.max(0, Math.min(1, feature.get("regionAnimationOpacity"))) : 1;

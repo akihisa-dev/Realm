@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import type { CellAttributeSnapshot, MapShape, RealmFeature } from "../../backend";
+import type { CellAttributeSnapshot, LayerId, MapShape, RealmFeature } from "../../backend";
 import { canonicalValueSignature } from "../../canonicalValue";
 import type {
   CellGridOptions,
@@ -15,6 +15,7 @@ type RendererRef = { current: RealmMapRenderer | null };
 type RendererSyncOptions = {
   adapterRef: RendererRef;
   features: RealmFeature[];
+  activeLayer: LayerId;
   themeId: MapThemeId;
   themeOverrides: ThemeOverrides;
   showGrid: boolean;
@@ -37,6 +38,7 @@ type RendererSyncOptions = {
 export function useRendererSync({
   adapterRef,
   features,
+  activeLayer,
   themeId,
   themeOverrides,
   showGrid,
@@ -65,6 +67,7 @@ export function useRendererSync({
   const selectedFeatureIdsSignature = useMemo(() => canonicalValueSignature(selectedFeatureIds), [selectedFeatureIds]);
 
   useEffect(() => { adapterRef.current?.setFeatures(features); }, [adapterRef, featuresSignature]);
+  useEffect(() => { adapterRef.current?.setActiveLayer?.(activeLayer); }, [adapterRef, activeLayer]);
   useEffect(() => { adapterRef.current?.setTheme(themeId); }, [adapterRef, themeId]);
   useEffect(() => { adapterRef.current?.setThemeOverrides(themeOverrides); }, [adapterRef, themeOverridesSignature]);
   useEffect(() => { adapterRef.current?.setGridVisible(showGrid); }, [adapterRef, showGrid]);

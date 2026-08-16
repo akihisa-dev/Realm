@@ -58,7 +58,7 @@ describe("MapCanvas", () => {
     const renderer = createPaletteRenderer();
     const onToolChange = vi.fn();
     const onRegionColorChange = vi.fn();
-    render(<MapCanvas mode="cell-region" onZoomChange={vi.fn()} onToolChange={onToolChange} onRegionColorChange={onRegionColorChange} createRenderer={() => renderer} />);
+    render(<MapCanvas activeLayer="region" mode="cell-region" onZoomChange={vi.fn()} onToolChange={onToolChange} onRegionColorChange={onRegionColorChange} createRenderer={() => renderer} />);
 
     const map = screen.getByRole("region", { name: "世界地図" });
     expect(map).toHaveClass("map-canvas-mode-cell-region", "map-canvas-draw");
@@ -66,7 +66,7 @@ describe("MapCanvas", () => {
     expect(screen.getByText("自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときはグラブに切り替えます。")).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "領域の色" })).toBeInTheDocument();
     expect(screen.getAllByRole("radio")).toHaveLength(10);
-    const regionButton = screen.getByRole("button", { name: "領域" });
+    const regionButton = screen.getByRole("button", { name: "領域を描く" });
     expect(regionButton).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(regionButton);
     expect(onToolChange).toHaveBeenCalledWith("region");
@@ -109,18 +109,17 @@ describe("MapCanvas", () => {
     expect(screen.getByText("地形を描く")).toHaveClass("tool-sidebar-button-label");
     expect(screen.getByText("グラブ")).toBeInTheDocument();
     expect(screen.getByText("シェイピング")).toHaveClass("tool-sidebar-button-label");
-    expect(screen.getByRole("group", { name: "領域の色" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "消しゴムの対象" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "地形削除" })).toBeInTheDocument();
-    expect(screen.getByText("地形削除")).not.toHaveClass("sr-only");
-    expect(screen.getByText("領域削除")).not.toHaveClass("sr-only");
+    expect(screen.getByRole("button", { name: "地形消しゴム" })).toBeInTheDocument();
+    expect(screen.getByText("地形だけ")).toBeInTheDocument();
 
     fireEvent.click(closeButton);
 
     expect(palette).toHaveClass("is-collapsed");
     expect(shell).toHaveClass("map-canvas-sidebar-collapsed");
-    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-sidebar-button"))).toHaveLength(5);
-    expect(palette.querySelectorAll(".tool-sidebar-button > svg")).toHaveLength(5);
+    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-sidebar-button"))).toHaveLength(4);
+    expect(palette.querySelectorAll(".tool-sidebar-button > svg")).toHaveLength(4);
     expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "消しゴムの対象" })).not.toBeInTheDocument();
     const openButton = screen.getByRole("button", { name: "地図ツールパレットを開く" });
@@ -131,19 +130,19 @@ describe("MapCanvas", () => {
     expect(palette).not.toHaveClass("is-collapsed");
     expect(shell).not.toHaveClass("map-canvas-sidebar-collapsed");
     expect(screen.getByRole("button", { name: "地図ツールパレットを閉じる" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "領域の色" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "消しゴムの対象" })).toBeInTheDocument();
   });
 
   it("keeps the hidden tool settings available from the collapsed rail", () => {
     const renderer = createPaletteRenderer();
-    render(<MapCanvas onZoomChange={vi.fn()} createRenderer={() => renderer} />);
+    render(<MapCanvas activeLayer="region" mode="cell-region" onZoomChange={vi.fn()} createRenderer={() => renderer} />);
 
     fireEvent.click(screen.getByRole("button", { name: "地図ツールパレットを閉じる" }));
-    fireEvent.click(screen.getByRole("button", { name: "領域" }));
+    fireEvent.click(screen.getByRole("button", { name: "領域を描く" }));
     expect(screen.getAllByRole("radio")).toHaveLength(10);
 
-    fireEvent.click(screen.getByRole("button", { name: "消しゴム" }));
+    fireEvent.click(screen.getByRole("button", { name: "領域消しゴム" }));
     expect(screen.getByRole("group", { name: "消しゴムの対象" })).toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
   });
@@ -315,10 +314,10 @@ describe("MapCanvas", () => {
     expect(map).not.toHaveClass("map-canvas-disabled");
     const palette = screen.getByRole("complementary", { name: "地図ツールパレット" });
     expect(palette).toHaveClass("tool-sidebar");
-    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-sidebar-button"))).toHaveLength(5);
+    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-sidebar-button"))).toHaveLength(4);
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "消しゴム" }).querySelector("svg")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "地形消しゴム" }).querySelector("svg")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "地形を描く" }).querySelector("svg")).toBeInTheDocument();
     expect(screen.getByRole("toolbar", { name: "地図ツール" })).toBeInTheDocument();
     const onMapPointerDown = vi.fn();
@@ -329,7 +328,7 @@ describe("MapCanvas", () => {
     fireEvent.click(terrainButton);
     expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
     expect(screen.queryByRole("slider", { name: "描画と削除の太さ" })).not.toBeInTheDocument();
-    const eraserButton = screen.getByRole("button", { name: "消しゴム" });
+    const eraserButton = screen.getByRole("button", { name: "地形消しゴム" });
     fireEvent.click(eraserButton);
     const eraseFlyout = screen.getByRole("group", { name: "消しゴムの対象" });
     fireEvent.pointerEnter(eraseFlyout);
@@ -378,7 +377,7 @@ describe("MapCanvas", () => {
       .toBeInTheDocument();
 
     rerender(<MapCanvas mode="cell-erase" zoom={5} onZoomChange={onZoomChange} createRenderer={createRenderer} />);
-    expect(screen.getByText("六角セルを押したままなぞって地形または領域を消去します。消しゴムの調整で削除対象を切り替えられます。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。")).toBeInTheDocument();
+    expect(screen.getByText("地形だけを六角セル単位で消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。")).toBeInTheDocument();
     expect(renderer.setMode).toHaveBeenLastCalledWith("cell-erase");
     expect(screen.getByRole("region", { name: "世界地図" })).toHaveClass("map-canvas-mode-cell-erase");
 
@@ -403,7 +402,7 @@ describe("MapCanvas", () => {
     vi.useRealTimers();
   });
 
-  it("keeps eraser target selection in the left sidebar", () => {
+  it("shows only the active layer as the eraser target", () => {
     const renderer: RealmMapRenderer = {
       getZoom: vi.fn(() => 1), setZoom: vi.fn(), resetView: vi.fn(), setFeatures: vi.fn(), setTheme: vi.fn(), setThemeOverrides: vi.fn(),
       setGridVisible: vi.fn(), setGridOptions: vi.fn(), setCellGridVisible: vi.fn(), setCellGridOptions: vi.fn(), setAssets: vi.fn(), setLayerVisibility: vi.fn(),
@@ -411,35 +410,17 @@ describe("MapCanvas", () => {
       onDraw: vi.fn(() => vi.fn()), onSelectFeatures: vi.fn(() => vi.fn()), onSelect: vi.fn(() => vi.fn()), onCellSelect: vi.fn(() => vi.fn()), onModifyFeatures: vi.fn(() => vi.fn()), onModify: vi.fn(() => vi.fn()), onEraseFeatures: vi.fn(() => vi.fn()), onErase: vi.fn(() => vi.fn()), onLayerShift: vi.fn(() => vi.fn()), onError: vi.fn(() => vi.fn()), onZoomChange: vi.fn(() => vi.fn()), updateSize: vi.fn(), exportRaster: vi.fn(async () => ({ bytes: [], width: 1, height: 1 })), dispose: vi.fn(),
     };
     const onToolChange = vi.fn();
-    const onEraseTargetChange = vi.fn();
-    render(<MapCanvas onToolChange={onToolChange} onEraseTargetChange={onEraseTargetChange} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
+    render(<MapCanvas activeLayer="region" onToolChange={onToolChange} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
     fireEvent.contextMenu(screen.getByRole("region", { name: "世界地図" }), { clientX: 100, clientY: 100 });
-    const eraserButton = screen.getByRole("button", { name: "消しゴム" });
+    const eraserButton = screen.getByRole("button", { name: "領域消しゴム" });
     expect(eraserButton).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(eraserButton);
     expect(onToolChange).toHaveBeenCalledWith("erase");
     expect(eraserButton).toHaveAttribute("aria-expanded", "true");
     const eraseFlyout = screen.getByRole("group", { name: "消しゴムの対象" });
     expect(eraseFlyout).toHaveClass("tool-flyout-erase");
-    const eraseTargetGroup = screen.getByRole("group", { name: "削除対象" });
-    expect(eraseTargetGroup).toBeInTheDocument();
-    const terrainEraseButton = screen.getByRole("button", { name: "地形削除" });
-    const regionEraseButton = screen.getByRole("button", { name: "領域削除" });
-    const eraserTargetPill = eraseTargetGroup.querySelector(".eraser-target-pill");
-    expect(eraserTargetPill).toHaveAttribute("aria-hidden", "true");
-    expect(eraserTargetPill).toHaveClass("eraser-target-pill");
-    expect(terrainEraseButton).toHaveAttribute("aria-pressed", "true");
-    expect(regionEraseButton).toHaveAttribute("aria-pressed", "false");
-    Object.defineProperty(terrainEraseButton, "offsetLeft", { configurable: true, value: 0 });
-    Object.defineProperty(terrainEraseButton, "offsetWidth", { configurable: true, value: 80 });
-    Object.defineProperty(regionEraseButton, "offsetLeft", { configurable: true, value: 84 });
-    Object.defineProperty(regionEraseButton, "offsetWidth", { configurable: true, value: 80 });
-    fireEvent.click(regionEraseButton);
-    expect(onToolChange).toHaveBeenLastCalledWith("erase");
-    expect(onEraseTargetChange).toHaveBeenCalledWith("region");
-    expect(regionEraseButton).toHaveAttribute("aria-pressed", "true");
-    expect(terrainEraseButton).toHaveAttribute("aria-pressed", "false");
-    expect(eraserTargetPill).toHaveStyle({ left: "84px", width: "80px" });
+    expect(screen.getByRole("status", { name: "削除対象" })).toHaveTextContent("領域だけ");
+    expect(screen.queryByRole("button", { name: "地形消しゴム" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("radio")).toHaveLength(10);
   });
 

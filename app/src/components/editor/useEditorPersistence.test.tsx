@@ -67,7 +67,7 @@ describe("useEditorPersistence", () => {
   it("optimistically commits shapes, recovers a failed save, and reports local normalization errors", async () => {
     const backend = new MemoryRealmBackend();
     const snapshot = await backend.createProject({ path: "browser://failure.realmmap", name: "Failure" });
-    const update = vi.spyOn(backend, "updateMapShapes").mockRejectedValue(new Error("synthetic failure"));
+    const update = vi.spyOn(backend, "replaceTerrainLayer").mockRejectedValue(new Error("synthetic failure"));
     const { result } = renderHook((props: EditorPersistenceOptions) => useEditorPersistence(props), { initialProps: hookProps(snapshot, backend) });
     const shape = terrain(["1:1", "1:2"]);
 
@@ -92,9 +92,10 @@ describe("useEditorPersistence", () => {
     let releaseFirst: (() => void) | undefined;
     const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
     const onSaved = vi.fn();
-    const update = vi.spyOn(backend, "updateMapShapes").mockImplementation(async ({ shapes }) => {
+    const replace = backend.replaceTerrainLayer.bind(backend);
+    const update = vi.spyOn(backend, "replaceTerrainLayer").mockImplementation(async ({ shapes }) => {
       if (update.mock.calls.length === 1) await firstGate;
-      return { ...snapshot, mapShapes: shapes };
+      return replace({ shapes });
     });
     const { result } = renderHook((props: EditorPersistenceOptions) => useEditorPersistence(props), { initialProps: hookProps(snapshot, backend, onSaved) });
 
@@ -110,9 +111,44 @@ describe("useEditorPersistence", () => {
     releaseFirst?.();
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.saving).toBe(false));
-    expect(update.mock.calls[1]?.[0].shapes).toEqual([secondShape]);
+    expect(update.mock.calls[1]?.[0].shapes).toEqual([{ id: secondShape.id, geometry: secondShape.geometry }]);
     expect(result.current.viewedSnapshot.mapShapes).toEqual([secondShape]);
     expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it("serializes object writes behind an in-flight terrain save", async () => {
+    const backend = new MemoryRealmBackend();
+    const snapshot = await backend.createProject({ path: "browser://layer-order.realmmap", name: "Layer order" });
+    const shape = terrain(["1:1"]);
+    const object = { id: "22222222-2222-4222-8222-222222222222", kind: "city" as const, label: "都市", geometry: { type: "Point" as const, coordinates: [1, 1] as [number, number] }, properties: {}, zIndex: 0, locked: false };
+    let releaseTerrain: (() => void) | undefined;
+    const terrainGate = new Promise<void>((resolve) => { releaseTerrain = resolve; });
+    const order: string[] = [];
+    const replaceTerrain = backend.replaceTerrainLayer.bind(backend);
+    const terrainSave = vi.spyOn(backend, "replaceTerrainLayer").mockImplementation(async ({ shapes }) => {
+      order.push("terrain:start");
+      await terrainGate;
+      const result = await replaceTerrain({ shapes });
+      order.push("terrain:end");
+      return result;
+    });
+    const replaceObject = backend.replaceObjectLayer.bind(backend);
+    vi.spyOn(backend, "replaceObjectLayer").mockImplementation(async ({ objects }) => {
+      order.push("object");
+      return replaceObject({ objects });
+    });
+    const { result } = renderHook((props: EditorPersistenceOptions) => useEditorPersistence(props), { initialProps: hookProps(snapshot, backend) });
+
+    act(() => { result.current.commitMapShapes([shape], "保存に失敗しました。", { normalize: false }); });
+    await waitFor(() => expect(terrainSave).toHaveBeenCalledTimes(1));
+    let objectRun: Promise<void> | undefined;
+    act(() => { objectRun = result.current.run(() => backend.replaceObjectLayer({ objects: [object] }), "オブジェクトを保存できませんでした。"); });
+    await Promise.resolve();
+    expect(order).toEqual(["terrain:start"]);
+
+    releaseTerrain?.();
+    await act(async () => { await objectRun; });
+    expect(order).toEqual(["terrain:start", "terrain:end", "object"]);
   });
 
   it("keeps stale failures from changing the current error and respects a busy editor", async () => {

@@ -1,4 +1,4 @@
-import type { CellAttributeSnapshot, FeatureType, GeoJsonGeometry, MapShape, MapShapeEdit, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, FeatureType, GeoJsonGeometry, LayerId, MapShape, MapShapeEdit, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { MapThemeId, ThemeOverrides } from "./themes";
 import type { MapErrorCode } from "./errors";
@@ -33,6 +33,8 @@ export interface RealmMapRenderer {
   setZoom(zoom: number): void;
   resetView(): void;
   setFeatures(features: RealmFeature[]): void;
+  /** The only layer allowed to receive primary-pointer edits and selection. */
+  setActiveLayer?(layer: LayerId): void;
   setTheme(themeId: MapThemeId): void;
   setThemeOverrides(overrides: ThemeOverrides): void;
   setGridVisible(visible: boolean): void;

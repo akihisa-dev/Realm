@@ -245,7 +245,7 @@ describe("Electron storage parity: path, snapshots, migrations and transfer", ()
     expect(existsSync(join(newParent, "published.realmmap"))).toBe(false);
   });
 
-  it.each([3, 4, 5, 6, 7, 8, 9, 10])("rejects a legacy v%d source and preserves source bytes", async (version) => {
+  it.each([3, 4, 5, 6, 7, 8, 9, 10, 11])("rejects a legacy v%d source and preserves source bytes", async (version) => {
     const directory = fixtureDirectory();
     const path = join(directory, `failed-v${version}.realmmap`);
     createLegacyFixture(path, version);
@@ -311,7 +311,7 @@ describe("Electron storage parity: path, snapshots, migrations and transfer", ()
 });
 
 describe("Electron storage parity: transactional CRUD and session history", () => {
-  it("rolls back feature, Polygon-shape, and asset writes when SQLite rejects a transaction", async () => {
+  it("rolls back object, Polygon-shape, and asset writes when SQLite rejects a transaction", async () => {
     const directory = fixtureDirectory();
     const commands = new RealmCommands({ libraryDirectory: directory });
     const initial = await commands.createProject({ name: "Rollback" });
@@ -333,11 +333,11 @@ describe("Electron storage parity: transactional CRUD and session history", () =
         drop(name);
       }
     };
-    await withTrigger("reject_feature", "features", async () => {
+    await withTrigger("reject_object", "objects", async () => {
       await expect(commands.createFeature(featureInput)).rejects.toThrow();
     });
-    let check = new DatabaseSync(path, { readOnly: true }); expect(Number((check.prepare("SELECT COUNT(*) AS count FROM features").get() as Record<string, unknown>).count)).toBe(0); check.close();
-    await withTrigger("reject_shape", "map_shapes", async () => {
+    let check = new DatabaseSync(path, { readOnly: true }); expect(Number((check.prepare("SELECT COUNT(*) AS count FROM objects").get() as Record<string, unknown>).count)).toBe(0); check.close();
+    await withTrigger("reject_shape", "terrain_shapes", async () => {
       await expect(commands.updateMapShapes({ shapes: [terrainShape(["1:1", "2:2"])] })).rejects.toThrow();
       expect((await commands.getOpenProject())?.mapShapes).toEqual([]);
     });

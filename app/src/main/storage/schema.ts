@@ -3,22 +3,20 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { corrupt, RealmError } from "../domain/errors";
 import { DEFAULT_SETTINGS, parseStoredSettings } from "../domain/settings";
+import { validateGeometry, validateName, validateProperties } from "../domain/geometry";
 import { validateMapShapes } from "../../shared/mapShapeGeometry";
-import type { MapShape } from "../../shared/realmContract";
+import type { GridShape, MapShapeGeometry, ObjectKind } from "../../shared/realmContract";
 
-/** Schema 11 is intentionally a new, non-migrating storage format. */
-export const CURRENT_SCHEMA_VERSION = 11;
-export const ACCEPTED_SCHEMA_VERSIONS = [11] as const;
+/** Schema 12 is the first storage format for the three independent layers. */
+export const CURRENT_SCHEMA_VERSION = 12;
+export const ACCEPTED_SCHEMA_VERSIONS = [12] as const;
 export const GRID_VERSION = 2;
-const FEATURE_TYPES = "'terrain','forest','river','coastline','country','region','boundary','city','town','road','lake','mountain','tree','symbol','label','overlay','frame','scale'";
-const SETTINGS_CHECK = `CHECK (json_valid(settings_json) AND json_type(settings_json) = 'object' AND length(settings_json) <= 32768 AND json_type(settings_json, '$.canvasWidth') = 'integer' AND json_extract(settings_json, '$.canvasWidth') BETWEEN 512 AND 8192 AND json_type(settings_json, '$.canvasHeight') = 'integer' AND json_extract(settings_json, '$.canvasHeight') BETWEEN 512 AND 8192 AND json_type(settings_json, '$.gridKind') = 'text' AND json_extract(settings_json, '$.gridKind') IN ('graticule','square','hex') AND json_type(settings_json, '$.gridColor') = 'text' AND length(json_extract(settings_json, '$.gridColor')) = 7 AND json_extract(settings_json, '$.gridColor') GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]' AND (json_type(settings_json, '$.gridWidth') = 'integer' OR json_type(settings_json, '$.gridWidth') = 'real') AND CAST(json_extract(settings_json, '$.gridWidth') AS REAL) BETWEEN 0.25 AND 4 AND (json_type(settings_json, '$.gridSpacing') = 'integer' OR json_type(settings_json, '$.gridSpacing') = 'real') AND CAST(json_extract(settings_json, '$.gridSpacing') AS REAL) BETWEEN 2 AND 45 AND json_type(settings_json, '$.themeOverrides') = 'object')`;
+const OBJECT_KINDS = "'city','text','mountain','forest'";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+const SETTINGS_CHECK = `CHECK (json_valid(settings_json) AND json_type(settings_json) = 'object' AND length(settings_json) <= 32768 AND json_type(settings_json, '$.canvasWidth') = 'integer' AND json_extract(settings_json, '$.canvasWidth') BETWEEN 512 AND 8192 AND json_type(settings_json, '$.canvasHeight') = 'integer' AND json_extract(settings_json, '$.canvasHeight') BETWEEN 512 AND 8192 AND json_type(settings_json, '$.gridKind') = 'text' AND json_extract(settings_json, '$.gridKind') IN ('graticule','square','hex') AND json_type(settings_json, '$.gridColor') = 'text' AND length(json_extract(settings_json, '$.gridColor')) = 7 AND json_extract(settings_json, '$.gridColor') GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]' AND (json_type(settings_json, '$.gridWidth') = 'integer' OR json_type(settings_json, '$.gridWidth') = 'real') AND CAST(json_extract(settings_json, '$.gridWidth') AS REAL) BETWEEN 0.25 AND 4 AND json_type(settings_json, '$.themeOverrides') = 'object')`;
 const RETIRED_OBJECTS = [
-  "eras", "timeline_events", "feature_revisions", "cell_edit_operations", "cell_attribute_revisions",
-  "feature_revisions_lookup", "feature_revisions_year", "timeline_events_range", "cell_attribute_revisions_lookup",
-  "cell_attribute_revisions_view", "feature_revision_sequence_monotonic", "feature_revision_no_update",
-  "feature_revision_no_delete", "cell_attribute_revision_sequence_monotonic", "cell_attribute_revision_no_update",
-  "cell_attribute_revision_no_delete", "cell_edit_operation_no_update", "cell_edit_operation_no_delete",
-  "cell_attributes", "cell_attributes_lookup",
+  "features", "map_shapes", "cell_grid", "cell_attributes", "cell_attributes_lookup", "eras", "timeline_events", "feature_revisions", "cell_edit_operations", "cell_attribute_revisions",
+  "feature_revisions_lookup", "feature_revisions_year", "timeline_events_range", "cell_attribute_revisions_lookup", "cell_attribute_revisions_view", "feature_revision_sequence_monotonic", "feature_revision_no_update", "feature_revision_no_delete", "cell_attribute_revision_sequence_monotonic", "cell_attribute_revision_no_update", "cell_attribute_revision_no_delete", "cell_edit_operation_no_update", "cell_edit_operation_no_delete",
 ] as const;
 
 function hasMovedExtensionCandidates(): string[] {
@@ -42,7 +40,6 @@ export function configureDatabase(db: DatabaseSync): void {
   assertSqlitePathNotMoved(db);
 }
 
-/** New staged databases must start in rollback-journal mode. */
 export function configureNewDatabase(db: DatabaseSync): void {
   configureDatabase(db);
   const current = String((db.prepare("PRAGMA journal_mode").get() as Record<string, unknown> | undefined)?.journal_mode ?? "");
@@ -57,14 +54,14 @@ export function schemaSql(): string {
   return `
 CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS world (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, settings_json TEXT NOT NULL ${SETTINGS_CHECK});
-CREATE TABLE IF NOT EXISTS features (id TEXT PRIMARY KEY NOT NULL, feature_type TEXT NOT NULL CHECK (feature_type IN (${FEATURE_TYPES})), name TEXT NOT NULL, geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json)), properties_json TEXT NOT NULL CHECK (json_valid(properties_json) AND json_type(properties_json) = 'object'));
-CREATE TABLE IF NOT EXISTS cell_grid (id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1), grid_version INTEGER NOT NULL CHECK (grid_version = 2), grid_columns INTEGER NOT NULL CHECK (grid_columns = 128), grid_rows INTEGER NOT NULL CHECK (grid_rows = 73));
-CREATE TABLE IF NOT EXISTS map_shapes (id TEXT PRIMARY KEY NOT NULL, layer TEXT NOT NULL CHECK (layer IN ('terrain','region')), region_id TEXT CHECK ((layer = 'terrain' AND region_id IS NULL) OR (layer = 'region' AND region_id IS NOT NULL)), value TEXT NOT NULL, geometry_version INTEGER NOT NULL CHECK (geometry_version = 1), snap_grid_version INTEGER NOT NULL CHECK (snap_grid_version = 2), geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json) AND json_type(geometry_json) = 'object'));
-CREATE INDEX IF NOT EXISTS map_shapes_layer_lookup ON map_shapes(layer,id);
-CREATE INDEX IF NOT EXISTS map_shapes_region_lookup ON map_shapes(region_id,id);
+CREATE TABLE IF NOT EXISTS terrain_shapes (id TEXT PRIMARY KEY NOT NULL, geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json) AND json_type(geometry_json) = 'object'));
+CREATE TABLE IF NOT EXISTS regions (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, color TEXT NOT NULL CHECK (color GLOB '#[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]'));
+CREATE TABLE IF NOT EXISTS region_shapes (id TEXT PRIMARY KEY NOT NULL, region_id TEXT NOT NULL REFERENCES regions(id) ON DELETE CASCADE, geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json) AND json_type(geometry_json) = 'object'));
+CREATE INDEX IF NOT EXISTS region_shapes_region_lookup ON region_shapes(region_id,id);
 CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY NOT NULL, sha256 TEXT NOT NULL UNIQUE CHECK (length(sha256) = 64), mime TEXT NOT NULL, bytes BLOB NOT NULL, width INTEGER NOT NULL CHECK (width > 0 AND width <= 32768), height INTEGER NOT NULL CHECK (height > 0 AND height <= 32768), metadata_json TEXT NOT NULL CHECK (json_valid(metadata_json) AND json_type(metadata_json) = 'object'));
 CREATE INDEX IF NOT EXISTS assets_sha256_lookup ON assets(sha256);
-INSERT OR IGNORE INTO cell_grid(id, grid_version, grid_columns, grid_rows) VALUES (1,2,128,73);`;
+CREATE TABLE IF NOT EXISTS objects (id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL CHECK (kind IN (${OBJECT_KINDS})), label TEXT NOT NULL, geometry_json TEXT NOT NULL CHECK (json_valid(geometry_json) AND json_type(geometry_json) = 'object'), properties_json TEXT NOT NULL CHECK (json_valid(properties_json) AND json_type(properties_json) = 'object'), z_index INTEGER NOT NULL CHECK (z_index BETWEEN -1000000 AND 1000000), locked INTEGER NOT NULL CHECK (locked IN (0,1)), asset_id TEXT REFERENCES assets(id) ON DELETE RESTRICT);
+CREATE INDEX IF NOT EXISTS objects_order_lookup ON objects(z_index,id);`;
 }
 
 export function initializeSchema(db: DatabaseSync, worldId: string, worldName: string): void {
@@ -84,11 +81,11 @@ type ColumnExpectation = { name: string; declaredType: string; notNull: boolean;
 const column = (name: string, declaredType: string, notNull: boolean, primaryKey: boolean): ColumnExpectation => ({ name, declaredType, notNull, primaryKey });
 const SCHEMA_MIGRATION_COLUMNS = [column("version", "INTEGER", false, true), column("applied_at", "TEXT", true, false)];
 const WORLD_COLUMNS = [column("id", "TEXT", true, true), column("name", "TEXT", true, false), column("settings_json", "TEXT", true, false)];
-const FEATURE_COLUMNS = [column("id", "TEXT", true, true), column("feature_type", "TEXT", true, false), column("name", "TEXT", true, false), column("geometry_json", "TEXT", true, false), column("properties_json", "TEXT", true, false)];
-const CELL_GRID_COLUMNS = [column("id", "INTEGER", true, true), column("grid_version", "INTEGER", true, false), column("grid_columns", "INTEGER", true, false), column("grid_rows", "INTEGER", true, false)];
-const MAP_SHAPE_COLUMNS = [column("id", "TEXT", true, true), column("layer", "TEXT", true, false), column("region_id", "TEXT", false, false), column("value", "TEXT", true, false), column("geometry_version", "INTEGER", true, false), column("snap_grid_version", "INTEGER", true, false), column("geometry_json", "TEXT", true, false)];
+const TERRAIN_COLUMNS = [column("id", "TEXT", true, true), column("geometry_json", "TEXT", true, false)];
+const REGION_COLUMNS = [column("id", "TEXT", true, true), column("name", "TEXT", true, false), column("color", "TEXT", true, false)];
+const REGION_SHAPE_COLUMNS = [column("id", "TEXT", true, true), column("region_id", "TEXT", true, false), column("geometry_json", "TEXT", true, false)];
+const OBJECT_COLUMNS = [column("id", "TEXT", true, true), column("kind", "TEXT", true, false), column("label", "TEXT", true, false), column("geometry_json", "TEXT", true, false), column("properties_json", "TEXT", true, false), column("z_index", "INTEGER", true, false), column("locked", "INTEGER", true, false), column("asset_id", "TEXT", false, false)];
 const ASSET_COLUMNS = [column("id", "TEXT", true, true), column("sha256", "TEXT", true, false), column("mime", "TEXT", true, false), column("bytes", "BLOB", true, false), column("width", "INTEGER", true, false), column("height", "INTEGER", true, false), column("metadata_json", "TEXT", true, false)];
-const FULL_SETTINGS_FRAGMENTS = ["check (json_valid(settings_json)", "json_type(settings_json) = 'object'", "length(settings_json) <= 32768", "json_type(settings_json, '$.canvasWidth') = 'integer'", "json_extract(settings_json, '$.canvasWidth') BETWEEN 512 AND 8192", "json_type(settings_json, '$.canvasHeight') = 'integer'", "json_extract(settings_json, '$.canvasHeight') BETWEEN 512 AND 8192", "json_type(settings_json, '$.gridKind') = 'text'", "json_extract(settings_json, '$.gridKind') IN ('graticule','square','hex')", "json_type(settings_json, '$.gridColor') = 'text'", "length(json_extract(settings_json, '$.gridColor')) = 7", "json_extract(settings_json, '$.gridColor') GLOB", "CAST(json_extract(settings_json, '$.gridWidth') AS REAL) BETWEEN 0.25 AND 4", "CAST(json_extract(settings_json, '$.gridSpacing') AS REAL) BETWEEN 2 AND 45", "json_type(settings_json, '$.themeOverrides') = 'object'"];
 function tableInfo(db: DatabaseSync, table: string): ColumnExpectation[] { return db.prepare(`PRAGMA table_info(${table})`).all().map((raw) => { const row = raw as Record<string, unknown>; return { name: String(row.name), declaredType: String(row.type), notNull: Number(row.notnull) !== 0, primaryKey: Number(row.pk) !== 0 }; }); }
 function hasColumns(db: DatabaseSync, table: string, expected: ColumnExpectation[]): boolean { const found = tableInfo(db, table); return found.length === expected.length && expected.every((want, index) => { const got = found[index]; return got?.name === want.name && got.declaredType.toUpperCase() === want.declaredType && got.notNull === want.notNull && got.primaryKey === want.primaryKey; }); }
 function normalizedSql(db: DatabaseSync, objectType: string, name: string): string { const row = db.prepare("SELECT sql FROM sqlite_master WHERE type=? AND name=?").get(objectType, name) as { sql?: unknown } | undefined; return String(row?.sql ?? "").replace(/\s+/g, " ").trim().toLowerCase(); }
@@ -97,7 +94,34 @@ function assertIndex(db: DatabaseSync, name: string, expected: string[]): void {
 function assertTableSql(db: DatabaseSync, table: string, fragments: readonly string[]): void { const sql = normalizedSql(db, "table", table).replace(/\s+/g, ""); if (!sql || fragments.some((fragment) => !sql.includes(fragment.toLowerCase().replace(/\s+/g, "")))) throw corrupt(); }
 function rowCount(db: DatabaseSync, table: string): number { return Number((db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count); }
 function verifyAssetsSchema(db: DatabaseSync): void { assertTableSql(db, "assets", ["unique", "check (length(sha256) = 64)", "check (width > 0", "check (height > 0", "check (json_valid(metadata_json)", "json_type(metadata_json) = 'object'"]); assertIndex(db, "assets_sha256_lookup", ["sha256"]); }
-function assertNoRetiredObjects(db: DatabaseSync): void { for (const retired of RETIRED_OBJECTS) if (tableExists(db, retired) || Boolean((db.prepare("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type IN ('index','trigger') AND name=?) AS value").get(retired) as { value: number }).value)) throw corrupt("This project contains the retired cell-attribute storage."); }
+function assertNoRetiredObjects(db: DatabaseSync): void { for (const retired of RETIRED_OBJECTS) if (tableExists(db, retired) || Boolean((db.prepare("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type IN ('index','trigger') AND name=?) AS value").get(retired) as { value: number }).value)) throw corrupt("This project contains storage from an older Realm format."); }
+function parseJson(value: unknown, label: string): unknown { try { return JSON.parse(String(value)); } catch { throw corrupt(`A project contains invalid ${label}.`); } }
+function verifyGeometryRows(db: DatabaseSync): void {
+  const transient: GridShape[] = [];
+  const regionColors = new Map<string, string>();
+  for (const row of db.prepare("SELECT id,name,color FROM regions ORDER BY id").all() as Record<string, unknown>[]) {
+    const id = String(row.id); const name = String(row.name); const color = String(row.color);
+    if (!UUID_PATTERN.test(id) || !/^#[\da-f]{6}$/iu.test(color)) throw corrupt("A region contains invalid identity or color.");
+    try { validateName(name); } catch { throw corrupt("A region contains an invalid name."); }
+    regionColors.set(id, color);
+  }
+  const foreignKeys = db.prepare("PRAGMA foreign_key_check").all();
+  if (foreignKeys.length > 0) throw corrupt("The project contains an invalid layer reference.");
+  for (const row of db.prepare("SELECT id,geometry_json AS geometryJson FROM terrain_shapes ORDER BY id").all() as Record<string, unknown>[]) transient.push({ id: String(row.id), layer: "terrain", value: "terrain", geometry: parseJson(row.geometryJson, "terrain geometry") as MapShapeGeometry });
+  for (const row of db.prepare("SELECT id,region_id AS regionId,geometry_json AS geometryJson FROM region_shapes ORDER BY id").all() as Record<string, unknown>[]) {
+    const regionId = String(row.regionId); const color = regionColors.get(regionId);
+    if (!color) throw corrupt("A region shape refers to a missing region.");
+    transient.push({ id: String(row.id), layer: "region", regionId, value: color, geometry: parseJson(row.geometryJson, "region geometry") as MapShapeGeometry });
+  }
+  try { validateMapShapes(transient.map((shape) => ({ ...shape, geometryVersion: 1, snapGridVersion: GRID_VERSION }))); } catch { throw corrupt("A terrain or region shape is invalid or overlaps another shape in its layer."); }
+  for (const row of db.prepare("SELECT id,kind,label,geometry_json AS geometryJson,properties_json AS propertiesJson,z_index AS zIndex,locked,asset_id AS assetId FROM objects ORDER BY id").all() as Record<string, unknown>[]) {
+    if (!UUID_PATTERN.test(String(row.id)) || !Number.isSafeInteger(Number(row.zIndex)) || Number(row.zIndex) < -1000000 || Number(row.zIndex) > 1000000 || ![0, 1].includes(Number(row.locked))) throw corrupt("An object contains invalid identity or ordering.");
+    try { validateName(String(row.label)); } catch { throw corrupt("An object contains an invalid label."); }
+    const kind = String(row.kind) as ObjectKind;
+    try { validateGeometry(kind === "forest" ? "forest" : kind, parseJson(row.geometryJson, "object geometry"), true); validateProperties(parseJson(row.propertiesJson, "object properties")); } catch { throw corrupt("An object contains invalid geometry or properties."); }
+    if (row.assetId !== null && row.assetId !== undefined && !UUID_PATTERN.test(String(row.assetId))) throw corrupt("An object contains an invalid asset reference.");
+  }
+}
 
 export function schemaVersion(db: DatabaseSync): number {
   const integrity = String((db.prepare("PRAGMA quick_check(1)").get() as Record<string, unknown> | undefined)?.quick_check ?? "");
@@ -112,33 +136,29 @@ export function schemaVersion(db: DatabaseSync): number {
 }
 
 export function verifyCurrentSchema(db: DatabaseSync): void {
-  if (!hasColumns(db, "schema_migrations", SCHEMA_MIGRATION_COLUMNS) || !hasColumns(db, "world", WORLD_COLUMNS) || !hasColumns(db, "features", FEATURE_COLUMNS) || !hasColumns(db, "cell_grid", CELL_GRID_COLUMNS) || !hasColumns(db, "map_shapes", MAP_SHAPE_COLUMNS) || !hasColumns(db, "assets", ASSET_COLUMNS)) throw corrupt();
-  if (rowCount(db, "world") !== 1 || rowCount(db, "cell_grid") !== 1) throw corrupt("The project must contain exactly one world record and one grid record.");
-  assertTableSql(db, "world", FULL_SETTINGS_FRAGMENTS);
-  assertTableSql(db, "features", ["check (json_valid(geometry_json)", "check (json_valid(properties_json)", "json_type(properties_json) = 'object'"]);
-  assertTableSql(db, "cell_grid", ["check (id = 1)", "check (grid_version = 2)", "check (grid_columns = 128)", "check (grid_rows = 73)"]);
-  assertTableSql(db, "map_shapes", ["check (layer in ('terrain','region'))", "check ((layer = 'terrain' and region_id is null) or (layer = 'region' and region_id is not null))", "check (geometry_version = 1)", "check (snap_grid_version = 2)", "check (json_valid(geometry_json)"]);
-  assertIndex(db, "map_shapes_layer_lookup", ["layer", "id"]);
-  assertIndex(db, "map_shapes_region_lookup", ["region_id", "id"]);
+  if (!hasColumns(db, "schema_migrations", SCHEMA_MIGRATION_COLUMNS) || !hasColumns(db, "world", WORLD_COLUMNS) || !hasColumns(db, "terrain_shapes", TERRAIN_COLUMNS) || !hasColumns(db, "regions", REGION_COLUMNS) || !hasColumns(db, "region_shapes", REGION_SHAPE_COLUMNS) || !hasColumns(db, "assets", ASSET_COLUMNS) || !hasColumns(db, "objects", OBJECT_COLUMNS)) throw corrupt();
+  if (rowCount(db, "world") !== 1) throw corrupt("The project must contain exactly one world record.");
+  // The settings constraint itself is defined in schemaSql; only its stable
+  // JSON-object guard is checked here because SQLite normalizes the long
+  // numeric expression differently across bundled SQLite builds.
+  assertTableSql(db, "world", ["check (json_valid(settings_json)", "json_type(settings_json) = 'object'"]);
+  assertTableSql(db, "terrain_shapes", ["check (json_valid(geometry_json)", "json_type(geometry_json) = 'object'"]);
+  assertTableSql(db, "regions", ["check (color glob"]);
+  assertTableSql(db, "region_shapes", ["references regions(id)", "on delete cascade", "check (json_valid(geometry_json)"]);
+  assertTableSql(db, "objects", ["check (kind in ('city','text','mountain','forest'))", "check (json_valid(geometry_json)", "check (json_valid(properties_json)", "check (z_index between", "check (locked in (0,1))"]);
+  assertIndex(db, "region_shapes_region_lookup", ["region_id", "id"]);
+  assertIndex(db, "objects_order_lookup", ["z_index", "id"]);
   verifyAssetsSchema(db);
   assertNoRetiredObjects(db);
   parseStoredSettings(String((db.prepare("SELECT settings_json FROM world LIMIT 1").get() as { settings_json: string }).settings_json));
-  const mapShapes = (db.prepare("SELECT id,layer,region_id AS regionId,value,geometry_version AS geometryVersion,snap_grid_version AS snapGridVersion,geometry_json AS geometryJson FROM map_shapes ORDER BY layer,region_id,id").all() as Record<string, unknown>[]).map((row): MapShape => {
-    let geometry: unknown;
-    try { geometry = JSON.parse(String(row.geometryJson)); } catch { throw corrupt("A map shape contains invalid JSON."); }
-    return { id: String(row.id), layer: String(row.layer) as MapShape["layer"], ...(row.regionId === null || row.regionId === undefined ? {} : { regionId: String(row.regionId) }), value: String(row.value), geometryVersion: Number(row.geometryVersion), snapGridVersion: Number(row.snapGridVersion), geometry: geometry as MapShape["geometry"] };
-  });
-  try { validateMapShapes(mapShapes); } catch { throw corrupt("A map shape is invalid or overlaps another shape."); }
+  verifyGeometryRows(db);
 }
-
 export function preflightSchema(db: DatabaseSync): number { const version = schemaVersion(db); verifyCurrentSchema(db); return version; }
-
 /** Old formats are rejected before a writable connection is opened. */
 export function migrateToCurrent(db: DatabaseSync, version: number): void {
   if (version !== CURRENT_SCHEMA_VERSION) throw new RealmError("unsupported_schema", "This project uses an unsupported Realm format and cannot be migrated.");
   verifyCurrentSchema(db);
 }
-
 export function transaction<T>(db: DatabaseSync, operation: () => T): T {
   const databaseFile = String((db.prepare("PRAGMA database_list").all()[0] as Record<string, unknown> | undefined)?.file ?? "");
   const assertCurrentPath = (): void => { if (databaseFile !== "") assertSqlitePathNotMoved(db); };

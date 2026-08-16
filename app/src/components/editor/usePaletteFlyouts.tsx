@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject, type ReactNode } from "react";
 import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
 import { Hexagon } from "@phosphor-icons/react/dist/csr/Hexagon";
 import { HandGrabbing } from "@phosphor-icons/react/dist/csr/HandGrabbing";
@@ -7,10 +7,12 @@ import { Mountains } from "@phosphor-icons/react/dist/csr/Mountains";
 import { SidebarSimple } from "@phosphor-icons/react/dist/csr/SidebarSimple";
 import packageJson from "../../../package.json";
 import { CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
-import { DEFAULT_ERASE_TARGET, ERASE_TARGETS, type EraseTarget } from "./eraseTargets";
+import type { LayerId, ObjectKind } from "../../backend";
 
 const REGION_FLYOUT_ID = "map-region-flyout";
 const ERASE_FLYOUT_ID = "map-eraser-flyout";
+const OBJECT_KINDS = ["city", "text", "mountain", "forest"] as const;
+const OBJECT_LABELS: Record<(typeof OBJECT_KINDS)[number], string> = { city: "都市", text: "テキスト", mountain: "山", forest: "森" };
 
 export const REGION_COLORS = [
   "#E45756",
@@ -27,11 +29,12 @@ export const REGION_COLORS = [
 
 export type PaletteFlyoutOptions = {
   hostRef: RefObject<HTMLDivElement | null>;
-  mode: "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "region";
+  mode: "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "region" | "erase" | ObjectKind;
+  activeLayer: LayerId;
   strokeRange?: number | undefined;
   regionColor?: string | undefined;
-  onToolChange: ((tool: "terrain" | "region" | "erase" | "grab" | "shape") => void) | undefined;
-  onEraseTargetChange: ((target: EraseTarget) => void) | undefined;
+  onToolChange: ((tool: "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void) | undefined;
+  onObjectKindChange: ((kind: ObjectKind) => void) | undefined;
   onRegionColorChange: ((color: string) => void) | undefined;
 };
 
@@ -44,11 +47,8 @@ export type PaletteFlyoutState = {
 };
 
 /** Owns the collapsible left tool sidebar, icon rail, and inline/flyout controls. */
-export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANGE_MIN, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
+export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CELL_PAINT_RANGE_MIN, regionColor, onToolChange, onObjectKindChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
   const paletteRef = useRef<HTMLElement>(null);
-  const eraserTargetButtonsRef = useRef<HTMLDivElement>(null);
-  const eraserTargetPillRef = useRef<HTMLSpanElement>(null);
-  const [eraseTarget, setEraseTarget] = useState<EraseTarget>(DEFAULT_ERASE_TARGET);
   const [eraseFlyoutOpen, setEraseFlyoutOpen] = useState(false);
   const [regionFlyoutOpen, setRegionFlyoutOpen] = useState(false);
   const [localRegionColor, setLocalRegionColor] = useState("#7A6FA8");
@@ -84,17 +84,9 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
     };
   }, [eraseFlyoutOpen, hostRef, regionFlyoutOpen]);
 
-  useLayoutEffect(() => {
-    const buttons = eraserTargetButtonsRef.current;
-    const pill = eraserTargetPillRef.current;
-    const activeButton = buttons?.querySelector<HTMLButtonElement>('[aria-pressed="true"]');
-    if (!pill || !activeButton) return;
-    pill.style.left = `${activeButton.offsetLeft}px`;
-    pill.style.width = `${activeButton.offsetWidth}px`;
-  }, [eraseFlyoutOpen, eraseTarget, sidebarOpen]);
-
+  const layerLabel = activeLayer === "terrain" ? "地形" : activeLayer === "region" ? "領域" : "オブジェクト";
   const selectPaintTool = (event: ReactMouseEvent<HTMLButtonElement>): void => {
-    onToolChange?.("terrain");
+    onToolChange?.(activeLayer === "terrain" ? "terrain" : activeLayer === "region" ? "region" : "object");
     closeFlyouts();
     event.stopPropagation();
   };
@@ -111,12 +103,6 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
     setEraseFlyoutOpen((current) => sidebarOpen || !current);
     setRegionFlyoutOpen(false);
     event.stopPropagation();
-  };
-
-  const selectEraseTarget = (target: EraseTarget): void => {
-    onToolChange?.("erase");
-    setEraseTarget(target);
-    onEraseTargetChange?.(target);
   };
 
   const selectSimpleTool = (tool: "grab" | "shape"): void => {
@@ -152,7 +138,7 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
       </div>
       <div className="tool-sidebar-body">
         <div className="tool-sidebar-tools" role="toolbar" aria-label="地図ツール">
-          <div className="tool-sidebar-item">
+          {activeLayer === "terrain" ? <div className="tool-sidebar-item">
             <button
               className={`tool-sidebar-button${mode === "cell-select" ? " is-active" : ""}`}
               type="button"
@@ -164,22 +150,22 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
               <Mountains aria-hidden="true" size={17} weight="bold" />
               <span className="tool-sidebar-button-label">地形を描く</span>
             </button>
-          </div>
+          </div> : null}
 
-          <div className="tool-sidebar-item">
+          {activeLayer === "region" ? <div className="tool-sidebar-item">
             <button
               className={`tool-sidebar-button${mode === "cell-region" || mode === "region" ? " is-active" : ""}`}
               type="button"
-              aria-label="領域"
+              aria-label="領域を描く"
               aria-pressed={mode === "cell-region" || mode === "region"}
               aria-haspopup={sidebarOpen ? undefined : "true"}
               aria-expanded={showRegionControls}
               aria-controls={REGION_FLYOUT_ID}
-              title="領域"
+              title="領域を描く"
               onClick={openRegionFlyout}
             >
               <Hexagon aria-hidden="true" size={17} weight="fill" color={effectiveRegionColor} />
-              <span className="tool-sidebar-button-label">領域</span>
+              <span className="tool-sidebar-button-label">領域を描く</span>
             </button>
             {showRegionControls ? (
             <div id={REGION_FLYOUT_ID} className="tool-flyout tool-flyout-region" role="group" aria-label="領域の色">
@@ -201,61 +187,69 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
               </div>
             </div>
             ) : null}
-          </div>
+          </div> : null}
+
+          {activeLayer === "object" ? <div className="tool-sidebar-item">
+            <button
+              className={`tool-sidebar-button${OBJECT_KINDS.includes(mode as ObjectKind) ? " is-active" : ""}`}
+              type="button"
+              aria-label="オブジェクトを配置"
+              aria-pressed={OBJECT_KINDS.includes(mode as ObjectKind)}
+              title="オブジェクトを配置"
+              onClick={selectPaintTool}
+            >
+              <Mountains aria-hidden="true" size={17} weight="bold" />
+              <span className="tool-sidebar-button-label">オブジェクトを配置</span>
+            </button>
+            <div className="tool-flyout tool-flyout-region" role="group" aria-label="オブジェクト種別">
+              <span className="tool-flyout-label">配置する種類</span>
+              <div className="eraser-target-buttons" role="group" aria-label="オブジェクト種別">
+                {OBJECT_KINDS.map((kind) => <button key={kind} className="eraser-target-button" type="button" aria-label={OBJECT_LABELS[kind]} aria-pressed={mode === kind} onClick={() => { onObjectKindChange?.(kind); onToolChange?.("object"); }}><span className="eraser-target-button-label">{OBJECT_LABELS[kind]}</span></button>)}
+              </div>
+            </div>
+          </div> : null}
+
+          {activeLayer === "object" ? <div className="tool-sidebar-item">
+            <button className={`tool-sidebar-button${mode === "pan" ? " is-active" : ""}`} type="button" aria-label="オブジェクトを選択・移動" aria-pressed={mode === "pan"} title="オブジェクトを選択・移動" onClick={() => onToolChange?.("select")}>
+              <HandGrabbing aria-hidden="true" size={17} weight="bold" />
+              <span className="tool-sidebar-button-label">選択・移動</span>
+            </button>
+          </div> : null}
 
           <div className="tool-sidebar-item">
             <button
-              className={`tool-sidebar-button${mode === "cell-erase" ? " is-active" : ""}`}
+              className={`tool-sidebar-button${(mode === "cell-erase" || (activeLayer === "object" && mode === "erase")) ? " is-active" : ""}`}
               type="button"
-              aria-label="消しゴム"
-              aria-pressed={mode === "cell-erase"}
+              aria-label={`${layerLabel}消しゴム`}
+              aria-pressed={mode === "cell-erase" || (activeLayer === "object" && mode === "erase")}
               aria-haspopup={sidebarOpen ? undefined : "true"}
               aria-expanded={showEraseControls}
               aria-controls={ERASE_FLYOUT_ID}
-              title="消しゴム"
+              title={`${layerLabel}消しゴム`}
               onClick={openEraseFlyout}
             >
               <Eraser aria-hidden="true" size={17} weight="bold" />
-              <span className="tool-sidebar-button-label">消しゴム</span>
+              <span className="tool-sidebar-button-label">{layerLabel}消しゴム</span>
             </button>
             {showEraseControls ? (
             <div id={ERASE_FLYOUT_ID} className="tool-flyout tool-flyout-erase" role="group" aria-label="消しゴムの対象">
-              <div className="eraser-targets" role="group" aria-label="削除対象">
-                <span className="tool-flyout-label">削除対象</span>
-                <div ref={eraserTargetButtonsRef} className="eraser-target-buttons">
-                  <span ref={eraserTargetPillRef} className="eraser-target-pill" aria-hidden="true" />
-                  {ERASE_TARGETS.map((target) => (
-                    <button
-                      className="eraser-target-button"
-                      key={target.id}
-                      type="button"
-                      aria-label={target.label}
-                      aria-pressed={eraseTarget === target.id}
-                      title={target.label}
-                      onClick={() => selectEraseTarget(target.id)}
-                    >
-                      {target.id === "terrain" ? <Mountains aria-hidden="true" size={16} weight="bold" /> : <Hexagon aria-hidden="true" size={16} weight="fill" />}
-                      <span className="eraser-target-button-label">{target.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <div className="eraser-targets" role="status" aria-label="削除対象"><span className="tool-flyout-label">削除対象</span><strong>{layerLabel}だけ</strong></div>
             </div>
             ) : null}
           </div>
 
-          <div className="tool-sidebar-item">
+          {activeLayer !== "object" ? <div className="tool-sidebar-item">
             <button className={`tool-sidebar-button${mode === "grab" ? " is-active" : ""}`} type="button" aria-label="グラブ" aria-pressed={mode === "grab"} title="グラブ" onClick={() => selectSimpleTool("grab")}>
               <HandGrabbing aria-hidden="true" size={17} weight="bold" />
               <span className="tool-sidebar-button-label">グラブ</span>
             </button>
-          </div>
-          <div className="tool-sidebar-item">
+          </div> : null}
+          {activeLayer !== "object" ? <div className="tool-sidebar-item">
             <button className={`tool-sidebar-button${mode === "shape" ? " is-active" : ""}`} type="button" aria-label="シェイピング" aria-pressed={mode === "shape"} title="シェイピング" onClick={() => selectSimpleTool("shape")}>
               <Magnet aria-hidden="true" size={17} weight="bold" />
               <span className="tool-sidebar-button-label">シェイピング</span>
             </button>
-          </div>
+          </div> : null}
         </div>
         <p className="tool-sidebar-help">開いたサイドバーではツール名と調整項目を表示します。閉じたときはアイコンから開けます。</p>
       </div>

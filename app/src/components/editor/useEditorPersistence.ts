@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { errorMessage, type MapShape, type RealmBackend, type RealmSnapshot } from "../../backend";
+import { errorMessage, type LayerId, type MapShape, type RealmBackend, type RealmSnapshot, type Region } from "../../backend";
 import { normalizeMapShapes } from "../../shared/mapShapeGeometry";
 
 type RunOptions = {
@@ -9,14 +9,30 @@ type RunOptions = {
 
 type CommitMapShapesOptions = {
   normalize?: boolean;
+  layer?: Exclude<LayerId, "object">;
 };
 
 type PendingMapShapeSave = {
   identity: string;
   generation: number;
   shapes: MapShape[];
+  layer: Exclude<LayerId, "object">;
+  regions: Region[];
   fallback: string;
 };
+
+function regionLayerFromShapes(shapes: readonly MapShape[], existing: readonly Region[]): Region[] {
+  const byId = new Map(existing.map((region) => [region.id, region]));
+  const result = new Map<string, Region>();
+  for (const shape of shapes) {
+    if (shape.layer !== "region" || !shape.regionId) continue;
+    const current = result.get(shape.regionId) ?? byId.get(shape.regionId);
+    const region = current ? { id: current.id, name: current.name, color: shape.value || current.color, shapes: [...current.shapes] } : { id: shape.regionId, name: "領域", color: shape.value, shapes: [] };
+    region.shapes = [...region.shapes.filter((candidate) => candidate.id !== shape.id), { id: shape.id, geometry: shape.geometry }];
+    result.set(region.id, region);
+  }
+  return [...result.values()].map((region) => ({ ...region, shapes: region.shapes.map((shape) => ({ id: shape.id, geometry: shape.geometry })) }));
+}
 
 export type EditorPersistenceOptions = {
   snapshot: RealmSnapshot;
@@ -106,7 +122,9 @@ export function useEditorPersistence({
           && viewedIdentity.current === pending.identity
           && mapShapeSaveGeneration.current === pending.generation;
         try {
-          const next = await backend.updateMapShapes({ shapes: pending.shapes });
+          const next = await enqueueSerial(commandTail, () => pending.layer === "terrain"
+            ? backend.replaceTerrainLayer({ shapes: pending.shapes.filter((shape) => shape.layer === "terrain").map(({ id, geometry }) => ({ id, geometry })) })
+            : backend.replaceRegionLayer({ regions: pending.regions }));
           if (!isLatest()) continue;
           setViewedSnapshot(next);
           // The optimistic state is already visible. Avoid replacing it with
@@ -173,11 +191,13 @@ export function useEditorPersistence({
     const identity = viewedIdentity.current;
     const generation = mapShapeSaveGeneration.current + 1;
     mapShapeSaveGeneration.current = generation;
-    mapShapeSavePending.current = { identity, generation, shapes, fallback };
+    const layer = options.layer ?? "terrain";
+    const regions = layer === "region" ? regionLayerFromShapes(shapes, viewedSnapshot.layers.regions) : [];
+    mapShapeSavePending.current = { identity, generation, shapes, layer, regions, fallback };
     setError(null);
     setMapShapes(shapes);
     void flushMapShapeSaves();
-  }, [busy, flushMapShapeSaves, operating]);
+  }, [busy, flushMapShapeSaves, operating, viewedSnapshot.layers.regions]);
 
   return {
     viewedSnapshot,

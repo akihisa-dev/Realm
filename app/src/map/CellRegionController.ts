@@ -5,6 +5,7 @@ import type { CellAttributeSnapshot } from "../backend";
 import { CellRegionAnimator } from "./CellRegionAnimator";
 import { createCellRegionDraw } from "./cellRegionDrawing";
 import type { MapErrorCode } from "./errors";
+import { cellAttributeLayer } from "../shared/realmContract";
 
 type CellAttributesById = ReadonlyMap<string, readonly CellAttributeSnapshot[]>;
 
@@ -32,8 +33,8 @@ export class CellRegionController {
   animateChanges(previous: CellAttributesById, next: CellAttributesById, getFeature: (id: string) => Feature | undefined): void {
     const changed = [...next.entries()]
       .filter(([id, values]) => {
-        const after = values.find(({ attribute }) => attribute === "region")?.value;
-        const before = previous.get(id)?.find(({ attribute }) => attribute === "region")?.value;
+        const after = values.find((attribute) => cellAttributeLayer(attribute) === "region")?.value;
+        const before = previous.get(id)?.find((attribute) => cellAttributeLayer(attribute) === "region")?.value;
         return after !== undefined && after !== before;
       })
       .map(([id]) => getFeature(id))

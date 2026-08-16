@@ -17,15 +17,15 @@ export type MigrationRequirement = {
 
 export const migrationInventory = [
   {
-    id: "schema11-shape-storage",
+    id: "schema12-layer-storage",
     area: "storage",
-    observable: "Schema versions 3 through 10 are rejected without mutation; schema 11 stores continuous grid-snapped map shapes.",
+    observable: "Schema versions before 12 are rejected without mutation; schema 12 stores terrain, region, and object layers in separate tables.",
     baselineEvidence: [
       "schema_11_creates_map_shapes_without_cell_attributes",
       "schema_11_round_trips_polygon_geometry_and_shape_ids",
       "legacy_schema_rejection_preserves_source_bytes",
     ],
-    electronSuite: "migration-tests/electronStorage.test.ts :: rejects each synthetic v%d source without mutation",
+    electronSuite: "migration-tests/electronStorage.test.ts :: creates, mutates, reopens and restores one undoable current-state transaction",
   },
   {
     id: "schema-rejection",
@@ -89,7 +89,7 @@ export const migrationInventory = [
   {
     id: "migration-rollback",
     area: "storage",
-    observable: "Legacy schema rejection preserves every source byte; current Polygon replacements roll back transactionally.",
+    observable: "Legacy schema rejection preserves every source byte; current layer replacements roll back transactionally.",
     baselineEvidence: [
       "unsupported_schema_rejection_preserves_source_bytes",
       "shape_replacement_rolls_back_when_sqlite_rejects_map_shapes",
@@ -99,7 +99,7 @@ export const migrationInventory = [
   {
     id: "crud-transaction",
     area: "storage",
-    observable: "Feature/shape/asset CRUD batches validate before writing and commit as one transaction.",
+    observable: "Object/shape/asset CRUD batches validate before writing and commit as one transaction.",
     baselineEvidence: [
       "static_feature_crud_reopen_and_undo_redo",
       "feature_batch_is_one_transaction_and_one_undo_step",
@@ -107,7 +107,7 @@ export const migrationInventory = [
       "static_map_shapes_round_trip_and_undo",
       "embedded_asset_import_read_delete_and_undo_are_transactional",
     ],
-    electronSuite: "migration-tests/storageParity.test.ts :: rolls back feature, Polygon-shape, and asset writes when SQLite rejects a transaction",
+    electronSuite: "migration-tests/storageParity.test.ts :: rolls back object, Polygon-shape, and asset writes when SQLite rejects a transaction",
   },
   {
     id: "undo-redo",

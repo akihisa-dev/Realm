@@ -6,6 +6,7 @@ import VectorSource from "ol/source/Vector";
 import type { CellAttributeSnapshot, MapShape, Position } from "../backend";
 import { connectedCellComponents } from "./regionGrab";
 import { mapShapeCellIds } from "../shared/mapShapeGeometry";
+import { cellAttributeLayer } from "../shared/realmContract";
 import { exactCellBoundaryPolygons, exactCellBoundaryRings, smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments, terrainCellCenters } from "./terrainOutline";
 
 export const cloneMapShapes = (shapes: readonly MapShape[]): MapShape[] => shapes.map((shape) => ({
@@ -130,7 +131,7 @@ export const renderTransientCellGeometry = ({
   renderShapes = true,
 }: RenderTransientCellGeometryOptions): Set<string> => {
   const terrainCellIds = [...attributes.entries()]
-    .filter(([, values]) => values.some(({ attribute }) => attribute === "terrain"))
+    .filter(([, values]) => values.some((attribute) => cellAttributeLayer(attribute) === "terrain"))
     .map(([id]) => id);
   const grid = splitTerrainGridSegments(fixedCellGridLines, terrainCellIds);
   cellGridSource.clear();
@@ -145,7 +146,7 @@ export const renderTransientCellGeometry = ({
     regionSmoothSource.clear();
     const regionIdsByIdentity = new globalThis.Map<string, { color: string; ids: string[]; identity: string }>();
     for (const [id, values] of attributes) {
-      const region = values.find(({ attribute }) => attribute === "region");
+      const region = values.find((attribute) => cellAttributeLayer(attribute) === "region");
       if (!region) continue;
       const color = /^#[\da-f]{6}$/i.test(region.value) ? region.value.toUpperCase() : regionFallbackColor;
       const identity = region.regionId ?? region.value;

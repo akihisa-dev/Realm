@@ -651,7 +651,14 @@ const groupsFromShapes = (shapes: readonly MapShape[]): CellGroup[] => {
 
 export const deriveMapGridCells = (shapes: readonly MapShape[]) => groupsFromShapes(shapes)
   .sort((first, second) => (first.layer === second.layer ? (first.regionId ?? "").localeCompare(second.regionId ?? "") || first.value.localeCompare(second.value) : first.layer === "terrain" ? -1 : 1))
-  .flatMap((group) => [...group.cells].sort().map((cellIdValue) => ({ cellId: cellIdValue, attribute: group.layer, value: group.value, ...(group.regionId ? { regionId: group.regionId } : {}) })));
+  .flatMap((group) => [...group.cells].sort().map((cellIdValue) => ({
+    cellId: cellIdValue,
+    layer: group.layer,
+    /** @deprecated Keep the renderer projection available to old adapters. */
+    attribute: group.layer,
+    value: group.value,
+    ...(group.regionId ? { regionId: group.regionId } : {}),
+  })));
 
 export type MapGridSelectionInput = { cellIds: readonly string[]; layer: "terrain" | "region"; value: string | null; regionId?: string; clearRegion?: boolean };
 export const applyGridSelectionToMapShapes = (shapes: readonly MapShape[], input: MapGridSelectionInput): MapShape[] => {

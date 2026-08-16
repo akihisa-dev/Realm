@@ -1,4 +1,5 @@
 import type { CellAttributeSnapshot, Position } from "../backend";
+import { cellAttributeLayer } from "../shared/realmContract";
 import { CELL_GRID_COLUMNS, CELL_GRID_ROWS, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
 
 type Axial = [number, number];
@@ -39,7 +40,7 @@ export const connectedCellComponents = (cellIds: Iterable<string>): string[][] =
 };
 export const connectedRegionCells = (startId: string, attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>): string[] => {
   const values = new Map<string, string>();
-  for (const [id, items] of attributes) { const region = items.find((item) => item.attribute === "region"); if (region) values.set(id, region.regionId ?? region.value); }
+  for (const [id, items] of attributes) { const region = items.find((item) => cellAttributeLayer(item) === "region"); if (region) values.set(id, region.regionId ?? region.value); }
   const identity = values.get(startId); if (identity === undefined) return [];
   return connectedCellComponents([...values.entries()].filter(([, value]) => value === identity).map(([id]) => id)
   ).find((component) => component.includes(startId)) ?? [];
@@ -47,7 +48,7 @@ export const connectedRegionCells = (startId: string, attributes: ReadonlyMap<st
 /** Returns the six-connected terrain mass containing the start cell. */
 export const connectedTerrainCells = (startId: string, attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>): string[] => {
   const terrainIds = [...attributes.entries()]
-    .filter(([, items]) => items.some((item) => item.attribute === "terrain"))
+    .filter(([, items]) => items.some((item) => cellAttributeLayer(item) === "terrain"))
     .map(([id]) => id);
   return connectedCellComponents(terrainIds).find((component) => component.includes(startId)) ?? [];
 };
@@ -56,7 +57,7 @@ export const sameRegionCells = (startId: string, attributes: ReadonlyMap<string,
   let identity: string | undefined;
   const values: Array<[string, string]> = [];
   for (const [id, items] of attributes) {
-    const region = items.find((item) => item.attribute === "region");
+    const region = items.find((item) => cellAttributeLayer(item) === "region");
     if (id === startId && region) identity = region.regionId ?? region.value;
     if (region) values.push([id, region.regionId ?? region.value]);
   }
@@ -113,17 +114,17 @@ const boundaryDistance = (
   const polygon = cellPolygon(parsed[0], parsed[1]);
   if (!polygon) return Number.POSITIVE_INFINITY;
   const values = attributes.get(cell) ?? [];
-  const region = values.find((item) => item.attribute === "region");
-  const hasTerrain = values.some((item) => item.attribute === "terrain");
+  const region = values.find((item) => cellAttributeLayer(item) === "region");
+  const hasTerrain = values.some((item) => cellAttributeLayer(item) === "terrain");
   if ((attribute === "region" && !region) || (attribute === "terrain" && !hasTerrain)) return Number.POSITIVE_INFINITY;
   const identity = region ? region.regionId ?? region.value : null;
   let nearest = Number.POSITIVE_INFINITY;
   for (const edge of polygonEdges(polygon)) {
     const neighbor = neighborForEdge(cell, edge);
     const neighborValues = neighbor ? attributes.get(neighbor) ?? [] : [];
-    const neighborRegion = neighborValues.find((item) => item.attribute === "region");
+    const neighborRegion = neighborValues.find((item) => cellAttributeLayer(item) === "region");
     const isBoundary = attribute === "terrain"
-      ? !neighborValues.some((item) => item.attribute === "terrain")
+      ? !neighborValues.some((item) => cellAttributeLayer(item) === "terrain")
       : !neighborRegion || (neighborRegion.regionId ?? neighborRegion.value) !== identity;
     if (isBoundary) nearest = Math.min(nearest, squaredDistanceToSegment(position, edge[0], edge[1]));
   }
@@ -152,9 +153,9 @@ export const resizableCellIdsAt = (
   const candidates = [...new Set(candidateIds)];
   for (const id of candidates) {
     const values = attributes.get(id) ?? [];
-    const region = values.find((item) => item.attribute === "region");
+    const region = values.find((item) => cellAttributeLayer(item) === "region");
     const regionDistance = region ? boundaryDistance(position, id, "region", attributes) : Number.POSITIVE_INFINITY;
-    const terrainDistance = values.some((item) => item.attribute === "terrain") ? boundaryDistance(position, id, "terrain", attributes) : Number.POSITIVE_INFINITY;
+    const terrainDistance = values.some((item) => cellAttributeLayer(item) === "terrain") ? boundaryDistance(position, id, "terrain", attributes) : Number.POSITIVE_INFINITY;
     const distance = Math.min(regionDistance, terrainDistance);
     if (distance <= boundaryHitToleranceSquared(id)) result.set(id, distance);
   }
@@ -163,10 +164,10 @@ export const resizableCellIdsAt = (
     const parsed = parseCellId(interiorCellId);
     const values = attributes.get(interiorCellId) ?? [];
     if (parsed && values.length > 0) {
-      const region = values.find((item) => item.attribute === "region");
+      const region = values.find((item) => cellAttributeLayer(item) === "region");
       const hasRegionBoundary = region !== undefined
         && isRegionBoundaryCell(interiorCellId, connectedRegionCells(interiorCellId, attributes));
-      const hasTerrainBoundary = values.some((item) => item.attribute === "terrain")
+      const hasTerrainBoundary = values.some((item) => cellAttributeLayer(item) === "terrain")
         && isRegionBoundaryCell(interiorCellId, connectedTerrainCells(interiorCellId, attributes));
       // Explicit grab mode accepts a press anywhere inside a visible boundary
       // cell, but never turns an interior cell into a fake resize handle.
@@ -184,5 +185,5 @@ export const translateRegionCells = (sourceIds: readonly string[], sourceAnchor:
   return translated.every((id): id is string => id !== null) ? translated : null;
 };
 export const clipRegionCellsToTerrain = (cellIds: readonly string[], attributes: ReadonlyMap<string, readonly CellAttributeSnapshot[]>): string[] =>
-  cellIds.filter((id) => attributes.get(id)?.some((item) => item.attribute === "terrain") === true);
+  cellIds.filter((id) => attributes.get(id)?.some((item) => cellAttributeLayer(item) === "terrain") === true);
 export const sameCellSet = (left: readonly string[], right: readonly string[]): boolean => left.length === right.length && right.every((id) => new Set(left).has(id));

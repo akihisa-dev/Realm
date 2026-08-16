@@ -20,6 +20,31 @@ import CircleStyle from "ol/style/Circle";
 import Style from "ol/style/Style";
 
 describe("RealmMapAdapter", () => {
+  it("limits primary editing and selection to the active layer", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    adapter.setFeatures([{ id: "city-1", featureType: "city", name: "City", geometry: { type: "Point", coordinates: [1, 2] } }]);
+    const selection = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof SelectModule.default) as SelectModule.default;
+
+    adapter.setActiveLayer("terrain");
+    adapter.setMode("city");
+    expect(adapter.getMap().getInteractions().getArray().some((interaction) => interaction instanceof Draw)).toBe(false);
+    adapter.setSelected("city-1");
+    expect(selection.getFeatures().getLength()).toBe(0);
+
+    adapter.setActiveLayer("object");
+    adapter.setMode("city");
+    expect(adapter.getMap().getInteractions().getArray().some((interaction) => interaction instanceof Draw)).toBe(true);
+    adapter.setSelected("city-1");
+    expect(selection.getFeatures().getLength()).toBe(1);
+
+    adapter.setActiveLayer("region");
+    expect(selection.getFeatures().getLength()).toBe(0);
+    adapter.dispose();
+    host.remove();
+  });
+
   it("does not select a fixed-grid cell whose center lies outside the world", () => {
     const center = cellCenter(30, 127);
     expect(cellPolygon(30, 127)).not.toBeNull();

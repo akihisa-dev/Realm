@@ -29,21 +29,34 @@ type MapLayerRegistryOptions = {
  * visual resource itself.
  */
 export class MapLayerRegistry {
-  readonly featureSource = new VectorSource({ wrapX: false });
+  /** Canonical persisted render layers.  These are intentionally separate. */
+  readonly terrainSource = new VectorSource({ wrapX: false });
+  readonly regionSource = new VectorSource({ wrapX: false });
+  readonly objectSource = new VectorSource({ wrapX: false });
+  /** @deprecated Renderer callers still use the old projection name. */
+  readonly featureSource = this.objectSource;
   readonly cellSource = new VectorSource({ wrapX: false });
   readonly terrainOutlineSource = new VectorSource({ wrapX: false });
-  readonly terrainSmoothSource = new VectorSource({ wrapX: false });
-  readonly regionSmoothSource = new VectorSource({ wrapX: false });
+  /** @deprecated The smooth names describe presentation, not ownership. */
+  readonly terrainSmoothSource = this.terrainSource;
+  /** @deprecated The smooth names describe presentation, not ownership. */
+  readonly regionSmoothSource = this.regionSource;
   readonly cellGridSource = new VectorSource({ wrapX: false });
   readonly terrainCellGridSource = new VectorSource({ wrapX: false });
   readonly gridSource = new VectorSource({ wrapX: false });
 
   readonly featureStyle: ReturnType<typeof createFeatureStyle>;
   readonly cellStyle: ReturnType<typeof createCellStyle>;
+  readonly terrainLayer: VectorLayer;
+  readonly regionLayer: VectorLayer;
+  readonly objectLayer: VectorLayer;
+  /** @deprecated Renderer callers still use the old projection name. */
   readonly featureLayer: VectorLayer;
   readonly cellLayer: VectorLayer;
   readonly terrainOutlineLayer: VectorLayer;
+  /** @deprecated The smooth names describe presentation, not ownership. */
   readonly terrainSmoothLayer: VectorLayer;
+  /** @deprecated The smooth names describe presentation, not ownership. */
   readonly regionSmoothLayer: VectorLayer;
   readonly cellGridLayer: VectorLayer;
   readonly terrainCellGridLayer: VectorLayer;
@@ -80,7 +93,8 @@ export class MapLayerRegistry {
       fill: new Fill({ color: colorWithOpacity(DEFAULT_CELL_GRID_OPTIONS.color, TERRAIN_GRID_OPACITY) }),
     });
 
-    this.featureLayer = new VectorLayer({ source: this.featureSource, style: this.featureStyle });
+    this.objectLayer = new VectorLayer({ source: this.objectSource, style: this.featureStyle, visible: true, zIndex: 20 });
+    this.featureLayer = this.objectLayer;
     this.cellLayer = new VectorLayer({ source: this.cellSource, style: this.cellStyle, visible: true });
     this.terrainOutlineLayer = new VectorLayer({
       source: this.terrainOutlineSource,
@@ -105,8 +119,10 @@ export class MapLayerRegistry {
         const preview = this.presentationPreview;
         return new Style({ fill: new Fill({ color: colorWithOpacity(color, 0.2) }), stroke: new Stroke({ color: colorWithOpacity(color, 0.78), width: preview ? 1.1 : 1, lineJoin: preview ? "round" : "miter", lineCap: preview ? "round" : "butt" }) });
       },
-      zIndex: 6,
+      zIndex: 10,
     });
+    this.terrainLayer = this.terrainSmoothLayer;
+    this.regionLayer = this.regionSmoothLayer;
     this.cellGridSource.addFeature(new Feature({ geometry: new MultiLineString(this.fixedCellGridLines) }));
     this.cellGridLayer = new VectorLayer({
       source: this.cellGridSource,
