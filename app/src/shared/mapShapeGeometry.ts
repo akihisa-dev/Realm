@@ -294,6 +294,42 @@ const movedResizeAnchorCells = (original: MapShapeGeometry, preview: MapShapeGeo
 };
 
 /**
+ * Returns a bounded bridge corridor for a continuous preview.  A cell-center
+ * sample can leave gaps along a long, narrow pull; the bridge may fill those
+ * gaps, but it must remain inside the preview's local extent instead of
+ * searching through the entire world grid.
+ */
+const cellsWithinGeometryBounds = (geometry: MapShapeGeometry): Set<string> => {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const ring of geometry.coordinates) {
+    for (const [x, y] of ring) {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) return new Set();
+  const padding = radius * 1.5;
+  minX -= padding;
+  maxX += padding;
+  minY -= padding;
+  maxY += padding;
+  const cells = new Set<string>();
+  for (let row = 0; row < MAP_SHAPE_GRID_ROWS; row += 1) {
+    for (let column = 0; column < MAP_SHAPE_GRID_COLUMNS; column += 1) {
+      const [x, y] = mapShapeCellCenter({ row, column });
+      if (x >= minX && x <= maxX && y >= minY && y <= maxY) cells.add(`${column}:${row}`);
+    }
+  }
+  return cells;
+};
+
+/**
  * Normalizes a boundary pull while retaining the original surface as the
  * continuity anchor. A narrow, long preview can contain cell centers at both
  * ends without containing any center between them, so plain center sampling
@@ -310,19 +346,25 @@ export const normalizeResizedMapShapeGeometry = (
 
   const isExpansion = Math.abs(ringArea(preview.coordinates[0] ?? [])) >= Math.abs(ringArea(original.coordinates[0] ?? []));
   const cells = isExpansion
-    ? connectCellComponents(new Set([
-      ...originalCells,
-      ...previewCells,
-      ...movedResizeAnchorCells(original, preview),
-    ]))
+    ? (() => {
+      const candidateCells = new Set([
+        ...originalCells,
+        ...previewCells,
+        ...movedResizeAnchorCells(original, preview),
+      ]);
+      const bridgeCorridor = cellsWithinGeometryBounds(preview);
+      return connectCellComponents(candidateCells, new Set([...candidateCells, ...bridgeCorridor]));
+    })()
     : (() => {
       const remaining = new Set([...originalCells].filter((cell) => previewCells.has(cell)));
       const components = connectedComponents(remaining);
-      return components.sort((left, right) => {
-        const leftOverlap = [...left].filter((cell) => originalCells.has(cell)).length;
-        const rightOverlap = [...right].filter((cell) => originalCells.has(cell)).length;
-        return rightOverlap - leftOverlap || [...left].sort().join().localeCompare([...right].sort().join());
-      })[0] ?? new Set<string>();
+      // A boundary pull must not silently delete a detached part that was
+      // unrelated to the pulled edge.  The current map-shape edit contract
+      // emits one replacement for one source shape, so preserve the source
+      // unchanged when this contraction would split it instead of choosing
+      // the largest component and discarding the rest.
+      if (components.length > 1) return originalCells;
+      return components[0] ?? new Set<string>();
     })();
   if (cells.size === 0) throw new Error("形状にグリッドセルがありません。");
   return cellIdsToPolygonGeometries(cells);
@@ -539,7 +581,7 @@ const connectedComponents = (cells: Set<string>): Set<string>[] => {
   return components;
 };
 
-const connectCellComponents = (cells: Set<string>): Set<string> => {
+const connectCellComponents = (cells: Set<string>, allowedCells: ReadonlySet<string> = cells): Set<string> => {
   let connected = new Set(cells);
   while (true) {
     const components = connectedComponents(connected);
@@ -555,6 +597,7 @@ const connectCellComponents = (cells: Set<string>): Set<string> => {
       if (!parsed) continue;
       for (const neighbor of componentNeighbors(parsed).sort((left, right) => cellId(left).localeCompare(cellId(right)))) {
         const neighborId = cellId(neighbor);
+        if (!allowedCells.has(neighborId)) continue;
         if (parent.has(neighborId)) continue;
         parent.set(neighborId, current);
         queue.push(neighborId);

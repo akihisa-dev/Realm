@@ -75,6 +75,20 @@ describe("grid-snapped continuous map shapes", () => {
     expect(mapShapeCellIds({ geometry: normalized[0]! })).toEqual(new Set(["30:30"]));
   });
 
+  it("keeps a long vertex pull on the side of the moved boundary", () => {
+    const original = terrain(["30:30", "31:30", "32:30", "30:31", "31:31", "32:31", "30:32", "31:32", "32:32"]);
+    const ring = original.geometry.coordinates[0]!;
+    const preview = resizeMapShapeGeometry(original.geometry, { kind: "vertex", ringIndex: 0, vertexIndex: 0, distance: 0 }, ring[0]!, [ring[0]![0] + 8, ring[0]![1] + 8]);
+    const normalized = normalizeResizedMapShapeGeometry(original.geometry, preview);
+    const cells = mapShapeCellIds({ geometry: normalized[0]! });
+
+    for (const cell of ["30:30", "31:30", "32:30", "30:31", "31:31", "32:31", "30:32", "31:32", "32:32"]) expect(cells).toContain(cell);
+    expect(cells).toContain("35:35");
+    expect(cells).not.toContain("29:29");
+    expect(cells).not.toContain("29:30");
+    expect(cells).not.toContain("30:29");
+  });
+
   it("stores one Polygon for one connected surface and reconstructs transient cells", () => {
     const shape = terrain(["1:1", "2:1"]);
     validateMapShapes([shape]);
