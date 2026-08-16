@@ -176,7 +176,7 @@ export const migrationInventory = [
     baselineEvidence: [
       "MapAdapter pointer-exit/external-release/lost-capture/blur cancellation",
       "MapAdapter wheel zoom and middle- and right-button drag pan",
-      "MapAdapter fit recomputation on resize",
+      "MapAdapter grid-fill recomputation on resize",
       "MapAdapter listener cleanup and idempotent disposal",
     ],
     electronSuite: "migration-tests/renderer-lifecycle",

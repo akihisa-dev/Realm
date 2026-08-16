@@ -12,6 +12,17 @@ export const resolutionForFittingExtent = (extent: readonly [number, number, num
   return Math.max(extentWidth / width, extentHeight / height);
 };
 
+/** Returns the resolution needed to fill the viewport with the complete extent.
+ * The shorter dimension is covered and the opposite edge may be outside the viewport.
+ */
+export const resolutionForFillingExtent = (extent: readonly [number, number, number, number], size: readonly [number, number]): number => {
+  const [width, height] = size;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return Number.NaN;
+  const extentWidth = extent[2] - extent[0]; const extentHeight = extent[3] - extent[1];
+  if (!Number.isFinite(extentWidth) || !Number.isFinite(extentHeight) || extentWidth <= 0 || extentHeight <= 0) return Number.NaN;
+  return Math.min(extentWidth / width, extentHeight / height);
+};
+
 export const snapFinalGeometry = (geometry: GeoJsonGeometry, stepDegrees: number): GeoJsonGeometry => {
   if (geometry.type === "Point") return geometry;
   if (geometry.type === "LineString") {

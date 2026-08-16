@@ -41,7 +41,7 @@ import { RegionShapeController } from "./RegionShapeController";
 import { GrabHoverController } from "./GrabHoverController";
 import { cloneMapShapes, renderCanonicalMapShapes, renderTransientCellGeometry } from "./mapShapeRendering";
 import { hitTestMapShapes } from "../shared/mapShapeGeometry";
-import { nudgeGeometry, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
+import { nudgeGeometry, resolutionForFillingExtent, resolutionForFittingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
 import { colorWithOpacity, DEFAULT_CELL_GRID_OPTIONS, OUTSIDE_GRID_LINE_DASH, OUTSIDE_GRID_OPACITY, TERRAIN_GRID_OPACITY, terrainGridDotRadius } from "./mapAdapterPresentation";
 import { MiddleButtonDragPan, MiddleButtonSafeDraw } from "./middleButtonPan";
 import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
@@ -51,6 +51,7 @@ export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
 export { selectFeatureIdsWithinLasso } from "./lassoSelection";
 export { resolutionForFittingExtent } from "./mapAdapterGeometry";
+export { resolutionForFillingExtent } from "./mapAdapterGeometry";
 const MAX_LASSO_POINTS = 4096;
 class CancelablePointerInteraction extends PointerInteraction {
   cancelSequence(): void {
@@ -1112,7 +1113,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     // same dimensions here so the relative minimum zoom and rendered extent
     // stay aligned when the canvas is resized or zoomed out.
     const viewportSize: [number, number] = [width, height];
-    const fitResolution = resolutionForFittingExtent(this.worldExtent, viewportSize);
+    const fitResolution = resolutionForFillingExtent(this.worldExtent, viewportSize);
     if (!Number.isFinite(fitResolution)) return;
     const fitZoom = view.getZoomForResolution(fitResolution);
     if (fitZoom === undefined) return;
