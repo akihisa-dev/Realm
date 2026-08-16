@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import type { CellAttributeSnapshot, LayerId, MapShape, RealmFeature } from "../../backend";
+import type { CellAttributeSnapshot, LayerId, MapObject, MapShape } from "../../backend";
 import { canonicalValueSignature } from "../../canonicalValue";
 import type {
   CellGridOptions,
@@ -14,7 +14,7 @@ type RendererRef = { current: RealmMapRenderer | null };
 
 type RendererSyncOptions = {
   adapterRef: RendererRef;
-  features: RealmFeature[];
+  objects: MapObject[];
   activeLayer: LayerId;
   themeId: MapThemeId;
   themeOverrides: ThemeOverrides;
@@ -30,14 +30,14 @@ type RendererSyncOptions = {
   selectedCellIds: readonly string[];
   effectivePaintRadius: number;
   eraseRadius: number;
-  selectedFeatureIds: readonly string[];
+  selectedObjectIds: readonly string[];
   regionColor: string;
 };
 
 /** Synchronizes controlled React state into an existing renderer by value. */
 export function useRendererSync({
   adapterRef,
-  features,
+  objects,
   activeLayer,
   themeId,
   themeOverrides,
@@ -53,10 +53,10 @@ export function useRendererSync({
   selectedCellIds,
   effectivePaintRadius,
   eraseRadius,
-  selectedFeatureIds,
+  selectedObjectIds,
   regionColor,
 }: RendererSyncOptions): void {
-  const featuresSignature = useMemo(() => canonicalValueSignature(features), [features]);
+  const objectsSignature = useMemo(() => canonicalValueSignature(objects), [objects]);
   const themeOverridesSignature = useMemo(() => canonicalValueSignature(themeOverrides), [themeOverrides]);
   const gridOptionsSignature = useMemo(() => canonicalValueSignature(gridOptions), [gridOptions]);
   const cellGridOptionsSignature = useMemo(() => canonicalValueSignature(cellGridOptions), [cellGridOptions]);
@@ -64,9 +64,9 @@ export function useRendererSync({
   const mapShapesSignature = useMemo(() => canonicalValueSignature(mapShapes), [mapShapes]);
   const cellAttributesSignature = useMemo(() => canonicalValueSignature(cellAttributes), [cellAttributes]);
   const selectedCellIdsSignature = useMemo(() => canonicalValueSignature(selectedCellIds), [selectedCellIds]);
-  const selectedFeatureIdsSignature = useMemo(() => canonicalValueSignature(selectedFeatureIds), [selectedFeatureIds]);
+  const selectedObjectIdsSignature = useMemo(() => canonicalValueSignature(selectedObjectIds), [selectedObjectIds]);
 
-  useEffect(() => { adapterRef.current?.setFeatures(features); }, [adapterRef, featuresSignature]);
+  useEffect(() => { adapterRef.current?.setObjects(objects); }, [adapterRef, objectsSignature]);
   useEffect(() => { adapterRef.current?.setActiveLayer?.(activeLayer); }, [adapterRef, activeLayer]);
   useEffect(() => { adapterRef.current?.setTheme(themeId); }, [adapterRef, themeId]);
   useEffect(() => { adapterRef.current?.setThemeOverrides(themeOverrides); }, [adapterRef, themeOverridesSignature]);
@@ -85,5 +85,5 @@ export function useRendererSync({
   useEffect(() => { adapterRef.current?.setCellPaintRadius(effectivePaintRadius); }, [adapterRef, effectivePaintRadius]);
   useEffect(() => { adapterRef.current?.setCellEraseRadius(eraseRadius); }, [adapterRef, eraseRadius]);
   useEffect(() => { adapterRef.current?.setCellRegionColor?.(regionColor); }, [adapterRef, regionColor]);
-  useEffect(() => { adapterRef.current?.setSelectedFeatures(selectedFeatureIds); }, [adapterRef, selectedFeatureIdsSignature]);
+  useEffect(() => { adapterRef.current?.setSelectedObjects(selectedObjectIds); }, [adapterRef, selectedObjectIdsSignature]);
 }

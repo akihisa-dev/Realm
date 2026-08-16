@@ -14,7 +14,7 @@ const fixture = { objects: 96, shapes: 1 } as const;
 const samples = { warmup: 1, repetitions: 5 } as const;
 const coveredCellCount = 192;
 const cells = Array.from({ length: coveredCellCount }, (_, index) => `${index % 64}:${Math.floor(index / 64)}`);
-const terrainShape = (value = "terrain") => ({ id: "11111111-1111-4111-8111-111111111111", layer: "terrain" as const, value, geometryVersion: 1, snapGridVersion: 2, geometry: cellIdsToPolygonGeometries(cells)[0]! });
+const terrainShape = () => ({ id: "11111111-1111-4111-8111-111111111111", geometry: cellIdsToPolygonGeometries(cells)[0]! });
 const objects: MapObject[] = Array.from({ length: fixture.objects }, (_, index) => ({
   id: `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
   kind: "city" as const,
@@ -37,7 +37,7 @@ async function createFixture(directory: string): Promise<string> {
   const commands = new RealmCommands({ libraryDirectory: directory });
   const snapshot = await commands.createProject({ name: "Synthetic performance fixture" });
   await commands.replaceObjectLayer({ objects });
-  await commands.updateMapShapes({ shapes: [terrainShape()] });
+  await commands.replaceTerrainLayer({ shapes: [terrainShape()] });
   await commands.closeProject();
   return snapshot.path;
 }
@@ -59,16 +59,16 @@ async function benchmark(directory: string, seed: string): Promise<Record<Operat
   const results = {} as Record<OperationName, OperationResult>;
   results.create = await measure("create", samples.repetitions, async () => {
     const commands = new RealmCommands({ libraryDirectory: directory });
-    const start = performance.now(); const snapshot = await commands.createProject({ name: "Synthetic performance fixture" }); await commands.replaceObjectLayer({ objects }); await commands.updateMapShapes({ shapes: [terrainShape()] }); const value = elapsed(start); await commands.closeProject(); rmSync(snapshot.path, { force: true }); return value;
+    const start = performance.now(); const snapshot = await commands.createProject({ name: "Synthetic performance fixture" }); await commands.replaceObjectLayer({ objects }); await commands.replaceTerrainLayer({ shapes: [terrainShape()] }); const value = elapsed(start); await commands.closeProject(); rmSync(snapshot.path, { force: true }); return value;
   }, fixture.objects + fixture.shapes);
   results.open = await measure("open", samples.repetitions, (sample) => withCopy(directory, seed, `open-${sample}.realmmap`, async (path) => {
     const commands = new RealmCommands({ libraryDirectory: directory }); const start = performance.now(); await commands.openProject({ libraryId: basename(path, ".realmmap") }); const value = elapsed(start); await commands.closeProject(); return value;
   }), fixture.objects + fixture.shapes);
   results.read = await measure("read", samples.repetitions, (sample) => withCopy(directory, seed, `read-${sample}.realmmap`, async (path) => {
-    const commands = new RealmCommands({ libraryDirectory: directory }); await commands.openProject({ libraryId: basename(path, ".realmmap") }); const start = performance.now(); const snapshot = await commands.getOpenProject(); const value = elapsed(start); if (snapshot?.layers.objects.length !== fixture.objects || snapshot.mapShapes.length !== fixture.shapes) throw new Error("Synthetic fixture read count changed."); await commands.closeProject(); return value;
+    const commands = new RealmCommands({ libraryDirectory: directory }); await commands.openProject({ libraryId: basename(path, ".realmmap") }); const start = performance.now(); const snapshot = await commands.getOpenProject(); const value = elapsed(start); if (snapshot?.layers.objects.length !== fixture.objects || snapshot.layers.terrain.length !== fixture.shapes) throw new Error("Synthetic fixture read count changed."); await commands.closeProject(); return value;
   }), fixture.objects + fixture.shapes);
   results.terrainBatch = await measure("terrainBatch", samples.repetitions, (sample) => withCopy(directory, seed, `terrain-${sample}.realmmap`, async (path) => {
-    const commands = new RealmCommands({ libraryDirectory: directory }); await commands.openProject({ libraryId: basename(path, ".realmmap") }); const start = performance.now(); await commands.updateMapShapes({ shapes: [terrainShape()] }); const value = elapsed(start); await commands.closeProject(); return value;
+    const commands = new RealmCommands({ libraryDirectory: directory }); await commands.openProject({ libraryId: basename(path, ".realmmap") }); const start = performance.now(); await commands.replaceTerrainLayer({ shapes: [terrainShape()] }); const value = elapsed(start); await commands.closeProject(); return value;
   }), fixture.shapes);
   results.save = await measure("save", samples.repetitions, (sample) => withCopy(directory, seed, `save-${sample}.realmmap`, async (path) => {
     const commands = new RealmCommands({ libraryDirectory: directory }); await commands.openProject({ libraryId: basename(path, ".realmmap") }); const start = performance.now(); await commands.saveProject({ name: `Saved synthetic ${sample}` }); const value = elapsed(start); await commands.closeProject(); return value;

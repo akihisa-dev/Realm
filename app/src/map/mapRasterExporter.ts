@@ -10,8 +10,8 @@ type Options = {
   worldExtent: readonly number[];
   activeThemeId: MapThemeId;
   themeOverrides: ThemeOverrides;
-  selectedFeatureIds: readonly string[];
-  setSelectedFeatures: (featureIds: readonly string[]) => void;
+  selectedObjectIds: readonly string[];
+  setSelectedObjects: (objectIds: readonly string[]) => void;
   mimeType: "image/png" | "image/jpeg";
   requestedScale: number;
   extent: "viewport" | "world";
@@ -19,7 +19,7 @@ type Options = {
 };
 
 export async function exportMapRaster(options: Options): Promise<MapRaster> {
-  const { map, target, worldExtent, activeThemeId, themeOverrides, selectedFeatureIds, setSelectedFeatures, mimeType, requestedScale, extent, size } = options;
+  const { map, target, worldExtent, activeThemeId, themeOverrides, selectedObjectIds, setSelectedObjects, mimeType, requestedScale, extent, size } = options;
   const [sourceWidth = 0, sourceHeight = 0] = map.getSize() ?? [];
   const scale = Math.max(1, Math.min(4, Math.round(requestedScale)));
   const baseWidth = size?.width ?? sourceWidth;
@@ -35,7 +35,7 @@ export async function exportMapRaster(options: Options): Promise<MapRaster> {
   const view = map.getView();
   const originalCenter = view.getCenter()?.slice() as [number, number] | undefined;
   const originalResolution = view.getResolution();
-  setSelectedFeatures([]);
+  setSelectedObjects([]);
   try {
     map.setSize([width, height]);
     if (extent === "world") view.fit([...worldExtent], { size: [width, height], padding: [24 * scale, 24 * scale, 24 * scale, 24 * scale] });
@@ -65,7 +65,7 @@ export async function exportMapRaster(options: Options): Promise<MapRaster> {
     map.setSize([sourceWidth, sourceHeight]);
     if (originalResolution !== undefined) view.setResolution(originalResolution);
     if (originalCenter) view.setCenter(originalCenter);
-    setSelectedFeatures(selectedFeatureIds);
+  setSelectedObjects(selectedObjectIds);
     map.renderSync();
   }
 }

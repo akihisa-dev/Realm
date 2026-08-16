@@ -1,4 +1,4 @@
-import type { ReplaceRegionLayerInput, ReplaceTerrainLayerInput, RealmLayers, RealmSnapshot, GridShape, Region, TerrainShape } from "../../shared/realmContract";
+import type { ReplaceRegionLayerInput, ReplaceTerrainLayerInput, RealmSnapshot, GridShape, Region, TerrainShape } from "../../shared/realmContract";
 import { validateMapShapes } from "../../shared/mapShapeGeometry";
 import { invalid } from "../domain/errors";
 import { canonicalUuid } from "../domain/identifiers";
@@ -69,19 +69,4 @@ export function replaceRegionLayer(getSession: () => OpenProjectSession, input: 
   const before = captureState(session.database);
   transaction(session.database, () => insertRegions(session, regions));
   session.checkpoint(before, "replace-region-layer"); return projectSnapshot(session);
-}
-
-/** Compatibility adapter for the retired combined map-shape API. */
-export function replaceTerrainAndRegionLayers(getSession: () => OpenProjectSession, layers: Pick<RealmLayers, "terrain" | "regions">): RealmSnapshot {
-  const terrain = prepareTerrain(layers.terrain);
-  const regions = prepareRegions(layers.regions);
-  const session = getSession();
-  validateLayers(terrain, regions);
-  const before = captureState(session.database);
-  transaction(session.database, () => {
-    insertTerrain(session, terrain);
-    insertRegions(session, regions);
-  });
-  session.checkpoint(before, "replace-terrain-region-layers");
-  return projectSnapshot(session);
 }

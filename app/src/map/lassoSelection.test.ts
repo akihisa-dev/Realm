@@ -1,8 +1,8 @@
-import { selectFeatureIdsWithinLasso } from "./lassoSelection";
+import { selectObjectIdsWithinLasso } from "./lassoSelection";
 
-describe("selectFeatureIdsWithinLasso", () => {
+describe("selectObjectIdsWithinLasso", () => {
   it("selects contained points and crossing lines without requiring a closed input ring", () => {
-    expect(selectFeatureIdsWithinLasso([
+    expect(selectObjectIdsWithinLasso([
       { id: "point", geometry: { type: "Point", coordinates: [1, 1] } },
       { id: "line", geometry: { type: "LineString", coordinates: [[-2, 0], [2, 0]] } },
       { id: "outside", geometry: { type: "Point", coordinates: [4, 4] } },

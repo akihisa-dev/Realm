@@ -2,7 +2,7 @@ import LineString from "ol/geom/LineString";
 import Point from "ol/geom/Point";
 import Polygon from "ol/geom/Polygon";
 import type Geometry from "ol/geom/Geometry";
-import type { GeoJsonGeometry, RealmFeature } from "../backend";
+import type { GeoJsonGeometry, MapObject } from "../backend";
 import { assertGeometryWithinWorld } from "./geometryGuard";
 import type { RealmMapMode } from "./contracts";
 
@@ -26,16 +26,11 @@ export const geometryToGeoJson = (geometry: Geometry): GeoJsonGeometry => {
   return encoded;
 };
 
-export const drawTypeForMode = (mode: Exclude<RealmMapMode, "pan" | "cell-select" | "cell-erase" | "erase">): "Point" | "LineString" | "Polygon" => mode === "city" || mode === "text" || mode === "town"
-  || mode === "mountain" || mode === "tree" || mode === "symbol" || mode === "label" || mode === "scale"
-  ? "Point"
-  : mode === "river" || mode === "coastline" || mode === "boundary" || mode === "road" || mode === "label-path"
-    ? "LineString"
-    : "Polygon";
+export const drawTypeForMode = (mode: Exclude<RealmMapMode, "pan" | "cell-select" | "cell-erase" | "erase">): "Point" | "Polygon" => mode === "city" || mode === "text" || mode === "mountain" ? "Point" : "Polygon";
 
-export const featureGeometryIsValid = (feature: RealmFeature): boolean => {
+export const objectGeometryIsValid = (object: Pick<MapObject, "geometry">): boolean => {
   try {
-    assertGeometryWithinWorld(feature.geometry);
+    assertGeometryWithinWorld(object.geometry);
     return true;
   } catch {
     return false;

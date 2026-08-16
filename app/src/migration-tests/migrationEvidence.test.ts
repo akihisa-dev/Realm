@@ -39,14 +39,14 @@ describe("Electron migration characterization evidence", () => {
   });
 
   it("canonicalizes row order for legacy-vs-Electron golden comparisons", () => {
-    const reordered = { ...baselineSnapshot, features: [...baselineSnapshot.features].reverse() };
+    const reordered = { ...baselineSnapshot, layers: { ...baselineSnapshot.layers, objects: [...baselineSnapshot.layers.objects].reverse() } };
     expect(canonicalSnapshot(baselineSnapshot)).toBe(canonicalSnapshot(reordered));
     expect(compareMigrationSnapshots(baselineSnapshot, reordered)).toEqual({ equal: true, differences: [] });
   });
 
   it("reports persisted data differences without treating source metadata as map data", () => {
-    const changed = { ...baselineSnapshot, mapShapes: [{ id: "shape", layer: "terrain", value: "terrain" }] };
-    expect(compareMigrationSnapshots(baselineSnapshot, changed)).toEqual({ equal: false, differences: ["mapShapes"] });
+    const changed = { ...baselineSnapshot, layers: { ...baselineSnapshot.layers, terrain: [{ id: "shape" }] } };
+    expect(compareMigrationSnapshots(baselineSnapshot, changed)).toEqual({ equal: false, differences: ["layers.terrain"] });
     expect(compareSourceIdentity(baselineIdentity, baselineIdentity)).toEqual({ equal: true, differences: [] });
   });
 

@@ -1,11 +1,14 @@
 export type SnapshotRow = Record<string, unknown>;
 
-/** A serializable, implementation-neutral view used by legacy/Electron comparisons. */
+/** A serializable, implementation-neutral view used by the storage comparisons. */
 export type MigrationSnapshot = {
   schemaVersion: number;
   world: SnapshotRow;
-  features: readonly SnapshotRow[];
-  mapShapes: readonly SnapshotRow[];
+  layers: {
+    terrain: readonly SnapshotRow[];
+    regions: readonly SnapshotRow[];
+    objects: readonly SnapshotRow[];
+  };
   assets: readonly SnapshotRow[];
   sourceHash?: string;
   sidecars?: readonly string[];
@@ -31,8 +34,11 @@ export const canonicalSnapshot = (snapshot: MigrationSnapshot): string =>
   JSON.stringify(sortObject({
     schemaVersion: snapshot.schemaVersion,
     world: snapshot.world,
-    features: canonicalRows(snapshot.features),
-    mapShapes: canonicalRows(snapshot.mapShapes),
+    layers: {
+      terrain: canonicalRows(snapshot.layers.terrain),
+      regions: canonicalRows(snapshot.layers.regions),
+      objects: canonicalRows(snapshot.layers.objects),
+    },
     assets: canonicalRows(snapshot.assets),
   }));
 
@@ -48,8 +54,11 @@ export const compareMigrationSnapshots = (
   const differences: string[] = [];
   if (expected.schemaVersion !== actual.schemaVersion) differences.push("schemaVersion");
   if (JSON.stringify(sortObject(expected.world)) !== JSON.stringify(sortObject(actual.world))) differences.push("world");
-  for (const key of ["features", "mapShapes", "assets"] as const) {
-    if (JSON.stringify(canonicalRows(expected[key])) !== JSON.stringify(canonicalRows(actual[key]))) differences.push(key);
+  for (const key of ["terrain", "regions", "objects"] as const) {
+    if (JSON.stringify(canonicalRows(expected.layers[key])) !== JSON.stringify(canonicalRows(actual.layers[key]))) differences.push(`layers.${key}`);
+  }
+  if (JSON.stringify(canonicalRows(expected.assets)) !== JSON.stringify(canonicalRows(actual.assets))) {
+    differences.push("assets");
   }
   return { equal: differences.length === 0, differences };
 };

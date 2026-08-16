@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import type { FeatureProperties, ImportAssetInput } from "../../shared/realmContract";
+import type { ImportAssetInput, Properties } from "../../shared/realmContract";
 import { validateProperties } from "./geometry";
 import { invalid } from "./errors";
 export const MAX_ASSET_BYTES = 8 * 1024 * 1024;
 export const MAX_ASSET_DIMENSION = 32_768;
 export function sha256Hex(bytes: Uint8Array): string { return createHash("sha256").update(bytes).digest("hex"); }
-export function validateAsset(input: ImportAssetInput): { mime: string; bytes: Uint8Array; width: number; height: number; metadata: FeatureProperties; sha256: string } {
+export function validateAsset(input: ImportAssetInput): { mime: string; bytes: Uint8Array; width: number; height: number; metadata: Properties; sha256: string } {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw invalid("The asset input is invalid.");
   if (typeof input.mime !== "string" || !Array.isArray(input.bytes)) throw invalid("The asset format or size is invalid.");
   const mime = input.mime.trim().toLowerCase(); const bytes = Uint8Array.from(input.bytes);

@@ -15,8 +15,6 @@ export type RegionEntry = {
   cellIds: string[];
   components: RegionComponent[];
 };
-/** @deprecated Use RegionEntry; regions are not objects. */
-export type RegionObject = RegionEntry;
 
 const DEFAULT_REGION_COLOR = "#7A6FA8";
 
@@ -56,6 +54,3 @@ export const deriveRegionEntries = (attributes: readonly CellAttributeSnapshot[]
     .sort((left, right) => compareCellIds(left.cellIds[0] ?? "", right.cellIds[0] ?? "") || left.id.localeCompare(right.id))
     .map((region, index) => ({ ...region, label: `領域 ${index + 1}` }));
 };
-
-/** @deprecated Use deriveRegionEntries; regions are not objects. */
-export const deriveRegionObjects = deriveRegionEntries;

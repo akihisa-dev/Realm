@@ -10,7 +10,7 @@ export type SprayBounds = {
   maxY: number;
 };
 
-export type SprayFeatureType = "symbol" | "tree" | "mountain";
+export type SprayObjectKind = "symbol" | "tree" | "mountain";
 
 export type SprayRange = {
   min: number;
@@ -25,7 +25,7 @@ export type SprayOptions = {
   maxCount: number;
   bounds?: SprayBounds;
   polygon?: SprayPolygon;
-  featureType?: SprayFeatureType;
+  objectKind?: SprayObjectKind;
   scale?: SprayRange;
   rotation?: SprayRange;
 };
@@ -35,7 +35,7 @@ export type SprayCandidate = {
   ordinal: number;
   scale: number;
   rotation: number;
-  featureType?: SprayFeatureType;
+  objectKind?: SprayObjectKind;
 };
 
 const DEFAULT_SCALE: SprayRange = { min: 0.85, max: 1.15 };
@@ -226,7 +226,7 @@ export const generateSprayCandidates = (options: SprayOptions): SprayCandidate[]
       ordinal: candidates.length,
       scale: valueInRange(random, scale),
       rotation: valueInRange(random, rotation),
-      ...(options.featureType ? { featureType: options.featureType } : {}),
+      ...(options.objectKind ? { objectKind: options.objectKind } : {}),
     };
     candidates.push(candidate);
     if (spacingSquared > 0) {

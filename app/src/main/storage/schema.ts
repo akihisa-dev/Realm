@@ -118,7 +118,7 @@ function verifyGeometryRows(db: DatabaseSync): void {
     if (!UUID_PATTERN.test(String(row.id)) || !Number.isSafeInteger(Number(row.zIndex)) || Number(row.zIndex) < -1000000 || Number(row.zIndex) > 1000000 || ![0, 1].includes(Number(row.locked))) throw corrupt("An object contains invalid identity or ordering.");
     try { validateName(String(row.label)); } catch { throw corrupt("An object contains an invalid label."); }
     const kind = String(row.kind) as ObjectKind;
-    try { validateGeometry(kind === "forest" ? "forest" : kind, parseJson(row.geometryJson, "object geometry"), true); validateProperties(parseJson(row.propertiesJson, "object properties")); } catch { throw corrupt("An object contains invalid geometry or properties."); }
+    try { validateGeometry(kind, parseJson(row.geometryJson, "object geometry"), true); validateProperties(parseJson(row.propertiesJson, "object properties")); } catch { throw corrupt("An object contains invalid geometry or properties."); }
     if (row.assetId !== null && row.assetId !== undefined && !UUID_PATTERN.test(String(row.assetId))) throw corrupt("An object contains an invalid asset reference.");
   }
 }

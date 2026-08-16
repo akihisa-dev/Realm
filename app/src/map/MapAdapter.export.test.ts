@@ -21,8 +21,9 @@ describe("RealmMapAdapter raster export", () => {
     host.style.height = "480px";
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
-    adapter.setFeatures([{ id: "selected", featureType: "city", name: "Selected", geometry: { type: "Point", coordinates: [0, 0] } }]);
-    adapter.setSelectedFeatures(["selected"]);
+    adapter.setObjects([{ id: "selected", kind: "city", label: "Selected", geometry: { type: "Point", coordinates: [0, 0] }, properties: {}, zIndex: 0, locked: false }]);
+    adapter.setActiveLayer("object");
+    adapter.setSelectedObjects(["selected"]);
     const map = adapter.getMap();
     map.setSize([640, 480]);
     const view = map.getView();

@@ -23,7 +23,7 @@ describe("main domain validation", () => {
     expect(() => validateName("x".repeat(201))).toThrow("too long");
     expect(() => validateProperties([])).toThrow("properties");
     expect(() => validateGeometry("city", square)).toThrow("Geometry type");
-    expect(() => validateGeometry("river", { type: "LineString", coordinates: [[0, 0], [0, 0]] })).toThrow("distinct");
+    expect(() => validateGeometry("region", { type: "LineString", coordinates: [[0, 0], [0, 0]] })).toThrow("Geometry type");
     expect(() => validateGeometry("terrain", { type: "Polygon", coordinates: [[[0, 0], [1, 0], [0, 1]]] })).toThrow("closed");
   });
 
@@ -53,7 +53,7 @@ describe("main domain validation", () => {
   });
 
   it("canonicalizes UUID identifiers at the domain boundary", () => {
-    expect(canonicalUuid("  ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDEF  ", "feature")).toBe("abcdefab-cdef-4abc-8def-abcdefabcdef");
-    expect(() => canonicalUuid("not-an-id", "feature")).toThrow("identifier");
+    expect(canonicalUuid("  ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDEF  ", "object")).toBe("abcdefab-cdef-4abc-8def-abcdefabcdef");
+    expect(() => canonicalUuid("not-an-id", "object")).toThrow("identifier");
   });
 });

@@ -1,4 +1,4 @@
-import type { FeatureType, GeoJsonGeometry, Position } from "../backend/types";
+import type { GeoJsonGeometry, ObjectKind, Position } from "../backend/types";
 import { DrawingGeometryError } from "./errors";
 
 /** Maximum number of coordinates retained for one line or polygon ring. */
@@ -223,26 +223,26 @@ const assertGeometryObject = (geometry: GeoJsonGeometry): void => {
 
 export type DrawingRefinementOptions = { smoothingPasses?: number };
 
-const defaultSmoothingPasses = (featureType: FeatureType): number =>
-  featureType === "terrain" || featureType === "forest" || featureType === "lake" ? 2 : 1;
+type DrawingKind = ObjectKind | "terrain" | "region";
+const defaultSmoothingPasses = (kind: DrawingKind): number => kind === "terrain" || kind === "forest" ? 2 : 1;
 
-const resolveSmoothingPasses = (featureType: FeatureType, options?: DrawingRefinementOptions): number => {
-  const smoothingPasses = options?.smoothingPasses ?? defaultSmoothingPasses(featureType);
+const resolveSmoothingPasses = (kind: DrawingKind, options?: DrawingRefinementOptions): number => {
+  const smoothingPasses = options?.smoothingPasses ?? defaultSmoothingPasses(kind);
   if (!Number.isInteger(smoothingPasses) || smoothingPasses < 0 || smoothingPasses > MAX_SMOOTHING_PASSES) {
     throw new DrawingGeometryError("drawing_smoothing");
   }
   return smoothingPasses;
 };
 
-/** Refines raw pointer geometry while preserving feature semantics and world bounds. */
+/** Refines raw pointer geometry while preserving object or layer semantics and world bounds. */
 export const refineDrawnGeometry = (
-  featureType: FeatureType,
+  kind: DrawingKind,
   geometry: GeoJsonGeometry,
   resolution: number,
   options?: DrawingRefinementOptions,
 ): GeoJsonGeometry => {
   assertGeometryObject(geometry);
-  const smoothingPasses = resolveSmoothingPasses(featureType, options);
+  const smoothingPasses = resolveSmoothingPasses(kind, options);
   if (geometry.type === "Point") {
     assertPosition(geometry.coordinates);
     return geometry;

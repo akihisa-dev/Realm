@@ -15,7 +15,7 @@ Schema version 12 is the only accepted storage format. It records the same versi
 - `terrain` is the current terrain itself. It does not encode surface, water system, biome, mountain type, or another terrain classification.
 - `region` is a separate logical layer. A region is not an object and is never stored in the object table.
 - `object` contains things placed above terrain and regions. Initial kinds are `city`, `text`, `mountain`, and `forest`.
-- The canonical snapshot exposes `layers.terrain`, `layers.regions`, and `layers.objects` separately. Renderer projections such as transient `MapShape[]` and legacy-shaped feature arrays are derived in memory and are not storage rows.
+- The canonical snapshot exposes `layers.terrain`, `layers.regions`, and `layers.objects` separately. The renderer-only `MapShape[]` projection is derived in memory and is not a storage row.
 - Undo and redo are session state. Each successful layer replacement or other command records a complete before/after state in one transaction and one history step.
 - Reopening a project clears undo and redo without changing the saved current state.
 

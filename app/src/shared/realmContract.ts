@@ -3,10 +3,7 @@
  * projections only and never cross the storage boundary. */
 
 export type LayerId = "terrain" | "region" | "object";
-/** Renderer-only object classes. They are not a persisted generic feature table. */
-export type FeatureType = "terrain" | "forest" | "river" | "coastline" | "country" | "region" | "boundary" | "city" | "text" | "town"
-  | "road" | "lake" | "mountain" | "tree" | "symbol" | "label" | "overlay" | "frame" | "scale";
-export type FeatureProperties = Record<string, unknown>;
+export type Properties = Record<string, unknown>;
 export type Position = [number, number];
 export type GeoJsonGeometry =
   | { type: "Point"; coordinates: Position }
@@ -23,11 +20,9 @@ export type GridShape = {
   geometry: MapShapeGeometry;
 };
 
-/** @deprecated Use GridShape inside the editor and the layer records at the API boundary. */
 export type MapShapeLayer = "terrain" | "region";
-/** @deprecated This is a renderer projection, never a storage row. */
+/** Renderer-only edit preview. It never crosses the persistence boundary. */
 export type MapShape = GridShape & { geometryVersion: number; snapGridVersion: number };
-/** @deprecated Renderer-only edit preview. */
 export type MapShapeEdit = { shapes: MapShape[] };
 
 export type TerrainShape = {
@@ -52,14 +47,11 @@ export type MapObject = {
   kind: ObjectKind;
   label: string;
   geometry: GeoJsonGeometry;
-  properties: FeatureProperties;
+  properties: Properties;
   zIndex: number;
   locked: boolean;
   assetId?: string;
 };
-
-/** @deprecated Renderer compatibility projection for an object. */
-export type RealmFeature = { id: string; featureType: FeatureType; name: string; geometry: GeoJsonGeometry; properties?: FeatureProperties };
 
 export type RealmLayers = {
   terrain: TerrainShape[];
@@ -71,7 +63,7 @@ export type RealmLayers = {
 export type CellAttributeSnapshot = {
   cellId: string;
   layer?: "terrain" | "region";
-  /** @deprecated Use layer. */
+  /** @deprecated Accepted only for renderer fixture compatibility; new state uses layer. */
   attribute?: "terrain" | "region";
   value: string;
   regionId?: string;
@@ -92,9 +84,9 @@ export type ProjectSettings = {
   themeOverrides: Partial<Record<"canvas" | "land" | "landInk" | "coastGlow" | "river" | "forest" | "country" | "region" | "boundary" | "settlement" | "label" | "labelHalo" | "grid", string>>;
 };
 
-export type AssetManifest = { id: string; sha256: string; mime: string; byteLength: number; width: number; height: number; metadata: FeatureProperties };
+export type AssetManifest = { id: string; sha256: string; mime: string; byteLength: number; width: number; height: number; metadata: Properties };
 export type AssetRead = { manifest: AssetManifest; bytes: number[] };
-export type ImportAssetInput = { sha256?: string; mime: string; bytes: number[]; width: number; height: number; metadata?: FeatureProperties };
+export type ImportAssetInput = { sha256?: string; mime: string; bytes: number[]; width: number; height: number; metadata?: Properties };
 export type ImportAssetsBatchInput = { packName: string; assets: ImportAssetInput[] };
 export type DeleteAssetsBatchInput = { ids: string[] };
 
@@ -109,31 +101,12 @@ export type RealmSnapshot = {
   settings: ProjectSettings;
   canUndo: boolean;
   canRedo: boolean;
-  /**
-   * Temporary renderer projections retained while the OpenLayers editor is
-   * being moved to the layer-native contract. They are derived from layers
-   * and are never read from SQLite.
-   */
-  features: RealmFeature[];
-  mapShapes: MapShape[];
-  featureCount: number;
 };
 
 export type SaveProjectInput = { name: string };
 export type ReplaceTerrainLayerInput = { shapes: TerrainShape[] };
 export type ReplaceRegionLayerInput = { regions: Region[] };
 export type ReplaceObjectLayerInput = { objects: MapObject[] };
-
-/** Deprecated command shapes kept as renderer adapters during the cutover. */
-export type CreateFeatureInput = { featureType: FeatureType; name: string; geometry: GeoJsonGeometry; properties?: FeatureProperties };
-export type ReviseFeatureInput = Omit<CreateFeatureInput, "featureType"> & { id: string };
-export type CreateFeaturesBatchInput = { features: CreateFeatureInput[] };
-export type ReviseFeaturesBatchInput = { features: ReviseFeatureInput[] };
-export type DeleteFeaturesBatchInput = { ids: string[] };
-export type SetFeaturesLockedInput = { ids: string[]; locked: boolean };
-export type CreateMapShapesInput = { shapes: MapShape[] };
-export type UpdateMapShapesInput = { shapes: MapShape[] };
-export type DeleteMapShapesInput = { ids: string[] };
 
 export interface RealmBackend {
   listProjects(): Promise<ProjectSummary[]>;
@@ -152,26 +125,6 @@ export interface RealmBackend {
   replaceTerrainLayer(input: ReplaceTerrainLayerInput): Promise<RealmSnapshot>;
   replaceRegionLayer(input: ReplaceRegionLayerInput): Promise<RealmSnapshot>;
   replaceObjectLayer(input: ReplaceObjectLayerInput): Promise<RealmSnapshot>;
-  /** @deprecated Use replaceObjectLayer. */
-  createFeature(input: CreateFeatureInput): Promise<RealmSnapshot>;
-  /** @deprecated Use replaceObjectLayer. */
-  createFeaturesBatch(input: CreateFeaturesBatchInput): Promise<RealmSnapshot>;
-  /** @deprecated Use replaceObjectLayer. */
-  reviseFeature(input: ReviseFeatureInput): Promise<RealmSnapshot>;
-  /** @deprecated Use replaceObjectLayer. */
-  reviseFeaturesBatch(input: ReviseFeaturesBatchInput): Promise<RealmSnapshot>;
-  /** @deprecated Use replaceObjectLayer. */
-  deleteFeature(input: { id: string }): Promise<RealmSnapshot>;
-  /** @deprecated Use replaceObjectLayer. */
-  deleteFeaturesBatch(input: DeleteFeaturesBatchInput): Promise<RealmSnapshot>;
-  /** @deprecated Use replaceObjectLayer. */
-  setFeaturesLocked(input: SetFeaturesLockedInput): Promise<RealmSnapshot>;
-  /** @deprecated Use replaceTerrainLayer or replaceRegionLayer. */
-  createMapShapes(input: CreateMapShapesInput): Promise<RealmSnapshot>;
-  /** @deprecated Use replaceTerrainLayer or replaceRegionLayer. */
-  updateMapShapes(input: UpdateMapShapesInput): Promise<RealmSnapshot>;
-  /** @deprecated Use replaceTerrainLayer or replaceRegionLayer. */
-  deleteMapShapes(input: DeleteMapShapesInput): Promise<RealmSnapshot>;
   undoProject(): Promise<RealmSnapshot>;
   redoProject(): Promise<RealmSnapshot>;
   closeProject(): Promise<void>;

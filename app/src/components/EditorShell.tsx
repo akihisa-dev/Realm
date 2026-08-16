@@ -191,10 +191,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     const regions = selectedRegionIds.map((id) => regionEntries.find((region) => region.id === id)).filter((region): region is RegionEntry => region !== undefined);
     const result = mergeRegionShapes(mapShapes, regions);
     if (!result) return;
-    if (result.kind === "legacy") {
-      setError("旧形式の領域は、先に新しい領域として描き直してください。");
-      return;
-    }
     const { target, shapes } = result;
     setSelectedRegionIds([target.id]);
     setSelectedComponentId(null);
@@ -258,10 +254,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       } else if (key === "e" || key === "x") {
         event.preventDefault();
         selectTool("erase");
-      } else if (key === "g") {
+      } else if (key === "g" && activeLayer !== "object") {
         event.preventDefault();
         selectTool("grab");
-      } else if (key === "s") {
+      } else if (key === "s" && activeLayer === "region") {
         event.preventDefault();
         selectTool("shape");
       }
@@ -300,7 +296,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       <div className={`editor-body${layerManagerOpen ? "" : " layer-manager-is-closed"}`}>
         <section className="map-region" aria-label="地形編集領域">
           <MapCanvas
-            features={viewedSnapshot.features}
+            objects={viewedSnapshot.layers.objects}
             activeLayer={activeLayer}
             mapShapes={mapShapes}
             mode={editingLocked || previewMode ? "pan" : activeLayer === "object" ? activeTool === "erase" ? "erase" : activeTool === "select" ? "pan" : objectKind : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "cell-region" : activeTool === "grab" ? "grab" : activeTool === "shape" ? "shape" : "cell-select"}
@@ -316,10 +312,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             onCellSelect={applyCellSelection}
             onMapShapeEdit={commitShapeEdit}
             onDraw={createObject}
-            selectedFeatureIds={selectedObjectIds}
-            onSelectFeatures={selectObjects}
-            onModifyFeatures={modifyObjects}
-            onEraseFeatures={eraseObjects}
+            selectedObjectIds={selectedObjectIds}
+            onSelectObjects={selectObjects}
+            onModifyObjects={modifyObjects}
+            onEraseObjects={eraseObjects}
             regionColor={regionColor}
             onToolChange={selectTool}
             onObjectKindChange={(kind) => { setObjectKind(kind); selectLayer("object"); selectTool("object"); }}

@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { ObjectManager } from "./ObjectManager";
-import { deriveRegionObjects } from "./regionObjects";
+import { RegionPanel } from "./RegionPanel";
+import { deriveRegionEntries } from "./regionObjects";
 
 const regionId = "11111111-1111-4111-8111-111111111111";
-const regions = deriveRegionObjects([
+const regions = deriveRegionEntries([
   { cellId: "1:1", attribute: "region", value: "#2468AC", regionId },
   { cellId: "2:1", attribute: "region", value: "#2468AC", regionId },
   { cellId: "20:20", attribute: "region", value: "#2468AC", regionId },
@@ -20,11 +20,11 @@ const renderManager = () => {
     onSplitComponent: vi.fn(),
     onClose: vi.fn(),
   };
-  render(<ObjectManager regions={regions} selectedRegionIds={[]} selectedComponentId={null} regionPaintTargetId={null} {...callbacks} />);
+  render(<RegionPanel regions={regions} selectedRegionIds={[]} selectedComponentId={null} regionPaintTargetId={null} {...callbacks} />);
   return callbacks;
 };
 
-describe("ObjectManager", () => {
+describe("RegionPanel", () => {
   it("shows the logical region and its disconnected chunks", () => {
     const callbacks = renderManager();
 
@@ -41,7 +41,7 @@ describe("ObjectManager", () => {
   });
 
   it("disables every region selection control while editing is locked", () => {
-    render(<ObjectManager regions={regions} selectedRegionIds={[]} selectedComponentId={null} regionPaintTargetId={null} disabled onSelectRegion={vi.fn()} onSelectionChange={vi.fn()} onSelectComponent={vi.fn()} onStartNewRegion={vi.fn()} onAddToRegion={vi.fn()} onMergeRegions={vi.fn()} onSplitComponent={vi.fn()} onClose={vi.fn()} />);
+    render(<RegionPanel regions={regions} selectedRegionIds={[]} selectedComponentId={null} regionPaintTargetId={null} disabled onSelectRegion={vi.fn()} onSelectionChange={vi.fn()} onSelectComponent={vi.fn()} onStartNewRegion={vi.fn()} onAddToRegion={vi.fn()} onMergeRegions={vi.fn()} onSplitComponent={vi.fn()} onClose={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: /領域 1 2個の塊・3セル/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "領域 1の塊を表示する" })).toBeDisabled();

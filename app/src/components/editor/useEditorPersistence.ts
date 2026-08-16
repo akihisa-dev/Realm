@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { errorMessage, type LayerId, type MapShape, type RealmBackend, type RealmSnapshot, type Region } from "../../backend";
 import { normalizeMapShapes } from "../../shared/mapShapeGeometry";
+import { mapShapesFromLayers } from "../../shared/layerProjection";
 
 type RunOptions = {
   recover?: (identity: string) => Promise<void>;
@@ -64,7 +65,7 @@ export function useEditorPersistence({
 }: EditorPersistenceOptions) {
   const projectIdentity = `${snapshot.path}:${snapshot.world.id}`;
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
-  const [mapShapes, setMapShapes] = useState<MapShape[]>(snapshot.mapShapes ?? []);
+  const [mapShapes, setMapShapes] = useState<MapShape[]>(() => mapShapesFromLayers(snapshot.layers));
   const [operating, setOperating] = useState(false);
   const [savingMapShapes, setSavingMapShapes] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +92,7 @@ export function useEditorPersistence({
     if (identityChanged) {
       mapShapeSaveGeneration.current += 1;
       mapShapeSavePending.current = null;
-      setMapShapes(snapshot.mapShapes ?? []);
+      setMapShapes(mapShapesFromLayers(snapshot.layers));
       setError(null);
       onProjectChangedRef.current?.();
     }
@@ -99,7 +100,7 @@ export function useEditorPersistence({
 
   const recoverMapShapes = useCallback(async (identity: string): Promise<void> => {
     const openSnapshot = await backend.getOpenProject();
-    if (mounted.current && viewedIdentity.current === identity && openSnapshot) setMapShapes(openSnapshot.mapShapes ?? []);
+    if (mounted.current && viewedIdentity.current === identity && openSnapshot) setMapShapes(mapShapesFromLayers(openSnapshot.layers));
   }, [backend]);
 
   /**
@@ -158,7 +159,7 @@ export function useEditorPersistence({
         const next = await action();
         if (!mounted.current || viewedIdentity.current !== identity) return;
         setViewedSnapshot(next);
-        setMapShapes(next.mapShapes ?? []);
+        setMapShapes(mapShapesFromLayers(next.layers));
         onSaved(next);
         if (!options.isCurrent || options.isCurrent()) onOperationSettledRef.current?.();
       } catch (cause) {

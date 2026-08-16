@@ -44,7 +44,8 @@ describe("Realm IPC sender and payload boundary", () => {
     });
     await expect(fake.handlers.get("realm:openProject")!(event(7), { path: 42 })).rejects.toMatchObject({ code: "invalid_input" });
     await expect(fake.handlers.get("realm:openProject")!(event(7), { path: "/tmp/world.realmmap" })).rejects.toMatchObject({ code: "invalid_input" });
-    await expect(fake.handlers.get("realm:deleteFeature")!(event(7), { id: "" })).rejects.toMatchObject({ code: "invalid_input" });
+    await fake.handlers.get("realm:createProject")!(event(7), { name: "Boundary" });
+    await expect(fake.handlers.get("realm:replaceObjectLayer")!(event(7), { objects: [{ id: "", kind: "city", label: "", geometry: { type: "Point", coordinates: [0, 0] }, properties: {}, zIndex: 0, locked: false }] })).rejects.toMatchObject({ code: "invalid_input" });
     await expect(fake.handlers.get("realm:chooseTransferPath")!(event(7), { mode: "other" })).rejects.toMatchObject({ code: "invalid_input" });
     await expect(fake.handlers.get("realm:chooseArtifactPath")!(event(7), { format: "png" })).rejects.toMatchObject({ code: "invalid_input" });
     close();

@@ -4,7 +4,6 @@ import type { RegionComponent, RegionEntry } from "./regionObjects";
 
 export type MergeRegionShapesResult =
   | { kind: "merged"; shapes: MapShape[]; target: RegionEntry }
-  | { kind: "legacy" }
   | null;
 
 /** Reassigns selected logical region parts to the first selected region. */
@@ -15,7 +14,7 @@ export const mergeRegionShapes = (
   if (regions.length < 2) return null;
   const target = regions[0];
   if (!target) return null;
-  if (!target.persistentId || regions.some((region) => region.persistentId === null)) return { kind: "legacy" };
+  if (!target.persistentId || regions.some((region) => region.persistentId === null)) return null;
   const selectedIds = new Set(regions.map((region) => region.persistentId).filter((id): id is string => id !== null));
   const shapes = mapShapes.map((shape) => shape.layer === "region" && shape.regionId && selectedIds.has(shape.regionId)
     ? { ...shape, regionId: target.persistentId!, value: target.color }

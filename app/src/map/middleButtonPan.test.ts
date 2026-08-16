@@ -7,8 +7,7 @@ import { RealmMapAdapter } from "./MapAdapter";
 import type { RealmMapMode } from "./contracts";
 
 const panButtonModes: RealmMapMode[] = [
-  "pan", "cell-select", "cell-region", "grab", "shape", "cell-erase", "erase",
-  "terrain", "forest", "river", "coastline", "country", "region", "boundary", "city", "town", "polygon-hole", "label-path",
+  "pan", "cell-select", "grab", "shape", "cell-erase",
 ];
 
 describe("secondary-button map pan", () => {
@@ -75,7 +74,8 @@ describe("secondary-button map pan", () => {
     const map = adapter.getMap();
 
     try {
-      for (const mode of ["region", "cell-region"] as const) {
+      adapter.setActiveLayer("region");
+      for (const mode of ["cell-region"] as const) {
         adapter.setMode(mode);
         const draw = map.getInteractions().getArray().find((interaction) => interaction instanceof Draw) as Draw;
         expect(draw.getFreehand(), `mode: ${mode}`).toBe(true);

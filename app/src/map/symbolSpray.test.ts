@@ -1,7 +1,7 @@
 import { MAX_SPRAY_COUNT, generateSprayCandidates, positionWithinPolygon } from "./symbolSpray";
 
 describe("generateSprayCandidates", () => {
-  const options = { seed: "world-1:forest-1", spacing: 2, maxCount: 24, bounds: { minX: -20, maxX: 20, minY: -10, maxY: 10 }, featureType: "tree" as const };
+  const options = { seed: "world-1:forest-1", spacing: 2, maxCount: 24, bounds: { minX: -20, maxX: 20, minY: -10, maxY: 10 }, objectKind: "mountain" as const };
 
   it("is deterministic for a seed and varies for a different seed", () => {
     const first = generateSprayCandidates(options);
@@ -14,7 +14,7 @@ describe("generateSprayCandidates", () => {
   it("keeps candidates in bounds, separated, typed, and capped", () => {
     const candidates = generateSprayCandidates(options);
     expect(candidates.length).toBeLessThanOrEqual(options.maxCount);
-    expect(candidates.every((candidate, index) => candidate.featureType === "tree" && candidate.ordinal === index
+    expect(candidates.every((candidate, index) => candidate.objectKind === "mountain" && candidate.ordinal === index
       && candidate.coordinates[0] >= -20 && candidate.coordinates[0] <= 20
       && candidate.coordinates[1] >= -10 && candidate.coordinates[1] <= 10
       && candidate.scale >= 0.85 && candidate.scale <= 1.15

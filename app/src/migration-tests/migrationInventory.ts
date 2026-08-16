@@ -136,7 +136,7 @@ export const migrationInventory = [
   {
     id: "ui-terrain-gestures",
     area: "ui",
-    observable: "Paint/erase gestures use transient cell selection, commit canonical Polygon rows, cancel safely, and do not delete legacy feature rows.",
+    observable: "Paint/erase gestures use transient cell selection, commit canonical Polygon rows for the active layer, cancel safely, and never expose legacy rows as editable state.",
     baselineEvidence: [
       "applies_terrain_to_selected_hex_cells",
       "edits_terrain_directly_on_the_canvas_while_hiding_legacy_objects",

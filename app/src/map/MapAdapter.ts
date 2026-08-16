@@ -15,7 +15,7 @@ import MouseWheelZoom from "ol/interaction/MouseWheelZoom";
 import { click, primaryAction } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
-import type { CellAttributeSnapshot, GeoJsonGeometry, LayerId, MapShape, MapShapeEdit, Position, RealmFeature } from "../backend";
+import type { CellAttributeSnapshot, GeoJsonGeometry, LayerId, MapObject, MapShape, MapShapeEdit, ObjectKind, Position } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import { CELL_PAINT_RADII, WORLD_EXTENT, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
@@ -25,7 +25,7 @@ import { DEFAULT_MAP_THEME_ID, mapTheme, validateThemeOverrides, type MapThemeId
 import { assertGeometryWithinWorld } from "./geometryGuard";
 import { TerrainOutlineAnimator } from "./terrainOutlineAnimator";
 import { CellRegionController } from "./CellRegionController";
-import { selectFeatureIdsWithinLasso } from "./lassoSelection";
+import { selectObjectIdsWithinLasso } from "./lassoSelection";
 import { exportMapRaster } from "./mapRasterExporter";
 import { MapShapeGrabController } from "./MapShapeGrabController";
 import { RegionShapeController } from "./RegionShapeController";
@@ -34,14 +34,14 @@ import { cloneMapShapes, renderCanonicalMapShapes, renderTransientCellGeometry, 
 import { hitTestMapShapes } from "../shared/mapShapeGeometry";
 import { nudgeGeometry, resolutionForFillingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
 import { MiddleButtonDragPan, MiddleButtonSafeDraw } from "./middleButtonPan";
-import type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
+import type { CellGridOptions, DrawingOptions, ExportCanvasSize, ObjectGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 import { MapLayerRegistry } from "./mapLayerRegistry";
 import { modeAllowedForActiveLayer, objectPanForMode, sameStringSet } from "./mapAdapterPolicy";
-export type { CellGridOptions, DrawingOptions, ExportCanvasSize, FeatureGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
+export type { CellGridOptions, DrawingOptions, ExportCanvasSize, ObjectGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellPaintSize } from "./gridGeometry";
 export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, availableViewportSize, cellCenterWithinWorld, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
 export { assertGeometryWithinWorld, isGeometryWithinWorld, isPositionWithinWorld } from "./geometryGuard";
-export { selectFeatureIdsWithinLasso } from "./lassoSelection";
+export { selectObjectIdsWithinLasso } from "./lassoSelection";
 export { resolutionForFittingExtent } from "./mapAdapterGeometry";
 export { resolutionForFillingExtent } from "./mapAdapterGeometry";
 const MAX_LASSO_POINTS = 4096;
@@ -57,7 +57,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly worldExtent = WORLD_EXTENT;
   private activeThemeId: MapThemeId = DEFAULT_MAP_THEME_ID;
   private themeOverrides: ThemeOverrides = {};
-  private readonly hiddenFeatureTypes = new Set<RealmFeature["featureType"]>();
+  private readonly hiddenObjectKinds = new Set<ObjectKind>();
   private assetUrls: Readonly<Record<string, string>> = {};
   private readonly layers: MapLayerRegistry;
   private readonly terrainOutlineAnimator: TerrainOutlineAnimator;
@@ -72,8 +72,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private draw: Draw | null = null;
   private activeMode: RealmMapMode = "pan";
   // Direct renderer consumers keep object-edit compatibility until lifecycle setup supplies a layer.
-  private activeLayer: LayerId = "object";
-  private activeLayerExplicit = false;
+  private activeLayer: LayerId = "terrain";
   private drawingGesture: DrawingOptions["gesture"] = "freehand";
   private drawingSmoothingPasses: number | undefined;
   private drawingSnapAngleDegrees: number | null = null;
@@ -100,13 +99,13 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private lastPointerCoordinate: [number, number] | null = null;
   private pointerInside = false;
   private readonly drawListeners = new Set<(geometry: GeoJsonGeometry) => void>();
-  private readonly selectFeaturesListeners = new Set<(featureIds: readonly string[]) => void>();
+  private readonly selectObjectsListeners = new Set<(objectIds: readonly string[]) => void>();
   private readonly selectListeners = new Set<(featureId: string | null) => void>();
   private readonly cellSelectListeners = new Set<(cellIds: readonly string[]) => void>();
   private readonly mapShapeEditListeners = new Set<(edit: MapShapeEdit) => void>();
-  private readonly modifyFeaturesListeners = new Set<(changes: readonly FeatureGeometryChange[]) => void>();
+  private readonly modifyObjectsListeners = new Set<(changes: readonly ObjectGeometryChange[]) => void>();
   private readonly modifyListeners = new Set<(featureId: string, geometry: GeoJsonGeometry) => void>();
-  private readonly eraseFeaturesListeners = new Set<(featureIds: readonly string[]) => void>();
+  private readonly eraseObjectsListeners = new Set<(objectIds: readonly string[]) => void>();
   private readonly eraseListeners = new Set<(featureId: string) => void>();
   private readonly layerShiftListeners = new Set<(direction: -1 | 1) => void>();
   private readonly errorListeners = new Set<(code: MapErrorCode) => void>();
@@ -117,9 +116,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private suppressSelectionUntil = 0;
   private disposed = false;
 
-  private get featureSource() { return this.layers.featureSource; }
-  private get featureLayer() { return this.layers.featureLayer; }
-  private get featureStyle() { return this.layers.featureStyle; }
+  private get objectSource() { return this.layers.objectSource; }
+  private get objectLayer() { return this.layers.objectLayer; }
+  private get objectStyle() { return this.layers.objectStyle; }
   private get cellSource() { return this.layers.cellSource; }
   private get cellLayer() { return this.layers.cellLayer; }
   private get terrainOutlineSource() { return this.layers.terrainOutlineSource; }
@@ -138,25 +137,25 @@ export class RealmMapAdapter implements RealmMapRenderer {
     return null;
   }
 
-  private selectedFeatureIds(): string[] {
+  private selectedObjectIds(): string[] {
     return this.selection.getFeatures().getArray()
       .map((feature) => feature.getId())
       .filter((id): id is string => typeof id === "string");
   }
   private emitSelection(): void {
-    const ids = this.selectedFeatureIds();
-    for (const listener of this.selectFeaturesListeners) listener(ids);
+    const ids = this.selectedObjectIds();
+    for (const listener of this.selectObjectsListeners) listener(ids);
     for (const listener of this.selectListeners) listener(ids[0] ?? null);
   }
   private selectableFeature(feature: Feature): boolean {
     if (this.activeLayer !== "object") return false;
-    const featureType = feature.get("featureType") as RealmFeature["featureType"] | undefined;
+    const kind = feature.get("kind") as ObjectKind | undefined;
     const properties = feature.get("properties") as Record<string, unknown> | undefined;
-    return properties?.locked !== true && (featureType === undefined || !this.hiddenFeatureTypes.has(featureType));
+    return feature.get("locked") !== true && properties?.locked !== true && (kind === undefined || !this.hiddenObjectKinds.has(kind));
   }
-  private featureSnapshots(): Pick<RealmFeature, "id" | "geometry">[] {
-    const snapshots: Pick<RealmFeature, "id" | "geometry">[] = [];
-    for (const feature of this.featureSource.getFeatures()) {
+  private objectSnapshots(): Pick<MapObject, "id" | "geometry">[] {
+    const snapshots: Pick<MapObject, "id" | "geometry">[] = [];
+    for (const feature of this.objectSource.getFeatures()) {
       const id = feature.getId();
       const geometry = feature.getGeometry();
       if (typeof id !== "string" || !geometry || !this.selectableFeature(feature)) continue;
@@ -166,7 +165,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   private readonly handleModify = (event: { features: { getArray(): Feature[] } }): void => {
-    const changes: FeatureGeometryChange[] = [];
+    const changes: ObjectGeometryChange[] = [];
     for (const feature of event.features.getArray()) {
       const id = feature.getId();
       const geometry = feature.getGeometry();
@@ -176,16 +175,16 @@ export class RealmMapAdapter implements RealmMapRenderer {
       changes.push({ id, geometry: encoded });
       for (const listener of this.modifyListeners) listener(id, encoded);
     }
-    if (changes.length > 0) for (const listener of this.modifyFeaturesListeners) listener(changes);
+    if (changes.length > 0) for (const listener of this.modifyObjectsListeners) listener(changes);
   };
 
   private emitErase(featureIds: readonly string[]): void {
     const valid = [...new Set(featureIds)].filter((id) => {
-      const feature = this.featureSource.getFeatureById(id);
+      const feature = this.objectSource.getFeatureById(id);
       return feature instanceof Feature && this.selectableFeature(feature);
     });
     if (valid.length === 0) return;
-    for (const listener of this.eraseFeaturesListeners) listener(valid);
+    for (const listener of this.eraseObjectsListeners) listener(valid);
     for (const id of valid) for (const listener of this.eraseListeners) listener(id);
   }
 
@@ -194,7 +193,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.layers = new MapLayerRegistry({
       themeId: () => this.activeThemeId,
       themeOverrides: () => this.themeOverrides,
-      featureVisible: (featureType) => featureType === undefined || !this.hiddenFeatureTypes.has(featureType),
+      objectKindVisible: (kind) => kind === undefined || kind === "terrain" || kind === "region" || !this.hiddenObjectKinds.has(kind),
       assetUrl: (assetId) => assetId === undefined ? undefined : this.assetUrls[assetId],
     });
     this.terrainOutlineAnimator = new TerrainOutlineAnimator(target.ownerDocument.defaultView, (segments, phase) => {
@@ -203,11 +202,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.terrainOutlineLayer.setVisible(!this.presentationPreview && phase === "transition");
       this.terrainSmoothLayer.setVisible(phase === "complete");
     });
-    this.cellRegion = new CellRegionController(target.ownerDocument.defaultView, (feature) => this.featureStyle(feature));
+    this.cellRegion = new CellRegionController(target.ownerDocument.defaultView, (feature) => this.objectStyle(feature));
     this.target.style.background = mapTheme(this.activeThemeId).canvas;
     this.grabHover = new GrabHoverController({ attributes: () => this.cellAttributesById, getFeature: (id) => this.getCellFeature(id), ensureFeatures: (ids) => this.ensureCells(ids), removeUnused: (id) => this.removeUnusedCell(id), changed: () => this.cellLayer.changed(), setTargetState: (active) => this.target.classList.toggle("map-canvas-grab-target", active) });
     this.selection = new SelectModule.default({
-      layers: [this.featureLayer],
+      layers: [this.objectLayer],
       multi: true,
       condition: (event) => Date.now() >= this.suppressSelectionUntil && click(event),
       filter: (feature) => this.selectableFeature(feature),
@@ -236,12 +235,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
         }
         const completedLasso = this.lassoPoints.length >= 3;
         const candidates = completedLasso
-          ? selectFeatureIdsWithinLasso(this.featureSnapshots(), this.lassoPoints)
+          ? selectObjectIdsWithinLasso(this.objectSnapshots(), this.lassoPoints)
           : [];
         if (completedLasso) {
-          const current = this.selectedFeatureIds();
+          const current = this.selectedObjectIds();
           const next = this.lassoAdditive ? [...new Set([...current, ...candidates])] : candidates;
-          this.setSelectedFeatures(next);
+          this.setSelectedObjects(next);
           this.emitSelection();
         }
         this.lassoPoints = [];
@@ -309,39 +308,41 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   setActiveLayer(layer: LayerId): void {
     if (layer !== "terrain" && layer !== "region" && layer !== "object") return;
-    this.activeLayerExplicit = true;
     if (layer === this.activeLayer) return;
-    this.handlePointerCancel(); const hadSelection = this.selectedFeatureIds().length > 0; this.setSelectedFeatures([]);
+    this.handlePointerCancel(); const hadSelection = this.selectedObjectIds().length > 0; this.setSelectedObjects([]);
     this.activeLayer = layer; this.setMode("pan"); if (hadSelection) this.emitSelection();
   }
-  setFeatures(features: RealmFeature[]): void {
-    const selectedIds = this.selectedFeatureIds();
-    const desiredIds = new Set(features.map((feature) => feature.id));
-    for (const rendered of this.featureSource.getFeatures()) {
+  setObjects(objects: MapObject[]): void {
+    const selectedIds = this.selectedObjectIds();
+    const desiredIds = new Set(objects.map((object) => object.id));
+    for (const rendered of this.objectSource.getFeatures()) {
       const id = rendered.getId();
-      if (typeof id !== "string" || !desiredIds.has(id)) this.featureSource.removeFeature(rendered);
+      if (typeof id !== "string" || !desiredIds.has(id)) this.objectSource.removeFeature(rendered);
     }
     const additions: Feature[] = [];
-    for (const snapshot of features) {
-      const snapshotKey = JSON.stringify([snapshot.featureType, snapshot.name, snapshot.geometry, snapshot.properties ?? {}]);
-      const found = this.featureSource.getFeatureById(snapshot.id);
+    for (const snapshot of objects) {
+      const snapshotKey = JSON.stringify([snapshot.kind, snapshot.label, snapshot.geometry, snapshot.properties, snapshot.locked, snapshot.zIndex, snapshot.assetId ?? null]);
+      const found = this.objectSource.getFeatureById(snapshot.id);
       const rendered = Array.isArray(found) ? found[0] : found;
       if (rendered) {
         if (rendered.get("snapshotKey") === snapshotKey) continue;
         rendered.setGeometry(guardedGeometryFromGeoJson(snapshot.geometry));
-        rendered.set("featureType", snapshot.featureType, true);
-        rendered.set("name", snapshot.name, true);
-        rendered.set("properties", snapshot.properties ?? {}, true);
+        rendered.set("kind", snapshot.kind, true);
+        rendered.set("label", snapshot.label, true);
+        rendered.set("properties", snapshot.properties, true);
+        rendered.set("locked", snapshot.locked, true);
+        rendered.set("zIndex", snapshot.zIndex, true);
+        rendered.set("assetId", snapshot.assetId, true);
         rendered.set("snapshotKey", snapshotKey, true);
         rendered.changed();
         continue;
       }
-      const created = new Feature({ geometry: guardedGeometryFromGeoJson(snapshot.geometry), featureType: snapshot.featureType, name: snapshot.name, properties: snapshot.properties ?? {}, snapshotKey });
+      const created = new Feature({ geometry: guardedGeometryFromGeoJson(snapshot.geometry), kind: snapshot.kind, label: snapshot.label, properties: snapshot.properties, locked: snapshot.locked, zIndex: snapshot.zIndex, assetId: snapshot.assetId, snapshotKey });
       created.setId(snapshot.id);
       additions.push(created);
     }
-    if (additions.length > 0) this.featureSource.addFeatures(additions);
-    this.setSelectedFeatures(selectedIds);
+    if (additions.length > 0) this.objectSource.addFeatures(additions);
+    this.setSelectedObjects(selectedIds);
   }
 
   setTheme(themeId: MapThemeId): void {
@@ -375,14 +376,14 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   setAssets(assetUrls: Readonly<Record<string, string>>): void {
     this.assetUrls = { ...assetUrls };
-    this.featureLayer.changed();
+    this.objectLayer.changed();
   }
 
-  setLayerVisibility(featureType: RealmFeature["featureType"], visible: boolean): void {
-    if (visible) this.hiddenFeatureTypes.delete(featureType);
-    else this.hiddenFeatureTypes.add(featureType);
-    this.setSelectedFeatures(this.selectedFeatureIds());
-    this.featureLayer.changed();
+  setObjectKindVisibility(kind: ObjectKind, visible: boolean): void {
+    if (visible) this.hiddenObjectKinds.delete(kind);
+    else this.hiddenObjectKinds.add(kind);
+    this.setSelectedObjects(this.selectedObjectIds());
+    this.objectLayer.changed();
   }
 
   setDrawingOptions(options: DrawingOptions): void {
@@ -407,7 +408,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   setMode(mode: RealmMapMode): void {
-    const effectiveMode = this.presentationPreview || !modeAllowedForActiveLayer(this.activeLayer, this.activeLayerExplicit, mode) ? "pan" : mode;
+    const effectiveMode = this.presentationPreview || !modeAllowedForActiveLayer(this.activeLayer, mode) ? "pan" : mode;
     this.temporaryPan = false;
     this.draw = this.disposePointerInteraction(this.draw); this.paint = this.disposePointerInteraction(this.paint);
     this.paintLastPoint = null; this.paintStrokeSelection.clear(); this.paintSelectionBeforeStroke = []; this.eraser = this.disposePointerInteraction(this.eraser);
@@ -445,7 +446,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.eraser = new PointerInteraction({
         handleDownEvent: (event) => {
           const id = this.map.forEachFeatureAtPixel(event.pixel, (feature) => this.selectableFeature(feature as Feature) ? feature.getId() : undefined, {
-            layerFilter: (layer) => layer === this.featureLayer,
+            layerFilter: (layer) => layer === this.objectLayer,
             hitTolerance: 8,
           });
           if (typeof id === "string") this.emitErase([id]);
@@ -517,8 +518,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
       return;
     }
     const drawType = drawTypeForMode(effectiveMode);
-    const drawingFeatureType = effectiveMode === "polygon-hole" ? "terrain" : effectiveMode === "label-path" ? "boundary" : effectiveMode;
-    this.draw = new MiddleButtonSafeDraw({ type: drawType, style: this.featureStyle(new Feature({ featureType: drawingFeatureType, name: "", properties: {} })) });
+    const drawingObjectKind = effectiveMode as ObjectKind;
+    this.draw = new MiddleButtonSafeDraw({ type: drawType, style: this.objectStyle(new Feature({ kind: drawingObjectKind, label: "", properties: {} })) });
     // Lines and areas follow the pointer continuously from press to release.
     // Point features remain a single click because they have no path to trace.
     this.draw.setFreehand(this.drawTypeUsesFreehand(effectiveMode));
@@ -529,7 +530,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       try {
         const raw = guardedGeometryToGeoJson(geometry);
         const refined = refineDrawnGeometry(
-          drawingFeatureType,
+          drawingObjectKind,
           raw,
           this.map.getView().getResolution() ?? 1,
           this.drawingSmoothingPasses === undefined ? undefined : { smoothingPasses: this.drawingSmoothingPasses },
@@ -548,7 +549,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   private nudgeSelectedFeatures(offset: Position): boolean {
-    const changes: FeatureGeometryChange[] = [];
+    const changes: ObjectGeometryChange[] = [];
     for (const feature of this.selection.getFeatures().getArray()) {
       const id = feature.getId();
       const geometry = feature.getGeometry();
@@ -564,12 +565,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
     }
     if (changes.length === 0) return false;
     for (const change of changes) {
-      const feature = this.featureSource.getFeatureById(change.id);
+      const feature = this.objectSource.getFeatureById(change.id);
       if (!(feature instanceof Feature)) continue;
       try { feature.setGeometry(guardedGeometryFromGeoJson(change.geometry)); } catch { return false; }
     }
     for (const change of changes) for (const listener of this.modifyListeners) listener(change.id, change.geometry);
-    for (const listener of this.modifyFeaturesListeners) listener(changes);
+    for (const listener of this.modifyObjectsListeners) listener(changes);
     return true;
   }
 
@@ -599,14 +600,14 @@ export class RealmMapAdapter implements RealmMapRenderer {
       event.preventDefault();
       return;
     }
-    if (this.activeMode === "pan" && event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown") && this.selectedFeatureIds().length > 0) {
+    if (this.activeMode === "pan" && event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown") && this.selectedObjectIds().length > 0) {
       for (const listener of this.layerShiftListeners) listener(event.key === "ArrowUp" ? 1 : -1);
       event.preventDefault();
       return;
     }
     if (this.activeMode === "pan" && !event.shiftKey && !event.metaKey && !event.ctrlKey
       && (event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")
-      && this.selectedFeatureIds().length > 0) {
+      && this.selectedObjectIds().length > 0) {
       const distance = event.altKey ? 0.05 : 0.25;
       const offset: Position = event.key === "ArrowLeft" ? [-distance, 0]
         : event.key === "ArrowRight" ? [distance, 0]
@@ -616,7 +617,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       return;
     }
     if ((event.key === "Delete" || event.key === "Backspace") && this.activeMode === "pan") {
-      this.emitErase(this.selectedFeatureIds());
+      this.emitErase(this.selectedObjectIds());
       event.preventDefault();
       return;
     }
@@ -639,7 +640,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (this.activeMode === "pan") {
       this.lassoPoints = [];
       this.lassoAdditive = false;
-      this.setSelectedFeatures([]);
+      this.setSelectedObjects([]);
       this.emitSelection();
       event.preventDefault();
       return;
@@ -892,13 +893,13 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   setSelected(featureId: string | null): void {
-    this.setSelectedFeatures(featureId ? [featureId] : []);
+    this.setSelectedObjects(featureId ? [featureId] : []);
   }
 
-  setSelectedFeatures(featureIds: readonly string[]): void {
-    const requested = [...new Set(featureIds)];
+  setSelectedObjects(objectIds: readonly string[]): void {
+    const requested = [...new Set(objectIds)];
     const next = requested
-      .map((id) => this.featureSource.getFeatureById(id))
+      .map((id) => this.objectSource.getFeatureById(id))
       .filter((feature): feature is Feature => feature instanceof Feature && this.selectableFeature(feature));
     const current = this.selection.getFeatures().getArray();
     if (current.length === next.length && current.every((feature, index) => feature === next[index])) return;
@@ -917,7 +918,6 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellLayer.changed();
   }
 
-  /** Stores canonical Polygon rows and renders exact editing geometry by default. */
   setMapShapes(shapes: readonly MapShape[]): void {
     this.mapShapesControlled = true;
     this.mapShapes = cloneMapShapes(shapes);
@@ -931,7 +931,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (preview) this.handlePointerCancel();
     if (preview && this.activeMode !== "pan") this.setMode("pan");
     if (preview) {
-      this.setSelectedFeatures([]);
+      this.setSelectedObjects([]);
       this.lassoPoints = [];
       this.lassoAdditive = false;
     }
@@ -1045,9 +1045,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.drawListeners.add(listener);
     return () => this.drawListeners.delete(listener);
   }
-  onSelectFeatures(listener: (featureIds: readonly string[]) => void): () => void {
-    this.selectFeaturesListeners.add(listener);
-    return () => this.selectFeaturesListeners.delete(listener);
+  onSelectObjects(listener: (objectIds: readonly string[]) => void): () => void {
+    this.selectObjectsListeners.add(listener);
+    return () => this.selectObjectsListeners.delete(listener);
   }
   onSelect(listener: (featureId: string | null) => void): () => void {
     this.selectListeners.add(listener);
@@ -1061,17 +1061,17 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.mapShapeEditListeners.add(listener);
     return () => this.mapShapeEditListeners.delete(listener);
   }
-  onModifyFeatures(listener: (changes: readonly FeatureGeometryChange[]) => void): () => void {
-    this.modifyFeaturesListeners.add(listener);
-    return () => this.modifyFeaturesListeners.delete(listener);
+  onModifyObjects(listener: (changes: readonly ObjectGeometryChange[]) => void): () => void {
+    this.modifyObjectsListeners.add(listener);
+    return () => this.modifyObjectsListeners.delete(listener);
   }
   onModify(listener: (featureId: string, geometry: GeoJsonGeometry) => void): () => void {
     this.modifyListeners.add(listener);
     return () => this.modifyListeners.delete(listener);
   }
-  onEraseFeatures(listener: (featureIds: readonly string[]) => void): () => void {
-    this.eraseFeaturesListeners.add(listener);
-    return () => this.eraseFeaturesListeners.delete(listener);
+  onEraseObjects(listener: (objectIds: readonly string[]) => void): () => void {
+    this.eraseObjectsListeners.add(listener);
+    return () => this.eraseObjectsListeners.delete(listener);
   }
   onErase(listener: (featureId: string) => void): () => void {
     this.eraseListeners.add(listener);
@@ -1109,7 +1109,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     };
   }
   updateSize(): void { this.map.updateSize(); this.rebaseZoom(); }
-  async exportRaster(mimeType: "image/png" | "image/jpeg", requestedScale = 1, extent: "viewport" | "world" = "viewport", size?: ExportCanvasSize): Promise<MapRaster> { return exportMapRaster({ map: this.map, target: this.target, worldExtent: this.worldExtent, activeThemeId: this.activeThemeId, themeOverrides: this.themeOverrides, selectedFeatureIds: this.selectedFeatureIds(), setSelectedFeatures: (featureIds) => this.setSelectedFeatures(featureIds), mimeType, requestedScale, extent, size }); }
+  async exportRaster(mimeType: "image/png" | "image/jpeg", requestedScale = 1, extent: "viewport" | "world" = "viewport", size?: ExportCanvasSize): Promise<MapRaster> { return exportMapRaster({ map: this.map, target: this.target, worldExtent: this.worldExtent, activeThemeId: this.activeThemeId, themeOverrides: this.themeOverrides, selectedObjectIds: this.selectedObjectIds(), setSelectedObjects: (objectIds) => this.setSelectedObjects(objectIds), mimeType, requestedScale, extent, size }); }
 
   private rebaseZoom(): void {
     const view = this.map.getView();
@@ -1160,11 +1160,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.modify.un("modifyend", this.handleModify);
     this.translate.un("translateend", this.handleModify);
     this.drawListeners.clear();
-    this.selectFeaturesListeners.clear();
+    this.selectObjectsListeners.clear();
     this.selectListeners.clear();
     this.cellSelectListeners.clear();
     this.mapShapeEditListeners.clear();
-    this.modifyFeaturesListeners.clear();
+    this.modifyObjectsListeners.clear();
     this.target.removeEventListener("keydown", this.handleKeyDown);
     this.target.removeEventListener("keyup", this.handleKeyUp);
     this.target.removeEventListener("contextmenu", this.handleContextMenu);
@@ -1175,7 +1175,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.map.getViewport().removeEventListener("pointercancel", this.handlePointerCancel);
     this.map.getViewport().removeEventListener("lostpointercapture", this.handlePointerCancel);
     this.modifyListeners.clear();
-    this.eraseFeaturesListeners.clear();
+    this.eraseObjectsListeners.clear();
     this.eraseListeners.clear();
     this.layerShiftListeners.clear();
     this.errorListeners.clear();

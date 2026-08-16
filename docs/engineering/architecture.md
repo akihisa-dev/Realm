@@ -25,7 +25,7 @@ Electron main boundary ── validation ── current-state service
 
 ## Three-layer editor
 
-The right-side `LayerManager` contains three tabs: `terrain`, `region`, and `object`. Selecting a tab sets `activeLayer`. The selected layer is the only layer that accepts primary-pointer creation, selection, movement, deletion, and shape editing. The other two layers remain visible but their features are not selectable or editable. Switching tabs cancels any active pointer sequence, selection, and preview before activating the new layer.
+The right-side `LayerManager` contains three tabs: `terrain`, `region`, and `object`. Selecting a tab sets `activeLayer`. The selected layer is the only layer that accepts primary-pointer creation, selection, movement, deletion, and shape editing. The other two layers remain visible but their rendered geometry is not selectable or editable. Switching tabs cancels any active pointer sequence, selection, and preview before activating the new layer.
 
 The left sidebar is generated from the active layer. Shared entrances may use the same visual pattern, but their handlers remain layer-specific:
 
@@ -59,7 +59,7 @@ Electron keeps `app/src/main/main.ts` as the process composition root and `app/s
 - `realm:replaceRegionLayer`
 - `realm:replaceObjectLayer`
 
-The renderer uses these commands through `RealmBackend`; the old feature and map-shape method names are not storage APIs and are not used by the layer editor. The browser-only memory backend implements the same layer contract for deterministic UI tests without becoming a second persistence format.
+The renderer uses these commands through `RealmBackend`; only the three layer-replacement commands cross the persistence boundary for map editing. The browser-only memory backend implements the same layer contract for deterministic UI tests without becoming a second persistence format. `MapShape[]` remains an in-memory editor projection and is not an IPC or storage API.
 
 Within main, `layerCommands.ts` validates terrain and region replacement, `objectCommands.ts` validates object kinds, geometry, properties, locks, order, and assets, `snapshot.ts` reads the split model, and `operations.ts` captures/restores all persistent tables for undo/redo. Storage schema verification and path/atomic-publication code remain below the command boundary.
 

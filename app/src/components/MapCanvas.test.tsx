@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import packageJson from "../../package.json";
-import type { RealmFeature } from "../backend";
+import type { MapObject } from "../backend";
 import { cellPaintRadiusForRange, type RealmMapRenderer } from "../map/MapAdapter";
 import { MapCanvas } from "./MapCanvas";
 import "../styles.css";
@@ -10,7 +10,8 @@ const createPaletteRenderer = (): RealmMapRenderer => ({
   getZoom: vi.fn(() => 1),
   setZoom: vi.fn(),
   resetView: vi.fn(),
-  setFeatures: vi.fn(),
+  setObjects: vi.fn(),
+  setActiveLayer: vi.fn(),
   setTheme: vi.fn(),
   setThemeOverrides: vi.fn(),
   setGridVisible: vi.fn(),
@@ -19,22 +20,22 @@ const createPaletteRenderer = (): RealmMapRenderer => ({
   setCellGridOptions: vi.fn(),
   setPresentationMode: vi.fn(),
   setAssets: vi.fn(),
-  setLayerVisibility: vi.fn(),
+  setObjectKindVisibility: vi.fn(),
   setMode: vi.fn(),
   setDrawingOptions: vi.fn(),
   setCellPaintRadius: vi.fn(),
   setSelected: vi.fn(),
-  setSelectedFeatures: vi.fn(),
+  setSelectedObjects: vi.fn(),
   setSelectedCells: vi.fn(),
   setCellAttributes: vi.fn(),
   setCellEraseRadius: vi.fn(),
   onDraw: vi.fn(() => vi.fn()),
-  onSelectFeatures: vi.fn(() => vi.fn()),
+  onSelectObjects: vi.fn(() => vi.fn()),
   onSelect: vi.fn(() => vi.fn()),
   onCellSelect: vi.fn(() => vi.fn()),
-  onModifyFeatures: vi.fn(() => vi.fn()),
+  onModifyObjects: vi.fn(() => vi.fn()),
   onModify: vi.fn(() => vi.fn()),
-  onEraseFeatures: vi.fn(() => vi.fn()),
+  onEraseObjects: vi.fn(() => vi.fn()),
   onErase: vi.fn(() => vi.fn()),
   onLayerShift: vi.fn(() => vi.fn()),
   onError: vi.fn(() => vi.fn()),
@@ -108,7 +109,7 @@ describe("MapCanvas", () => {
     expect(screen.getByText("地形を描く")).toBeInTheDocument();
     expect(screen.getByText("地形を描く")).toHaveClass("tool-sidebar-button-label");
     expect(screen.getByText("グラブ")).toBeInTheDocument();
-    expect(screen.getByText("シェイピング")).toHaveClass("tool-sidebar-button-label");
+    expect(screen.queryByText("シェイピング")).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "消しゴムの対象" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "地形消しゴム" })).toBeInTheDocument();
@@ -118,8 +119,8 @@ describe("MapCanvas", () => {
 
     expect(palette).toHaveClass("is-collapsed");
     expect(shell).toHaveClass("map-canvas-sidebar-collapsed");
-    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-sidebar-button"))).toHaveLength(4);
-    expect(palette.querySelectorAll(".tool-sidebar-button > svg")).toHaveLength(4);
+    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-sidebar-button"))).toHaveLength(3);
+    expect(palette.querySelectorAll(".tool-sidebar-button > svg")).toHaveLength(3);
     expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
     expect(screen.queryByRole("group", { name: "消しゴムの対象" })).not.toBeInTheDocument();
     const openButton = screen.getByRole("button", { name: "地図ツールパレットを開く" });
@@ -189,18 +190,20 @@ describe("MapCanvas", () => {
   it("does not resync semantically unchanged renderer collections or grid options", () => {
     const renderer = createPaletteRenderer();
     const createRenderer = vi.fn(() => renderer);
-    const feature: RealmFeature = {
+    const object: MapObject = {
       id: "city-1",
-      featureType: "city",
-      name: "City",
+      kind: "city",
+      label: "City",
       geometry: { type: "Point", coordinates: [0, 0] },
-      properties: { zIndex: 2, labelColor: "#102030" },
+      properties: { labelColor: "#102030" },
+      zIndex: 2,
+      locked: false,
     };
     const firstGrid = { kind: "hex" as const, color: "#102030", width: 1, spacingDegrees: 12 };
     const firstCellGrid = { color: "#102030", width: 1 };
     const { rerender } = render(
       <MapCanvas
-        features={[feature]}
+        objects={[object]}
         gridOptions={firstGrid}
         cellGridOptions={firstCellGrid}
         onZoomChange={vi.fn()}
@@ -208,34 +211,34 @@ describe("MapCanvas", () => {
       />,
     );
     const initialCalls = {
-      features: (renderer.setFeatures as ReturnType<typeof vi.fn>).mock.calls.length,
+      features: (renderer.setObjects as ReturnType<typeof vi.fn>).mock.calls.length,
       grid: (renderer.setGridOptions as ReturnType<typeof vi.fn>).mock.calls.length,
       cellGrid: (renderer.setCellGridOptions as ReturnType<typeof vi.fn>).mock.calls.length,
     };
 
     rerender(
       <MapCanvas
-        features={[{ ...feature, properties: { labelColor: "#102030", zIndex: 2 } }]}
+        objects={[{ ...object, properties: { labelColor: "#102030" } }]}
         gridOptions={{ ...firstGrid }}
         cellGridOptions={{ ...firstCellGrid }}
         onZoomChange={vi.fn()}
         createRenderer={createRenderer}
       />,
     );
-    expect(renderer.setFeatures).toHaveBeenCalledTimes(initialCalls.features);
+    expect(renderer.setObjects).toHaveBeenCalledTimes(initialCalls.features);
     expect(renderer.setGridOptions).toHaveBeenCalledTimes(initialCalls.grid);
     expect(renderer.setCellGridOptions).toHaveBeenCalledTimes(initialCalls.cellGrid);
 
     rerender(
       <MapCanvas
-        features={[{ ...feature, name: "Updated city" }]}
+        objects={[{ ...object, label: "Updated city" }]}
         gridOptions={{ ...firstGrid, spacingDegrees: 15 }}
         cellGridOptions={{ ...firstCellGrid, width: 1.5 }}
         onZoomChange={vi.fn()}
         createRenderer={createRenderer}
       />,
     );
-    expect(renderer.setFeatures).toHaveBeenCalledTimes(initialCalls.features + 1);
+    expect(renderer.setObjects).toHaveBeenCalledTimes(initialCalls.features + 1);
     expect(renderer.setGridOptions).toHaveBeenCalledTimes(initialCalls.grid + 1);
     expect(renderer.setCellGridOptions).toHaveBeenCalledTimes(initialCalls.cellGrid + 1);
   });
@@ -253,7 +256,7 @@ describe("MapCanvas", () => {
       getZoom: vi.fn(() => zoom),
       setZoom: vi.fn((nextZoom) => { zoom = nextZoom; }),
       resetView: vi.fn(),
-      setFeatures: vi.fn(),
+      setObjects: vi.fn(),
       setTheme: vi.fn(),
       setThemeOverrides: vi.fn(),
       setGridVisible: vi.fn(),
@@ -261,22 +264,22 @@ describe("MapCanvas", () => {
       setCellGridVisible: vi.fn(),
       setCellGridOptions: vi.fn(),
       setAssets: vi.fn(),
-      setLayerVisibility: vi.fn(),
+      setActiveLayer: vi.fn(), setObjectKindVisibility: vi.fn(),
       setMode: vi.fn(),
       setDrawingOptions: vi.fn(),
       setCellPaintRadius: vi.fn(),
       setCellEraseRadius: vi.fn(),
       setSelected: vi.fn(),
-      setSelectedFeatures: vi.fn(),
+      setSelectedObjects: vi.fn(),
       setSelectedCells: vi.fn(),
       setCellAttributes: vi.fn(),
       onDraw: vi.fn((listener) => { drawListener = listener as typeof drawListener; return vi.fn(); }),
-      onSelectFeatures: vi.fn((listener) => { selectFeaturesListener = listener as typeof selectFeaturesListener; return vi.fn(); }),
+      onSelectObjects: vi.fn((listener) => { selectFeaturesListener = listener as typeof selectFeaturesListener; return vi.fn(); }),
       onSelect: vi.fn(() => vi.fn()),
       onCellSelect: vi.fn((listener) => { cellSelectListener = listener; return vi.fn(); }),
-      onModifyFeatures: vi.fn((listener) => { modifyFeaturesListener = listener as typeof modifyFeaturesListener; return vi.fn(); }),
+      onModifyObjects: vi.fn((listener) => { modifyFeaturesListener = listener as typeof modifyFeaturesListener; return vi.fn(); }),
       onModify: vi.fn(() => vi.fn()),
-      onEraseFeatures: vi.fn(() => vi.fn()),
+      onEraseObjects: vi.fn(() => vi.fn()),
       onErase: vi.fn(() => vi.fn()),
       onLayerShift: vi.fn(() => vi.fn()),
       onError: vi.fn((listener) => { errorListener = listener as typeof errorListener; return vi.fn(); }),
@@ -314,7 +317,7 @@ describe("MapCanvas", () => {
     expect(map).not.toHaveClass("map-canvas-disabled");
     const palette = screen.getByRole("complementary", { name: "地図ツールパレット" });
     expect(palette).toHaveClass("tool-sidebar");
-    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-sidebar-button"))).toHaveLength(4);
+    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-sidebar-button"))).toHaveLength(3);
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "地形消しゴム" }).querySelector("svg")).toBeInTheDocument();
@@ -404,10 +407,10 @@ describe("MapCanvas", () => {
 
   it("shows only the active layer as the eraser target", () => {
     const renderer: RealmMapRenderer = {
-      getZoom: vi.fn(() => 1), setZoom: vi.fn(), resetView: vi.fn(), setFeatures: vi.fn(), setTheme: vi.fn(), setThemeOverrides: vi.fn(),
-      setGridVisible: vi.fn(), setGridOptions: vi.fn(), setCellGridVisible: vi.fn(), setCellGridOptions: vi.fn(), setAssets: vi.fn(), setLayerVisibility: vi.fn(),
-      setMode: vi.fn(), setDrawingOptions: vi.fn(), setCellPaintRadius: vi.fn(), setCellEraseRadius: vi.fn(), setSelected: vi.fn(), setSelectedFeatures: vi.fn(), setSelectedCells: vi.fn(), setCellAttributes: vi.fn(),
-      onDraw: vi.fn(() => vi.fn()), onSelectFeatures: vi.fn(() => vi.fn()), onSelect: vi.fn(() => vi.fn()), onCellSelect: vi.fn(() => vi.fn()), onModifyFeatures: vi.fn(() => vi.fn()), onModify: vi.fn(() => vi.fn()), onEraseFeatures: vi.fn(() => vi.fn()), onErase: vi.fn(() => vi.fn()), onLayerShift: vi.fn(() => vi.fn()), onError: vi.fn(() => vi.fn()), onZoomChange: vi.fn(() => vi.fn()), updateSize: vi.fn(), exportRaster: vi.fn(async () => ({ bytes: [], width: 1, height: 1 })), dispose: vi.fn(),
+      getZoom: vi.fn(() => 1), setZoom: vi.fn(), resetView: vi.fn(), setObjects: vi.fn(), setTheme: vi.fn(), setThemeOverrides: vi.fn(),
+      setGridVisible: vi.fn(), setGridOptions: vi.fn(), setCellGridVisible: vi.fn(), setCellGridOptions: vi.fn(), setAssets: vi.fn(), setActiveLayer: vi.fn(), setObjectKindVisibility: vi.fn(),
+      setMode: vi.fn(), setDrawingOptions: vi.fn(), setCellPaintRadius: vi.fn(), setCellEraseRadius: vi.fn(), setSelected: vi.fn(), setSelectedObjects: vi.fn(), setSelectedCells: vi.fn(), setCellAttributes: vi.fn(),
+      onDraw: vi.fn(() => vi.fn()), onSelectObjects: vi.fn(() => vi.fn()), onSelect: vi.fn(() => vi.fn()), onCellSelect: vi.fn(() => vi.fn()), onModifyObjects: vi.fn(() => vi.fn()), onModify: vi.fn(() => vi.fn()), onEraseObjects: vi.fn(() => vi.fn()), onErase: vi.fn(() => vi.fn()), onLayerShift: vi.fn(() => vi.fn()), onError: vi.fn(() => vi.fn()), onZoomChange: vi.fn(() => vi.fn()), updateSize: vi.fn(), exportRaster: vi.fn(async () => ({ bytes: [], width: 1, height: 1 })), dispose: vi.fn(),
     };
     const onToolChange = vi.fn();
     render(<MapCanvas activeLayer="region" onToolChange={onToolChange} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
@@ -427,7 +430,7 @@ describe("MapCanvas", () => {
   it("exposes shaping as an accessible palette tool", () => {
     const renderer = createPaletteRenderer();
     const onToolChange = vi.fn();
-    render(<MapCanvas onZoomChange={vi.fn()} onToolChange={onToolChange} createRenderer={() => renderer} />);
+    render(<MapCanvas activeLayer="region" onZoomChange={vi.fn()} onToolChange={onToolChange} createRenderer={() => renderer} />);
     const shapeButton = screen.getByRole("button", { name: "シェイピング" });
     expect(shapeButton).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(shapeButton);

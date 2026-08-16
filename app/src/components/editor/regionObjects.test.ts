@@ -1,9 +1,9 @@
-import { deriveRegionObjects } from "./regionObjects";
+import { deriveRegionEntries } from "./regionObjects";
 
-describe("deriveRegionObjects", () => {
+describe("deriveRegionEntries", () => {
   it("groups the same persistent region into disconnected components", () => {
     const regionId = "11111111-1111-4111-8111-111111111111";
-    const regions = deriveRegionObjects([
+    const regions = deriveRegionEntries([
       { cellId: "1:1", attribute: "region", value: "#2468AC", regionId },
       { cellId: "2:1", attribute: "region", value: "#2468AC", regionId },
       { cellId: "20:20", attribute: "region", value: "#2468AC", regionId },

@@ -1,8 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { AssetManifest, FeatureProperties, MapObject, MapShape, RealmFeature, RealmSnapshot, Region, RegionShape, TerrainShape } from "../../shared/realmContract";
+import type { AssetManifest, MapObject, Properties, RealmSnapshot, Region, RegionShape, TerrainShape } from "../../shared/realmContract";
 import { validateObjectGeometry, validateProperties } from "../domain/geometry";
 import { MAX_ASSET_BYTES, MAX_ASSET_DIMENSION, validateAsset } from "../domain/assets";
 import { parseStoredSettings } from "../domain/settings";
+import { mapShapesFromLayers } from "../../shared/layerProjection";
 import { validateMapShapes } from "../../shared/mapShapeGeometry";
 import type { OpenProjectSession } from "../state/session";
 import { corrupt } from "../domain/errors";
@@ -18,7 +19,7 @@ function assetManifest(row: StoredAssetRow, bytes?: number[]): AssetManifest {
   const metadata = json(row.metadataJson, "asset metadata");
   try {
     if (bytes !== undefined) {
-      const checked = validateAsset({ sha256, mime, bytes, width, height, metadata: metadata as FeatureProperties });
+      const checked = validateAsset({ sha256, mime, bytes, width, height, metadata: metadata as Properties });
       return { id: String(row.id), sha256, mime: checked.mime, byteLength: checked.bytes.length, width: checked.width, height: checked.height, metadata: checked.metadata };
     }
     if (!/^[0-9a-f]{64}$/u.test(sha256) || !Number.isSafeInteger(byteLength) || byteLength < 1 || byteLength > MAX_ASSET_BYTES) throw new Error("invalid asset size");
@@ -29,7 +30,7 @@ function assetManifest(row: StoredAssetRow, bytes?: number[]): AssetManifest {
   } catch { throw corrupt("An asset contains invalid contents."); }
 }
 
-function readLayers(session: OpenProjectSession): { terrain: TerrainShape[]; regions: Region[]; objects: MapObject[]; mapShapes: MapShape[]; features: RealmFeature[] } {
+function readLayers(session: OpenProjectSession): { terrain: TerrainShape[]; regions: Region[]; objects: MapObject[] } {
   const terrain = (session.database.prepare("SELECT id,geometry_json AS geometryJson FROM terrain_shapes ORDER BY id").all() as Record<string, unknown>[]).map((row): TerrainShape => ({ id: String(row.id), geometry: json(row.geometryJson, "terrain geometry") as TerrainShape["geometry"] }));
   const regionRows = session.database.prepare("SELECT id,name,color FROM regions ORDER BY name,id").all() as Record<string, unknown>[];
   const shapeRows = session.database.prepare("SELECT id,region_id AS regionId,geometry_json AS geometryJson FROM region_shapes ORDER BY region_id,id").all() as Record<string, unknown>[];
@@ -44,15 +45,11 @@ function readLayers(session: OpenProjectSession): { terrain: TerrainShape[]; reg
     const geometry = json(row.geometryJson, "object geometry"); const properties = json(row.propertiesJson, "object properties");
     const kind = String(row.kind) as MapObject["kind"];
     try { validateObjectGeometry(kind, geometry, true); validateProperties(properties); } catch { throw corrupt("An object contains invalid geometry or properties."); }
-    return { id: String(row.id), kind, label: String(row.label), geometry: geometry as MapObject["geometry"], properties: properties as FeatureProperties, zIndex: Number(row.zIndex), locked: Number(row.locked) === 1, ...(row.assetId === null || row.assetId === undefined ? {} : { assetId: String(row.assetId) }) };
+    return { id: String(row.id), kind, label: String(row.label), geometry: geometry as MapObject["geometry"], properties: properties as Properties, zIndex: Number(row.zIndex), locked: Number(row.locked) === 1, ...(row.assetId === null || row.assetId === undefined ? {} : { assetId: String(row.assetId) }) };
   });
-  const mapShapes: MapShape[] = [
-    ...terrain.map((shape) => ({ id: shape.id, layer: "terrain" as const, value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: shape.geometry })),
-    ...regions.flatMap((region) => region.shapes.map((shape) => ({ id: shape.id, layer: "region" as const, regionId: region.id, value: region.color, geometryVersion: 1, snapGridVersion: 2, geometry: shape.geometry }))),
-  ];
+  const mapShapes = mapShapesFromLayers({ terrain, regions });
   try { validateMapShapes(mapShapes); } catch { throw corrupt("A terrain or region shape is invalid or overlaps another shape in its layer."); }
-  const features = objects.map((object): RealmFeature => ({ id: object.id, featureType: object.kind, name: object.label, geometry: object.geometry, properties: { ...object.properties, locked: object.locked, zIndex: object.zIndex, ...(object.assetId ? { assetId: object.assetId } : {}) } }));
-  return { terrain, regions, objects, mapShapes, features };
+  return { terrain, regions, objects };
 }
 
 export function projectSnapshot(session: OpenProjectSession): RealmSnapshot {
@@ -71,7 +68,6 @@ export function projectSnapshot(session: OpenProjectSession): RealmSnapshot {
     formatVersion: 12, path: session.path, world: { id: String(world.id), name: String(world.name) },
     layers: { terrain: layers.terrain, regions: layers.regions, objects: layers.objects }, assets,
     settings: parseStoredSettings(String(world.settingsJson)), canUndo: session.canUndo, canRedo: session.canRedo,
-    features: layers.features, mapShapes: layers.mapShapes, featureCount: layers.objects.length,
   };
 }
 

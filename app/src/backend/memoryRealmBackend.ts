@@ -1,7 +1,8 @@
 import type {
-  AssetRead, CreateFeatureInput, CreateFeaturesBatchInput, CreateMapShapesInput, DeleteAssetsBatchInput, DeleteFeaturesBatchInput, DeleteMapShapesInput, ImportAssetInput, ImportAssetsBatchInput, MapObject, MapShape, ObjectKind, ProjectSummary, RealmBackend, RealmFeature, RealmLayers, RealmSnapshot, ReviseFeatureInput, ReviseFeaturesBatchInput, SaveProjectInput, SetFeaturesLockedInput, UpdateMapShapesInput,
+  AssetRead, DeleteAssetsBatchInput, ImportAssetInput, ImportAssetsBatchInput, ProjectSummary, RealmBackend, RealmLayers, RealmSnapshot, SaveProjectInput,
 } from "./types";
 import { validateMapShapes } from "../shared/mapShapeGeometry";
+import { mapShapesFromLayers } from "../shared/layerProjection";
 import { validateName, validateObjectGeometry, validateProperties } from "../main/domain/geometry";
 
 type MemoryProject = { snapshot: RealmSnapshot; assetBytes: Record<string, number[]> };
@@ -10,20 +11,19 @@ const normalizeName = (name: string): string => { const value = name.trim(); if 
 const emptySettings: RealmSnapshot["settings"] = { themeId: "ink", showGrid: true, exportScale: 1, exportExtent: "world", canvasWidth: 2048, canvasHeight: 1024, gridKind: "graticule", gridColor: "#687784", gridWidth: 1, gridSpacing: 10, themeOverrides: {} };
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const emptyLayers = (): RealmLayers => ({ terrain: [], regions: [], objects: [] });
-const asMapShapes = (layers: RealmLayers): MapShape[] => [
-  ...layers.terrain.map((shape) => ({ id: shape.id, layer: "terrain" as const, value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: shape.geometry })),
-  ...layers.regions.flatMap((region) => region.shapes.map((shape) => ({ id: shape.id, layer: "region" as const, regionId: region.id, value: region.color, geometryVersion: 1, snapGridVersion: 2, geometry: shape.geometry }))),
-];
-const asFeatures = (objects: readonly MapObject[]): RealmFeature[] => objects.map((object) => ({ id: object.id, featureType: object.kind, name: object.label, geometry: object.geometry, properties: { ...object.properties, locked: object.locked, zIndex: object.zIndex, ...(object.assetId ? { assetId: object.assetId } : {}) } }));
-const withProjection = (snapshot: RealmSnapshot): RealmSnapshot => { const layers = snapshot.layers; snapshot.mapShapes = asMapShapes(layers); snapshot.features = asFeatures(layers.objects); snapshot.featureCount = layers.objects.length; return snapshot; };
-const makeSnapshot = (path: string, name: string): RealmSnapshot => withProjection({ formatVersion: 12, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, layers: emptyLayers(), assets: [], settings: clone(emptySettings), features: [], mapShapes: [], featureCount: 0, canUndo: false, canRedo: false });
+const makeSnapshot = (path: string, name: string): RealmSnapshot => ({ formatVersion: 12, path, world: { id: crypto.randomUUID(), name: normalizeName(name) }, layers: emptyLayers(), assets: [], settings: clone(emptySettings), canUndo: false, canRedo: false });
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(",")}}`;
+  return JSON.stringify(value) ?? "undefined";
+};
 
 function validateLayers(layers: RealmLayers, assets: readonly { id: string }[] = []): void {
   for (const region of layers.regions) {
     if (!UUID_PATTERN.test(region.id) || !/^#[\da-f]{6}$/iu.test(region.color)) throw new Error("領域の識別子または色が不正です。");
     validateName(region.name);
   }
-  try { validateMapShapes(asMapShapes(layers)); } catch { throw new Error("地形または領域の形状が不正です。同じレイヤー内の重なりも許可されません。"); }
+  try { validateMapShapes(mapShapesFromLayers(layers)); } catch { throw new Error("地形または領域の形状が不正です。同じレイヤー内の重なりも許可されません。"); }
   for (const object of layers.objects) {
     if (!UUID_PATTERN.test(object.id) || !["city", "text", "mountain", "forest"].includes(object.kind) || !Number.isSafeInteger(object.zIndex) || object.zIndex < -1000000 || object.zIndex > 1000000 || typeof object.locked !== "boolean") throw new Error("オブジェクトの識別子、種別、順序、またはロック状態が不正です。");
     try { validateName(object.label); validateObjectGeometry(object.kind, object.geometry); validateProperties(object.properties); } catch { throw new Error("オブジェクトの形状またはプロパティが不正です。"); }
@@ -47,11 +47,11 @@ async function prepareAsset(input: ImportAssetInput): Promise<{ mime: string; by
 
 export class MemoryRealmBackend implements RealmBackend {
   private readonly projects = new Map<string, MemoryProject>(); private readonly undo = new Map<string, MemoryProject[]>(); private readonly redo = new Map<string, MemoryProject[]>(); private openPath: string | null = null;
-  constructor(initialProjects: RealmSnapshot[] = []) { for (const incoming of initialProjects) { const snapshot = clone(incoming); snapshot.layers ??= emptyLayers(); withProjection(snapshot); this.projects.set(snapshot.path, { snapshot, assetBytes: {} }); } }
+  constructor(initialProjects: RealmSnapshot[] = []) { for (const incoming of initialProjects) { const snapshot = clone(incoming); snapshot.layers ??= emptyLayers(); this.projects.set(snapshot.path, { snapshot, assetBytes: {} }); } }
   private current(): MemoryProject { if (!this.openPath) throw new Error("世界が開かれていません。"); const project = this.projects.get(this.openPath); if (!project) throw new Error("世界が見つかりません。"); return project; }
-  private result(project: MemoryProject): RealmSnapshot { const snapshot = withProjection(clone(project.snapshot)); snapshot.canUndo = (this.undo.get(snapshot.path)?.length ?? 0) > 0; snapshot.canRedo = (this.redo.get(snapshot.path)?.length ?? 0) > 0; return snapshot; }
+  private result(project: MemoryProject): RealmSnapshot { const snapshot = clone(project.snapshot); snapshot.canUndo = (this.undo.get(snapshot.path)?.length ?? 0) > 0; snapshot.canRedo = (this.redo.get(snapshot.path)?.length ?? 0) > 0; return snapshot; }
   private checkpoint(project: MemoryProject): void { const stack = this.undo.get(project.snapshot.path) ?? []; stack.push(clone(project)); this.undo.set(project.snapshot.path, stack); this.redo.set(project.snapshot.path, []); }
-  private replaceLayers(layers: RealmLayers): RealmSnapshot { const project = this.current(); validateLayers(layers, project.snapshot.assets); this.checkpoint(project); project.snapshot.layers = clone(layers); withProjection(project.snapshot); return this.result(project); }
+  private replaceLayers(layers: RealmLayers): RealmSnapshot { const project = this.current(); validateLayers(layers, project.snapshot.assets); this.checkpoint(project); project.snapshot.layers = clone(layers); return this.result(project); }
   async listProjects(): Promise<ProjectSummary[]> { return [...this.projects.values()].map(({ snapshot }) => ({ libraryId: snapshot.path, name: snapshot.world.name })).sort((a, b) => a.name.localeCompare(b.name)); }
   async createProject(input: { name: string; path?: string }): Promise<RealmSnapshot> { const path = input.path ?? `browser://${crypto.randomUUID()}.realmmap`; if (this.projects.has(path)) throw new Error("同じ場所に世界がすでにあります。"); const project = { snapshot: makeSnapshot(path, input.name), assetBytes: {} }; this.projects.set(path, project); this.openPath = path; return this.result(project); }
   async openProject(input: { libraryId: string }): Promise<RealmSnapshot> { const project = this.projects.get(input.libraryId); if (!project) throw new Error("指定した世界が見つかりません。"); this.openPath = input.libraryId; this.undo.set(input.libraryId, []); this.redo.set(input.libraryId, []); return this.result(project); }
@@ -62,26 +62,23 @@ export class MemoryRealmBackend implements RealmBackend {
   async updateProjectSettings(input: { settings: RealmSnapshot["settings"] }): Promise<RealmSnapshot> { if (!input?.settings) throw new Error("プロジェクト設定が不正です。"); const project = this.current(); if (JSON.stringify(project.snapshot.settings) !== JSON.stringify(input.settings)) { this.checkpoint(project); project.snapshot.settings = clone(input.settings); } return this.result(project); }
   async replaceTerrainLayer(input: { shapes: RealmLayers["terrain"] }): Promise<RealmSnapshot> { return this.replaceLayers({ ...clone(this.current().snapshot.layers), terrain: clone(input.shapes) }); }
   async replaceRegionLayer(input: { regions: RealmLayers["regions"] }): Promise<RealmSnapshot> { return this.replaceLayers({ ...clone(this.current().snapshot.layers), regions: clone(input.regions) }); }
-  async replaceObjectLayer(input: { objects: RealmLayers["objects"] }): Promise<RealmSnapshot> { return this.replaceLayers({ ...clone(this.current().snapshot.layers), objects: clone(input.objects) }); }
+  async replaceObjectLayer(input: { objects: RealmLayers["objects"] }): Promise<RealmSnapshot> {
+    const current = this.current().snapshot.layers.objects;
+    const next = input.objects;
+    const nextById = new Map(next.map((object) => [object.id, object]));
+    for (const locked of current.filter((object) => object.locked)) {
+      const replacement = nextById.get(locked.id);
+      if (!replacement || stableJson(locked) !== stableJson(replacement)) throw new Error("ロックされたオブジェクトは変更または削除できません。");
+    }
+    return this.replaceLayers({ ...clone(this.current().snapshot.layers), objects: clone(input.objects) });
+  }
   async importAsset(input: ImportAssetInput): Promise<RealmSnapshot> { const prepared = await prepareAsset(input); const project = this.current(); if (project.snapshot.assets.some((asset) => asset.sha256 === prepared.digest)) return this.result(project); this.checkpoint(project); const id = crypto.randomUUID(); project.snapshot.assets.push({ id, sha256: prepared.digest, mime: prepared.mime, byteLength: prepared.bytes.length, width: prepared.width, height: prepared.height, metadata: prepared.metadata }); project.assetBytes[id] = prepared.bytes; return this.result(project); }
   async importAssetsBatch(input: ImportAssetsBatchInput): Promise<RealmSnapshot> { if (!input || !Array.isArray(input.assets) || input.assets.length < 1 || input.assets.length > 256) throw new Error("素材パックの件数が不正です。"); const prepared = await Promise.all(input.assets.map(prepareAsset)); const project = this.current(); const known = new Set(project.snapshot.assets.map((asset) => asset.sha256)); const additions = prepared.filter((asset) => !known.has(asset.digest)); if (!additions.length) return this.result(project); this.checkpoint(project); for (const asset of additions) { const id = crypto.randomUUID(); known.add(asset.digest); project.snapshot.assets.push({ id, sha256: asset.digest, mime: asset.mime, byteLength: asset.bytes.length, width: asset.width, height: asset.height, metadata: asset.metadata }); project.assetBytes[id] = asset.bytes; } return this.result(project); }
   async readAsset(input: { id: string }): Promise<AssetRead> { const project = this.current(); const manifest = project.snapshot.assets.find((asset) => asset.id === input.id); const bytes = project.assetBytes[input.id]; if (!manifest || !bytes) throw new Error("素材が見つかりません。"); return { manifest: clone(manifest), bytes: [...bytes] }; }
   async deleteAsset(input: { id: string }): Promise<RealmSnapshot> { return this.deleteAssetsBatch({ ids: [input.id] }); }
   async deleteAssetsBatch(input: DeleteAssetsBatchInput): Promise<RealmSnapshot> { const project = this.current(); const ids = new Set(input.ids); if (!input.ids.length || ids.size !== input.ids.length || input.ids.some((id) => !project.snapshot.assets.some((asset) => asset.id === id))) throw new Error("素材の指定が不正です。"); if (project.snapshot.layers.objects.some((object) => object.assetId && ids.has(object.assetId))) throw new Error("使用中の素材は削除できません。"); this.checkpoint(project); project.snapshot.assets = project.snapshot.assets.filter((asset) => !ids.has(asset.id)); for (const id of ids) delete project.assetBytes[id]; return this.result(project); }
-  private featureKind(featureType: CreateFeatureInput["featureType"]): ObjectKind { if (featureType === "city" || featureType === "text" || featureType === "mountain" || featureType === "forest") return featureType; throw new Error("この地物種別はオブジェクトとして扱えません。"); }
-  async createFeature(input: CreateFeatureInput): Promise<RealmSnapshot> { return this.createFeaturesBatch({ features: [input] }); }
-  async createFeaturesBatch(input: CreateFeaturesBatchInput): Promise<RealmSnapshot> { if (!input?.features?.length || input.features.length > 2048) throw new Error("一度に作成できるオブジェクト数が不正です。"); const project = this.current(); const objects = [...project.snapshot.layers.objects]; input.features.forEach((feature, index) => { const object: MapObject = { id: crypto.randomUUID(), kind: this.featureKind(feature.featureType), label: normalizeName(feature.name), geometry: clone(feature.geometry), properties: clone(validateProperties(feature.properties ?? {})), zIndex: objects.length + index, locked: feature.properties?.locked === true, ...(typeof feature.properties?.assetId === "string" ? { assetId: feature.properties.assetId } : {}) }; objects.push(object); }); return this.replaceObjectLayer({ objects }); }
-  async reviseFeature(input: ReviseFeatureInput): Promise<RealmSnapshot> { return this.reviseFeaturesBatch({ features: [input] }); }
-  async reviseFeaturesBatch(input: ReviseFeaturesBatchInput): Promise<RealmSnapshot> { const project = this.current(); const objects = clone(project.snapshot.layers.objects); for (const revision of input.features) { const index = objects.findIndex((object) => object.id === revision.id); if (index < 0) throw new Error("オブジェクトが見つかりません。"); const object = objects[index]!; if (object.locked) throw new Error("ロック中のオブジェクトは変更できません。"); objects[index] = { ...object, label: normalizeName(revision.name), geometry: clone(revision.geometry), properties: clone(validateProperties(revision.properties ?? {})), locked: revision.properties?.locked === true }; } return this.replaceObjectLayer({ objects }); }
-  async deleteFeature(input: { id: string }): Promise<RealmSnapshot> { return this.deleteFeaturesBatch({ ids: [input.id] }); }
-  async deleteFeaturesBatch(input: DeleteFeaturesBatchInput): Promise<RealmSnapshot> { const project = this.current(); const ids = new Set(input.ids); const objects = project.snapshot.layers.objects; const selected = objects.filter((object) => ids.has(object.id)); if (!input.ids.length || selected.length !== ids.size) throw new Error("オブジェクトが見つかりません。"); if (selected.some((object) => object.locked)) throw new Error("ロック中のオブジェクトは削除できません。"); return this.replaceObjectLayer({ objects: objects.filter((object) => !ids.has(object.id)) }); }
-  async setFeaturesLocked(input: SetFeaturesLockedInput): Promise<RealmSnapshot> { const project = this.current(); const ids = new Set(input.ids); const objects = project.snapshot.layers.objects.map((object) => ids.has(object.id) ? { ...object, locked: input.locked } : object); if (objects.filter((object) => ids.has(object.id)).length !== ids.size) throw new Error("オブジェクトが見つかりません。"); return this.replaceObjectLayer({ objects }); }
   async undoProject(): Promise<RealmSnapshot> { const project = this.current(); const stack = this.undo.get(project.snapshot.path) ?? []; const previous = stack.pop(); if (!previous) throw new Error("元に戻す操作がありません。"); const redo = this.redo.get(project.snapshot.path) ?? []; redo.push(clone(project)); this.redo.set(project.snapshot.path, redo); this.projects.set(project.snapshot.path, previous); return this.result(previous); }
   async redoProject(): Promise<RealmSnapshot> { const project = this.current(); const stack = this.redo.get(project.snapshot.path) ?? []; const next = stack.pop(); if (!next) throw new Error("やり直す操作がありません。"); const undo = this.undo.get(project.snapshot.path) ?? []; undo.push(clone(project)); this.undo.set(project.snapshot.path, undo); this.projects.set(project.snapshot.path, next); return this.result(next); }
-  private layersFromMapShapes(shapes: readonly MapShape[]): RealmLayers { const regionMap = new Map<string, RealmLayers["regions"][number]>(); const terrain = shapes.filter((shape) => shape.layer === "terrain").map(({ id, geometry }) => ({ id, geometry })); for (const shape of shapes.filter((candidate) => candidate.layer === "region")) { const region = regionMap.get(shape.regionId!) ?? { id: shape.regionId!, name: "領域", color: shape.value, shapes: [] }; region.shapes.push({ id: shape.id, geometry: shape.geometry }); regionMap.set(region.id, region); } return { ...clone(this.current().snapshot.layers), terrain, regions: [...regionMap.values()] }; }
-  async createMapShapes(input: CreateMapShapesInput): Promise<RealmSnapshot> { const current = this.current(); const ids = new Set(current.snapshot.mapShapes.map((shape) => shape.id)); if (input.shapes.some((shape) => ids.has(shape.id))) throw new Error("形状IDが重複しています。"); return this.updateMapShapes({ shapes: [...current.snapshot.mapShapes, ...input.shapes] }); }
-  async updateMapShapes(input: UpdateMapShapesInput): Promise<RealmSnapshot> { const layers = this.layersFromMapShapes(input.shapes); validateLayers(layers); return this.replaceLayers(layers); }
-  async deleteMapShapes(input: DeleteMapShapesInput): Promise<RealmSnapshot> { const current = this.current(); const ids = new Set(input.ids); if (!input.ids.length || input.ids.some((id) => !current.snapshot.mapShapes.some((shape) => shape.id === id))) throw new Error("形状が見つかりません。"); return this.updateMapShapes({ shapes: current.snapshot.mapShapes.filter((shape) => !ids.has(shape.id)) }); }
   async closeProject(): Promise<void> { this.openPath = null; }
   async getOpenProject(): Promise<RealmSnapshot | null> { return this.openPath ? this.result(this.current()) : null; }
 }

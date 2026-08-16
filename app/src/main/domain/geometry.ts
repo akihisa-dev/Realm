@@ -1,4 +1,4 @@
-import type { FeatureType, GeoJsonGeometry, FeatureProperties } from "../../shared/realmContract";
+import type { GeoJsonGeometry, ObjectKind, Properties } from "../../shared/realmContract";
 import { invalid } from "./errors";
 
 export const MAX_FEATURE_PROPERTIES_BYTES = 32 * 1024;
@@ -7,21 +7,20 @@ export const MAX_GEOMETRY_BYTES = 512 * 1024;
 const MIN_POLYGON_AREA = 1e-8;
 const EPSILON = 1e-12;
 
-const geometryKind: Record<FeatureType, GeoJsonGeometry["type"]> = {
-  city: "Point", text: "Point", town: "Point", mountain: "Point", tree: "Point", symbol: "Point", label: "Point", scale: "Point",
-  river: "LineString", coastline: "LineString", boundary: "LineString", road: "LineString",
-  terrain: "Polygon", forest: "Polygon", country: "Polygon", region: "Polygon", lake: "Polygon", overlay: "Polygon", frame: "Polygon",
+type GeometryKind = ObjectKind | "terrain" | "region";
+const geometryKind: Record<GeometryKind, GeoJsonGeometry["type"]> = {
+  city: "Point", text: "Point", mountain: "Point", forest: "Polygon", terrain: "Polygon", region: "Polygon",
 };
 
 /** Geometry validation for the layer-native object registry. */
 export function validateObjectGeometry(kind: "city" | "text" | "mountain" | "forest", geometry: unknown, strict = true): string {
-  return validateGeometry(kind === "text" ? "label" : kind, geometry, strict);
+  return validateGeometry(kind, geometry, strict);
 }
 
 export function validateName(name: string): string {
-  if (typeof name !== "string") throw invalid("A project or feature name is required.");
+  if (typeof name !== "string") throw invalid("A project or object name is required.");
   const value = name.trim();
-  if (!value) throw invalid("A project or feature name is required.");
+  if (!value) throw invalid("A project or object name is required.");
   if ([...value].length > 200) throw invalid("The name is too long.");
   return value;
 }
@@ -66,10 +65,10 @@ function strictRing(raw: unknown): [number, number][] {
   return ring;
 }
 
-export function validateGeometry(featureType: FeatureType, geometry: unknown, strict = true): string {
+export function validateGeometry(kind: GeometryKind, geometry: unknown, strict = true): string {
   if (!geometry || typeof geometry !== "object" || Array.isArray(geometry)) throw invalid("Geometry must be a GeoJSON geometry object.");
   const object = geometry as { type?: unknown; coordinates?: unknown };
-  if (object.type !== geometryKind[featureType]) throw invalid("Geometry type does not match the selected feature class.");
+  if (object.type !== geometryKind[kind]) throw invalid("Geometry type does not match the selected object or layer.");
   const coordinates = object.coordinates;
   let encoded: string;
   try { encoded = JSON.stringify(geometry); } catch { throw invalid("Geometry could not be encoded as GeoJSON."); }
@@ -97,20 +96,18 @@ export function validateGeometry(featureType: FeatureType, geometry: unknown, st
   return encoded;
 }
 
-export function validateProperties(properties: unknown): FeatureProperties {
-  if (!properties || typeof properties !== "object" || Array.isArray(properties)) throw invalid("Feature properties must be an object.");
+export function validateProperties(properties: unknown): Properties {
+  if (!properties || typeof properties !== "object" || Array.isArray(properties)) throw invalid("Object properties must be an object.");
   let encoded: string;
   try {
     encoded = JSON.stringify(properties, (_key, value) => {
-      if (value === undefined || typeof value === "bigint" || typeof value === "function" || typeof value === "symbol") throw invalid("Feature properties must contain JSON values.");
+      if (value === undefined || typeof value === "bigint" || typeof value === "function" || typeof value === "symbol") throw invalid("Object properties must contain JSON values.");
       return value;
     });
   } catch (error) {
     if (error instanceof Error && error.name === "RealmError") throw error;
-    throw invalid("Feature properties must contain JSON values.");
+    throw invalid("Object properties must contain JSON values.");
   }
-  if (new TextEncoder().encode(encoded).length > MAX_FEATURE_PROPERTIES_BYTES) throw invalid("Feature properties are too large.");
-  return properties as FeatureProperties;
+  if (new TextEncoder().encode(encoded).length > MAX_FEATURE_PROPERTIES_BYTES) throw invalid("Object properties are too large.");
+  return properties as Properties;
 }
-
-export function featureTypeGeometry(featureType: FeatureType): GeoJsonGeometry["type"] { return geometryKind[featureType]; }

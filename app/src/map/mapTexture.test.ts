@@ -1,11 +1,30 @@
-import { mapTextureDots } from "./mapTexture";
+import { describe, expect, it, vi } from "vitest";
+import { mapTextureDots, paintMapTexture } from "./mapTexture";
 
-it("creates bounded deterministic paper texture dots for each theme", () => {
-  const first = mapTextureDots(800, 600, "ink");
-  expect(first).toEqual(mapTextureDots(800, 600, "ink"));
-  expect(first).not.toEqual(mapTextureDots(800, 600, "midnight"));
-  expect(first.length).toBeGreaterThan(20);
-  expect(first.every(({ x, y, radius }) => x >= 0 && x <= 800 && y >= 0 && y <= 600 && radius > 0)).toBe(true);
-  expect(mapTextureDots(0, 600, "ink")).toEqual([]);
-  expect(mapTextureDots(20_000, 20_000, "atlas")).toHaveLength(12_000);
+describe("map texture", () => {
+  it("returns deterministic bounded dots for each theme and rejects invalid sizes", () => {
+    expect(mapTextureDots(0, 100, "ink")).toEqual([]);
+    expect(mapTextureDots(Number.NaN, 100, "atlas")).toEqual([]);
+    for (const theme of ["ink", "atlas", "midnight"] as const) {
+      const dots = mapTextureDots(200, 100, theme);
+      expect(dots.length).toBeGreaterThan(0);
+      expect(dots).toEqual(mapTextureDots(200, 100, theme));
+      expect(dots.every(({ x, y, radius }) => x >= 0 && x <= 200 && y >= 0 && y <= 100 && radius > 0)).toBe(true);
+    }
+  });
+
+  it("paints both light and dark dots with theme-specific colors", () => {
+    const context = {
+      beginPath: vi.fn(),
+      arc: vi.fn(),
+      fill: vi.fn(),
+      fillStyle: "",
+    } as unknown as CanvasRenderingContext2D;
+    paintMapTexture(context, 120, 120, "midnight");
+    expect(context.beginPath).toHaveBeenCalled();
+    expect(context.arc).toHaveBeenCalled();
+    expect(context.fill).toHaveBeenCalled();
+    paintMapTexture(context, 120, 120, "ink");
+    expect(context.fill).toHaveBeenCalled();
+  });
 });

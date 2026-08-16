@@ -48,8 +48,8 @@ export class CellRegionController {
 
   private previewFeature(): Feature {
     return new Feature({
-      featureType: "region",
-      name: "",
+      kind: "region",
+      label: "",
       properties: { fillColor: this.color, strokeColor: this.color, fillOpacity: 0.18 },
     });
   }

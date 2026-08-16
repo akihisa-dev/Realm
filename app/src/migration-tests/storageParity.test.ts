@@ -26,7 +26,7 @@ import { copySqliteSnapshot } from "../main/storage/atomic";
 import { preflightExistingProject, sameIdentity, sourceIdentity } from "../main/storage/path";
 import { openProject, openProjectAfterValidationForTest, createProject as createStoredProject } from "../main/storage/project";
 import { cellIdsToPolygonGeometries } from "../shared/mapShapeGeometry";
-import type { MapShape } from "../shared/realmContract";
+import type { MapObject } from "../shared/realmContract";
 
 const directories: string[] = [];
 const fixtureDirectory = (): string => {
@@ -41,8 +41,8 @@ afterEach(() => {
 
 const point = { type: "Point" as const, coordinates: [1, 2] as [number, number] };
 const png = [137, 80, 78, 71, 13, 10, 26, 10, 0, 1, 2];
-const featureInput = { featureType: "city" as const, name: "Synthetic city", geometry: point, properties: { source: "parity" } };
-const terrainShape = (cells: string[], id = "11111111-1111-4111-8111-111111111111"): MapShape => ({ id, layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: cellIdsToPolygonGeometries(cells)[0]! });
+const objectInput: MapObject = { id: "22222222-2222-4222-8222-222222222222", kind: "city", label: "Synthetic city", geometry: point, properties: { source: "parity" }, zIndex: 0, locked: false };
+const terrainShape = (cells: string[], id = "11111111-1111-4111-8111-111111111111") => ({ id, geometry: cellIdsToPolygonGeometries(cells)[0]! });
 
 function privateSnapshots(directory: string): string[] {
   return readdirSync(directory).filter((name) => name.startsWith(".realm-source-") || name.includes("parity"));
@@ -300,7 +300,7 @@ describe("Electron storage parity: path, snapshots, migrations and transfer", ()
     try { expect(copied.prepare("SELECT value FROM wal_marker").get()).toEqual({ value: "committed-wal" }); } finally { copied.close(); }
     const imported = new RealmCommands({ libraryDirectory: join(directory, "library") });
     const importedSnapshot = await imported.importProject({ path: transferPath });
-    expect(importedSnapshot.featureCount).toBe(0);
+    expect(importedSnapshot.layers.objects).toHaveLength(0);
     const exportedPath = join(directory, "exported.realmmap");
     await imported.exportProject({ path: exportedPath });
     const exported = new DatabaseSync(exportedPath, { readOnly: true });
@@ -334,12 +334,12 @@ describe("Electron storage parity: transactional CRUD and session history", () =
       }
     };
     await withTrigger("reject_object", "objects", async () => {
-      await expect(commands.createFeature(featureInput)).rejects.toThrow();
+      await expect(commands.replaceObjectLayer({ objects: [objectInput] })).rejects.toThrow();
     });
     let check = new DatabaseSync(path, { readOnly: true }); expect(Number((check.prepare("SELECT COUNT(*) AS count FROM objects").get() as Record<string, unknown>).count)).toBe(0); check.close();
     await withTrigger("reject_shape", "terrain_shapes", async () => {
-      await expect(commands.updateMapShapes({ shapes: [terrainShape(["1:1", "2:2"])] })).rejects.toThrow();
-      expect((await commands.getOpenProject())?.mapShapes).toEqual([]);
+      await expect(commands.replaceTerrainLayer({ shapes: [terrainShape(["1:1", "2:2"])] })).rejects.toThrow();
+      expect((await commands.getOpenProject())?.layers.terrain).toEqual([]);
     });
     await withTrigger("reject_asset", "assets", async () => {
       await expect(commands.importAsset({ mime: "image/png", bytes: png, width: 1, height: 1, metadata: {} })).rejects.toThrow();
@@ -353,29 +353,29 @@ describe("Electron storage parity: transactional CRUD and session history", () =
     const commands = new RealmCommands({ libraryDirectory: directory });
     let snapshot = await commands.createProject({ name: "History" });
     const path = snapshot.path;
-    snapshot = await commands.createFeature(featureInput);
-    const featureId = snapshot.features[0]!.id;
+    snapshot = await commands.replaceObjectLayer({ objects: [objectInput] });
+    const objectId = snapshot.layers.objects[0]!.id;
     snapshot = await commands.saveProject({ name: "Renamed" });
     expect(snapshot.canUndo).toBe(true);
     snapshot = await commands.undoProject(); expect(snapshot.world.name).toBe("History"); expect(snapshot.canRedo).toBe(true);
     snapshot = await commands.redoProject(); expect(snapshot.world.name).toBe("Renamed");
     const shape = terrainShape(["1:1"]);
-    snapshot = await commands.updateMapShapes({ shapes: [shape] });
+    snapshot = await commands.replaceTerrainLayer({ shapes: [shape] });
     expect(snapshot.canUndo).toBe(true);
-    snapshot = await commands.undoProject(); expect(snapshot.mapShapes).toEqual([]);
-    snapshot = await commands.redoProject(); expect(snapshot.mapShapes[0]?.value).toBe("terrain");
+    snapshot = await commands.undoProject(); expect(snapshot.layers.terrain).toEqual([]);
+    snapshot = await commands.redoProject(); expect(snapshot.layers.terrain[0]?.id).toBe(shape.id);
     snapshot = await commands.importAsset({ mime: "image/png", bytes: png, width: 1, height: 1, metadata: { role: "history" } });
     expect(snapshot.assets).toHaveLength(1);
     snapshot = await commands.undoProject(); expect(snapshot.assets).toHaveLength(0);
     snapshot = await commands.redoProject(); expect(snapshot.assets).toHaveLength(1);
     await commands.closeProject();
     const reopened = await commands.openProject({ libraryId: basename(path, ".realmmap") });
-    expect(reopened.featureCount).toBe(1);
-    expect((await commands.getOpenProject())?.mapShapes[0]?.value).toBe("terrain");
+    expect(reopened.layers.objects).toHaveLength(1);
+    expect((await commands.getOpenProject())?.layers.terrain[0]?.id).toBe(shape.id);
     expect(reopened.assets).toHaveLength(1);
     expect(reopened.canUndo).toBe(false);
     await commands.closeProject();
-    void featureId;
+    void objectId;
   });
 
   it("restores deleted asset bytes through undo and removes them again through redo", async () => {

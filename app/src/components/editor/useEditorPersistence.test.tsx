@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { MemoryRealmBackend, type MapShape, type RealmSnapshot } from "../../backend";
 import { cellIdsToPolygonGeometries } from "../../shared/mapShapeGeometry";
+import { mapShapesFromLayers } from "../../shared/layerProjection";
 import { useEditorPersistence, type EditorPersistenceOptions } from "./useEditorPersistence";
 
 const terrain = (cells: string[], id = "11111111-1111-4111-8111-111111111111"): MapShape => ({
@@ -60,7 +61,7 @@ describe("useEditorPersistence", () => {
 
     act(() => { rerender(hookProps(second, backend, onSaved, onProjectChanged, onOperationSettled)); });
     expect(result.current.viewedSnapshot.path).toBe(second.path);
-    expect(result.current.mapShapes).toEqual(second.mapShapes);
+    expect(result.current.mapShapes).toEqual(mapShapesFromLayers(second.layers));
     expect(onProjectChanged).toHaveBeenCalledTimes(1);
   });
 
@@ -112,7 +113,7 @@ describe("useEditorPersistence", () => {
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.saving).toBe(false));
     expect(update.mock.calls[1]?.[0].shapes).toEqual([{ id: secondShape.id, geometry: secondShape.geometry }]);
-    expect(result.current.viewedSnapshot.mapShapes).toEqual([secondShape]);
+    expect(mapShapesFromLayers(result.current.viewedSnapshot.layers)).toEqual([secondShape]);
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
 

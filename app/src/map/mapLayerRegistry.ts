@@ -8,8 +8,8 @@ import CircleStyle from "ol/style/Circle";
 import Fill from "ol/style/Fill";
 import Stroke from "ol/style/Stroke";
 import Style from "ol/style/Style";
-import type { RealmFeature } from "../backend";
-import { createCellStyle, createFeatureStyle } from "./styles";
+import type { ObjectKind } from "../backend";
+import { createCellStyle, createObjectStyle } from "./styles";
 import { mapTheme, type MapThemeId, type ThemeOverrides } from "./themes";
 import { boundedHexGrid, boundedSquareGrid, createGraticule, DEFAULT_GRID_OPTIONS, fixedCellGridLines } from "./gridLayers";
 import type { CellGridOptions, GridOptions } from "./contracts";
@@ -18,7 +18,7 @@ import { colorWithOpacity, DEFAULT_CELL_GRID_OPTIONS, OUTSIDE_GRID_LINE_DASH, OU
 type MapLayerRegistryOptions = {
   themeId: () => MapThemeId;
   themeOverrides: () => ThemeOverrides;
-  featureVisible: (featureType: RealmFeature["featureType"] | undefined) => boolean;
+  objectKindVisible: (kind: ObjectKind | "terrain" | "region" | undefined) => boolean;
   assetUrl: (assetId: string | undefined) => string | undefined;
 };
 
@@ -33,8 +33,6 @@ export class MapLayerRegistry {
   readonly terrainSource = new VectorSource({ wrapX: false });
   readonly regionSource = new VectorSource({ wrapX: false });
   readonly objectSource = new VectorSource({ wrapX: false });
-  /** @deprecated Renderer callers still use the old projection name. */
-  readonly featureSource = this.objectSource;
   readonly cellSource = new VectorSource({ wrapX: false });
   readonly terrainOutlineSource = new VectorSource({ wrapX: false });
   /** @deprecated The smooth names describe presentation, not ownership. */
@@ -45,13 +43,11 @@ export class MapLayerRegistry {
   readonly terrainCellGridSource = new VectorSource({ wrapX: false });
   readonly gridSource = new VectorSource({ wrapX: false });
 
-  readonly featureStyle: ReturnType<typeof createFeatureStyle>;
+  readonly objectStyle: ReturnType<typeof createObjectStyle>;
   readonly cellStyle: ReturnType<typeof createCellStyle>;
   readonly terrainLayer: VectorLayer;
   readonly regionLayer: VectorLayer;
   readonly objectLayer: VectorLayer;
-  /** @deprecated Renderer callers still use the old projection name. */
-  readonly featureLayer: VectorLayer;
   readonly cellLayer: VectorLayer;
   readonly terrainOutlineLayer: VectorLayer;
   /** @deprecated The smooth names describe presentation, not ownership. */
@@ -74,9 +70,9 @@ export class MapLayerRegistry {
   private regionSmoothHiddenIdentity: string | null = null;
 
   constructor(options: MapLayerRegistryOptions) {
-    this.featureStyle = createFeatureStyle(
+    this.objectStyle = createObjectStyle(
       options.themeId,
-      options.featureVisible,
+      options.objectKindVisible,
       options.assetUrl,
       options.themeOverrides,
     );
@@ -93,8 +89,7 @@ export class MapLayerRegistry {
       fill: new Fill({ color: colorWithOpacity(DEFAULT_CELL_GRID_OPTIONS.color, TERRAIN_GRID_OPACITY) }),
     });
 
-    this.objectLayer = new VectorLayer({ source: this.objectSource, style: this.featureStyle, visible: true, zIndex: 20 });
-    this.featureLayer = this.objectLayer;
+    this.objectLayer = new VectorLayer({ source: this.objectSource, style: this.objectStyle, visible: true, zIndex: 20 });
     this.cellLayer = new VectorLayer({ source: this.cellSource, style: this.cellStyle, visible: true });
     this.terrainOutlineLayer = new VectorLayer({
       source: this.terrainOutlineSource,
@@ -143,7 +138,7 @@ export class MapLayerRegistry {
   get mapLayers(): [Graticule, VectorLayer, VectorLayer, VectorLayer, VectorLayer, VectorLayer, VectorLayer, VectorLayer, VectorLayer] {
     return [
       this.graticule,
-      this.featureLayer,
+      this.objectLayer,
       this.cellLayer,
       this.gridLayer,
       this.cellGridLayer,
@@ -155,7 +150,7 @@ export class MapLayerRegistry {
   }
 
   invalidateTheme(): void {
-    this.featureLayer.changed();
+    this.objectLayer.changed();
     this.cellLayer.changed();
     this.terrainOutlineLayer.changed();
     this.terrainSmoothLayer.changed();
@@ -220,7 +215,7 @@ export class MapLayerRegistry {
   }
 
   dispose(map: Map): void {
-    this.featureSource.clear();
+    this.objectSource.clear();
     this.cellSource.clear();
     this.terrainOutlineSource.clear();
     map.removeLayer(this.terrainOutlineLayer);

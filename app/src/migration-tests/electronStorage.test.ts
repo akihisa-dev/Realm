@@ -12,6 +12,8 @@ import { assertSqlitePathNotMoved, loadHasMovedExtension } from "../main/storage
 import { CURRENT_SCHEMA_VERSION } from "../main/storage/schema";
 import { openProject as openStoredProject } from "../main/storage/project";
 import { cellIdsToPolygonGeometries } from "../shared/mapShapeGeometry";
+import { mapShapesFromLayers } from "../shared/layerProjection";
+import type { MapObject } from "../shared/realmContract";
 
 const fixtureDirectory = (): string => mkdtempSync(join(tmpdir(), "realm-electron-"));
 const legacyFeatureTypes = "'terrain','forest','river','coastline','country','region','boundary','city','town','road','lake','mountain','tree','symbol','label','overlay','frame','scale'";
@@ -32,11 +34,15 @@ describe("Electron native SQLite storage", () => {
     const directory = fixtureDirectory(); const commands = new RealmCommands({ libraryDirectory: directory });
     let snapshot = await commands.createProject({ name: "Synthetic" });
     expect(snapshot.formatVersion).toBe(CURRENT_SCHEMA_VERSION);
-    snapshot = await commands.createFeaturesBatch({ features: [{ featureType: "city", name: "A", geometry: { type: "Point", coordinates: [1, 2] } }, { featureType: "text", name: "B", geometry: { type: "Point", coordinates: [2, 3] } }] });
-    expect(snapshot.featureCount).toBe(2); expect(snapshot.canUndo).toBe(true);
-    snapshot = await commands.undoProject(); expect(snapshot.featureCount).toBe(0); expect(snapshot.canRedo).toBe(true);
-    snapshot = await commands.redoProject(); expect(snapshot.featureCount).toBe(2);
-    snapshot = await commands.updateMapShapes({ shapes: [{ id: "11111111-1111-4111-8111-111111111111", layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: cellIdsToPolygonGeometries(["0:0", "1:0"])[0]! }] });
+    const objects: MapObject[] = [
+      { id: "22222222-2222-4222-8222-222222222222", kind: "city", label: "A", geometry: { type: "Point", coordinates: [1, 2] }, properties: {}, zIndex: 0, locked: false },
+      { id: "33333333-3333-4333-8333-333333333333", kind: "text", label: "B", geometry: { type: "Point", coordinates: [2, 3] }, properties: {}, zIndex: 1, locked: false },
+    ];
+    snapshot = await commands.replaceObjectLayer({ objects });
+    expect(snapshot.layers.objects).toHaveLength(2); expect(snapshot.canUndo).toBe(true);
+    snapshot = await commands.undoProject(); expect(snapshot.layers.objects).toHaveLength(0); expect(snapshot.canRedo).toBe(true);
+    snapshot = await commands.redoProject(); expect(snapshot.layers.objects).toHaveLength(2);
+    snapshot = await commands.replaceTerrainLayer({ shapes: [{ id: "11111111-1111-4111-8111-111111111111", geometry: cellIdsToPolygonGeometries(["0:0", "1:0"])[0]! }] });
     const path = snapshot.path; const libraryId = basename(path, ".realmmap"); await commands.closeProject();
     const stored = new DatabaseSync(path, { readOnly: true });
     try {
@@ -48,7 +54,7 @@ describe("Electron native SQLite storage", () => {
       expect(JSON.parse(String(shape.geometryJson))).toMatchObject({ type: "Polygon" });
       expect(Number((stored.prepare("SELECT COUNT(*) AS count FROM objects").get() as { count: number }).count)).toBe(2);
     } finally { stored.close(); }
-    snapshot = await commands.openProject({ libraryId }); expect(snapshot.featureCount).toBe(2); expect(snapshot.layers.objects).toHaveLength(2); expect(snapshot.layers.terrain).toHaveLength(1); expect(snapshot.mapShapes).toHaveLength(1); expect(snapshot.canUndo).toBe(false);
+    snapshot = await commands.openProject({ libraryId }); expect(snapshot.layers.objects).toHaveLength(2); expect(snapshot.layers.terrain).toHaveLength(1); expect(mapShapesFromLayers(snapshot.layers)).toHaveLength(1); expect(snapshot.canUndo).toBe(false);
   });
 
   it("copies a WAL snapshot without changing source identity", async () => {

@@ -1,4 +1,4 @@
-import type { GeoJsonGeometry, Position, RealmFeature } from "../backend";
+import type { GeoJsonGeometry, MapObject, Position } from "../backend";
 
 type Segment = readonly [Position, Position];
 
@@ -79,12 +79,12 @@ const geometryIntersectsLasso = (geometry: GeoJsonGeometry, lassoRing: readonly 
 };
 
 /** Returns feature ids whose geometry intersects or is contained by a lasso. */
-export const selectFeatureIdsWithinLasso = (
-  features: readonly Pick<RealmFeature, "id" | "geometry">[],
+export const selectObjectIdsWithinLasso = (
+  objects: readonly Pick<MapObject, "id" | "geometry">[],
   lasso: readonly Position[],
 ): string[] => {
   const valid = lasso.length >= 3 && lasso.every((point) => point.length === 2 && point.every(Number.isFinite));
   if (!valid) return [];
   const ring = samePosition(lasso[0]!, lasso[lasso.length - 1]!) ? [...lasso] : [...lasso, lasso[0]!];
-  return features.filter((feature) => geometryIntersectsLasso(feature.geometry, ring)).map((feature) => feature.id);
+  return objects.filter((object) => geometryIntersectsLasso(object.geometry, ring)).map((object) => object.id);
 };

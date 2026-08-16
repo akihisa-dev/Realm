@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AssetRead, DeleteAssetsBatchInput, FeatureProperties, ImportAssetInput, ImportAssetsBatchInput, RealmSnapshot } from "../../shared/realmContract";
+import type { AssetRead, DeleteAssetsBatchInput, Properties, ImportAssetInput, ImportAssetsBatchInput, RealmSnapshot } from "../../shared/realmContract";
 import { RealmError, invalid } from "../domain/errors";
 import { canonicalUuid } from "../domain/identifiers";
 import { MAX_ASSET_BYTES, sha256Hex, validateAsset } from "../domain/assets";
@@ -61,8 +61,8 @@ export function readAsset(getSession: () => OpenProjectSession, input: { id: str
   const bytes = row.bytes instanceof Uint8Array ? [...row.bytes] : Array.isArray(row.bytes) ? row.bytes : [];
   const sha256 = String(row.sha256).toLowerCase();
   if (bytes.length === 0 || bytes.length > MAX_ASSET_BYTES || bytes.some((byte) => !Number.isInteger(byte) || byte < 0 || byte > 255) || !/^[0-9a-f]{64}$/u.test(sha256) || sha256Hex(Uint8Array.from(bytes)) !== sha256) throw new RealmError("corrupt_project", "The asset hash or size is invalid.");
-  let metadata: FeatureProperties;
-  try { metadata = JSON.parse(String(row.metadata)) as FeatureProperties; validateAsset({ sha256, mime: String(row.mime), bytes, width: Number(row.width), height: Number(row.height), metadata }); } catch { throw new RealmError("corrupt_project", "The asset contents are invalid."); }
+  let metadata: Properties;
+  try { metadata = JSON.parse(String(row.metadata)) as Properties; validateAsset({ sha256, mime: String(row.mime), bytes, width: Number(row.width), height: Number(row.height), metadata }); } catch { throw new RealmError("corrupt_project", "The asset contents are invalid."); }
   return { manifest: { id, sha256, mime: String(row.mime), byteLength: bytes.length, width: Number(row.width), height: Number(row.height), metadata }, bytes };
 }
 

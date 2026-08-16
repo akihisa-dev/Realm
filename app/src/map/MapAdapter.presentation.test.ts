@@ -15,9 +15,10 @@ describe("RealmMapAdapter presentation preview", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const adapter = new RealmMapAdapter({ target: host });
+    adapter.setActiveLayer("object");
     adapter.setMode("pan");
     adapter.setPresentationMode(true);
-    adapter.setMode("river");
+    adapter.setMode("city");
 
     const interactions = adapter.getMap().getInteractions().getArray();
     const selection = interactions.find((interaction) => interaction instanceof SelectModule.default);

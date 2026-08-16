@@ -29,7 +29,7 @@ export const REGION_COLORS = [
 
 export type PaletteFlyoutOptions = {
   hostRef: RefObject<HTMLDivElement | null>;
-  mode: "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "region" | "erase" | ObjectKind;
+  mode: "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "erase" | ObjectKind;
   activeLayer: LayerId;
   strokeRange?: number | undefined;
   regionColor?: string | undefined;
@@ -154,10 +154,10 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
 
           {activeLayer === "region" ? <div className="tool-sidebar-item">
             <button
-              className={`tool-sidebar-button${mode === "cell-region" || mode === "region" ? " is-active" : ""}`}
+              className={`tool-sidebar-button${mode === "cell-region" ? " is-active" : ""}`}
               type="button"
               aria-label="領域を描く"
-              aria-pressed={mode === "cell-region" || mode === "region"}
+              aria-pressed={mode === "cell-region"}
               aria-haspopup={sidebarOpen ? undefined : "true"}
               aria-expanded={showRegionControls}
               aria-controls={REGION_FLYOUT_ID}
@@ -244,7 +244,7 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
               <span className="tool-sidebar-button-label">グラブ</span>
             </button>
           </div> : null}
-          {activeLayer !== "object" ? <div className="tool-sidebar-item">
+          {activeLayer === "region" ? <div className="tool-sidebar-item">
             <button className={`tool-sidebar-button${mode === "shape" ? " is-active" : ""}`} type="button" aria-label="シェイピング" aria-pressed={mode === "shape"} title="シェイピング" onClick={() => selectSimpleTool("shape")}>
               <Magnet aria-hidden="true" size={17} weight="bold" />
               <span className="tool-sidebar-button-label">シェイピング</span>

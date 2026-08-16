@@ -1,7 +1,7 @@
 import { cellIdsToPolygonGeometries, mapShapeCellIds } from "../../shared/mapShapeGeometry";
 import type { MapShape } from "../../backend";
 import { mergeRegionShapes, splitRegionComponentShapes } from "./editorMapOperations";
-import type { RegionComponent, RegionObject } from "./regionObjects";
+import type { RegionComponent, RegionEntry } from "./regionObjects";
 
 const regionShape = (cells: string[], regionId: string, id: string, value = "#2468AC"): MapShape => ({
   id,
@@ -13,7 +13,7 @@ const regionShape = (cells: string[], regionId: string, id: string, value = "#24
   geometry: cellIdsToPolygonGeometries(cells)[0]!,
 });
 
-const region = (id: string, persistentId: string | null, color = "#2468AC"): RegionObject => ({
+const region = (id: string, persistentId: string | null, color = "#2468AC"): RegionEntry => ({
   id,
   persistentId,
   label: id,
@@ -38,9 +38,9 @@ describe("editor map operations", () => {
     expect(result.shapes.every((shape) => shape.regionId === "persistent-a" && shape.value === "#2468AC")).toBe(true);
   });
 
-  it("rejects legacy regions without changing the shape set", () => {
+  it("ignores regions without a persistent identity", () => {
     const result = mergeRegionShapes([], [region("region-a", null), region("region-b", "persistent-b")]);
-    expect(result).toEqual({ kind: "legacy" });
+    expect(result).toBeNull();
   });
 
   it("moves a selected disconnected component to a new region id", () => {

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { MemoryRealmBackend, type GeoJsonGeometry, type LayerId, type MapShape, type ObjectKind, type RealmSnapshot } from "../backend";
 import { cellIdsToPolygonGeometries, mapShapeCellIds } from "../shared/mapShapeGeometry";
+import { mapShapesFromLayers } from "../shared/layerProjection";
 import { EditorShell } from "./EditorShell";
 
 vi.mock("./MapCanvas", () => ({
@@ -17,9 +18,9 @@ vi.mock("./MapCanvas", () => ({
     onRegionColorChange?: (color: string) => void;
     onDraw?: (geometry: GeoJsonGeometry) => void;
     onObjectKindChange?: (kind: ObjectKind) => void;
-    onSelectFeatures?: (ids: readonly string[]) => void;
-    onModifyFeatures?: (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void;
-    onEraseFeatures?: (ids: readonly string[]) => void;
+    onSelectObjects?: (ids: readonly string[]) => void;
+    onModifyObjects?: (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void;
+    onEraseObjects?: (ids: readonly string[]) => void;
     preview?: boolean;
   }) => (
     <div role="region" aria-label="世界地図" data-mode={props.mode}>
@@ -47,9 +48,9 @@ vi.mock("./MapCanvas", () => ({
       <button type="button" onClick={() => props.onDraw?.({ type: "Point", coordinates: [3, 4] })}>テストテキスト配置</button>
       <button type="button" onClick={() => props.onDraw?.({ type: "Polygon", coordinates: cellIdsToPolygonGeometries(["4:4", "5:4"])[0]!.coordinates })}>テスト森配置</button>
       <button type="button" onClick={() => props.onDraw?.({ type: "Point", coordinates: [10, 20] })}>テスト山配置</button>
-      <button type="button" onClick={() => props.onSelectFeatures?.(["test-object-id"])}>テストオブジェクト選択</button>
-      <button type="button" onClick={() => props.onModifyFeatures?.([{ id: "test-object-id", geometry: { type: "Point", coordinates: [11, 21] } }])}>テストオブジェクト移動</button>
-      <button type="button" onClick={() => props.onEraseFeatures?.(["test-object-id"])}>テストオブジェクト消去</button>
+      <button type="button" onClick={() => props.onSelectObjects?.(["test-object-id"])}>テストオブジェクト選択</button>
+      <button type="button" onClick={() => props.onModifyObjects?.([{ id: "test-object-id", geometry: { type: "Point", coordinates: [11, 21] } }])}>テストオブジェクト移動</button>
+      <button type="button" onClick={() => props.onEraseObjects?.(["test-object-id"])}>テストオブジェクト消去</button>
       <button type="button" onClick={() => {
         const current = props.mapShapes?.[0];
         if (!current) return;
@@ -62,7 +63,7 @@ vi.mock("./MapCanvas", () => ({
 const renderEditor = (backend: MemoryRealmBackend, snapshot: RealmSnapshot) => render(<EditorShell snapshot={snapshot} backend={backend} busy={false} onSaved={vi.fn()} />);
 const terrain = (cells: string[], id = "11111111-1111-4111-8111-111111111111"): MapShape => ({ id, layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry: cellIdsToPolygonGeometries(cells)[0]! });
 
-it("keeps the editor shell and object manager while rendering map_shapes", async () => {
+it("keeps the editor shell and layer manager while rendering the three layers", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://shell.realmmap", name: "Shell" });
   renderEditor(backend, snapshot);
@@ -158,8 +159,9 @@ it("turns a temporary grid selection into one Polygon update", async () => {
   expect(screen.getByRole("status", { name: "保存中の図形数" })).toHaveTextContent("1");
   await waitFor(async () => {
     const saved = await backend.getOpenProject();
-    expect(saved?.mapShapes).toHaveLength(1);
-    expect(mapShapeCellIds(saved!.mapShapes[0]!)).toEqual(new Set(["1:1", "1:2"]));
+    const shapes = mapShapesFromLayers(saved!.layers);
+    expect(shapes).toHaveLength(1);
+    expect(mapShapeCellIds(shapes[0]!)).toEqual(new Set(["1:1", "1:2"]));
   });
 });
 
@@ -167,13 +169,15 @@ it("commits a shape edit once and keeps the shape id", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://shape-commit.realmmap", name: "Shape commit" });
   const original = terrain(["1:1"]);
-  const before = await backend.updateMapShapes({ shapes: [original] });
+  const before = await backend.replaceTerrainLayer({ shapes: [{ id: original.id, geometry: original.geometry }] });
   const update = vi.spyOn(backend, "replaceTerrainLayer");
   renderEditor(backend, before);
   fireEvent.click(screen.getByRole("button", { name: "テスト図形編集コミット" }));
   await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-  expect((await backend.getOpenProject())?.mapShapes[0]?.id).toBe(original.id);
-  expect(mapShapeCellIds((await backend.getOpenProject())!.mapShapes[0]!)).toEqual(new Set(["4:4"]));
+  const saved = await backend.getOpenProject();
+  const shapes = mapShapesFromLayers(saved!.layers);
+  expect(shapes[0]?.id).toBe(original.id);
+  expect(mapShapeCellIds(shapes[0]!)).toEqual(new Set(["4:4"]));
 });
 
 it("uses the active layer for region drawing and terrain erasing", async () => {
@@ -181,7 +185,8 @@ it("uses the active layer for region drawing and terrain erasing", async () => {
   await backend.createProject({ path: "browser://layer-cell-operations.realmmap", name: "Layer cells" });
   const initialTerrain = terrain(["1:1"]);
   const initialRegion = { ...terrain(["8:8"], "33333333-3333-4333-8333-333333333333"), layer: "region" as const, regionId: "22222222-2222-4222-8222-222222222222", value: "#2468AC" };
-  const snapshot = await backend.updateMapShapes({ shapes: [initialTerrain, initialRegion] });
+  let snapshot = await backend.replaceTerrainLayer({ shapes: [{ id: initialTerrain.id, geometry: initialTerrain.geometry }] });
+  snapshot = await backend.replaceRegionLayer({ regions: [{ id: initialRegion.regionId, name: "領域", color: initialRegion.value, shapes: [{ id: initialRegion.id, geometry: initialRegion.geometry }] }] });
   renderEditor(backend, snapshot);
 
   fireEvent.click(screen.getByRole("tab", { name: "領域" }));
@@ -217,14 +222,17 @@ it("merges and splits logical regions through map_shape updates", async () => {
   const secondId = "22222222-2222-4222-8222-222222222222";
   const first = { ...terrain(["1:1"], "33333333-3333-4333-8333-333333333333"), layer: "region" as const, regionId: firstId, value: "#2468AC" };
   const second = { ...terrain(["8:8"], "44444444-4444-4444-8444-444444444444"), layer: "region" as const, regionId: secondId, value: "#E45756" };
-  const snapshot = await backend.updateMapShapes({ shapes: [first, second] });
+  const snapshot = await backend.replaceRegionLayer({ regions: [
+    { id: firstId, name: "領域 1", color: first.value, shapes: [{ id: first.id, geometry: first.geometry }] },
+    { id: secondId, name: "領域 2", color: second.value, shapes: [{ id: second.id, geometry: second.geometry }] },
+  ] });
   renderEditor(backend, snapshot);
   fireEvent.click(screen.getByRole("tab", { name: "領域" }));
   await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(2));
   fireEvent.click(screen.getByRole("checkbox", { name: "領域 1を統合対象にする" }));
   fireEvent.click(screen.getByRole("checkbox", { name: "領域 2を統合対象にする" }));
   fireEvent.click(screen.getByRole("button", { name: "選択した領域を統合" }));
-  await waitFor(async () => expect((await backend.getOpenProject())?.mapShapes.every((shape) => shape.regionId === firstId)).toBe(true));
+  await waitFor(async () => expect((await backend.getOpenProject())?.layers.regions.every((region) => region.id === firstId)).toBe(true));
 });
 
 it("shows optimistic Polygon state while an update is pending and restores it on failure", async () => {
