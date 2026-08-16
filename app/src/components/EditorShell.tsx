@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowClockwise } from "@phosphor-icons/react/dist/csr/ArrowClockwise";
 import { ArrowCounterClockwise } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
+import { Eye } from "@phosphor-icons/react/dist/csr/Eye";
+import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { Stack } from "@phosphor-icons/react/dist/csr/Stack";
 import { errorMessage, type CellAttributeSnapshot, type MapShape, type MapShapeEdit, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
@@ -250,6 +252,9 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
           <output htmlFor="editor-stroke-range">{strokeRange}セル</output>
         </div>
         <nav aria-label="編集履歴">
+          <button className="editor-preview-toggle" type="button" aria-label={previewMode ? "編集画面に戻る" : "レンダリングプレビューを表示"} title={previewMode ? "編集画面に戻る" : "レンダリングプレビューを表示"} aria-pressed={previewMode} onClick={() => setPreviewMode((current) => !current)}>
+            {previewMode ? <PencilSimple aria-hidden="true" size={17} weight="bold" /> : <Eye aria-hidden="true" size={17} weight="bold" />}
+          </button>
           <button type="button" aria-label="戻す" title="戻す" onClick={() => { void run(() => backend.undoProject(), "操作を戻せませんでした。"); }} disabled={locked || previewMode || !viewedSnapshot.canUndo}><ArrowCounterClockwise aria-hidden="true" size={17} weight="bold" /></button>
           <button type="button" aria-label="進む" title="進む" onClick={() => { void run(() => backend.redoProject(), "操作を進められませんでした。"); }} disabled={locked || previewMode || !viewedSnapshot.canRedo}><ArrowClockwise aria-hidden="true" size={17} weight="bold" /></button>
           <button className="object-manager-toggle" type="button" aria-label={objectManagerOpen ? "オブジェクトマネージャーを閉じる" : "オブジェクトマネージャーを開く"} title={objectManagerOpen ? "オブジェクトマネージャーを閉じる" : "オブジェクトマネージャーを開く"} aria-pressed={objectManagerOpen} onClick={() => setObjectManagerOpen((current) => !current)}><Stack aria-hidden="true" size={17} weight="bold" /></button>
@@ -279,7 +284,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             onEraseTargetChange={selectEraseTarget}
             onRegionColorChange={changeRegionColor}
             preview={previewMode}
-            onPreviewChange={setPreviewMode}
             onError={(code) => setError(mapErrorMessage(code, activeToolRef.current === "region" || (activeToolRef.current === "erase" && eraseTargetRef.current === "region") ? "region" : "terrain"))}
             onZoomChange={setZoom}
             strokeRange={strokeRange}

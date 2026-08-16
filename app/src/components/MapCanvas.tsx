@@ -1,6 +1,4 @@
-import { useRef, useState } from "react";
-import { Eye } from "@phosphor-icons/react/dist/csr/Eye";
-import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
+import { useRef } from "react";
 import {
   createRealmMapRenderer,
   type CellGridOptions,
@@ -42,7 +40,6 @@ type MapCanvasProps = {
   showGrid?: boolean;
   showCellGrid?: boolean;
   preview?: boolean;
-  onPreviewChange?: (preview: boolean) => void;
   onDraw?: (geometry: GeoJsonGeometry) => void;
   onSelect?: (featureId: string | null) => void;
   onSelectFeatures?: (featureIds: readonly string[]) => void;
@@ -82,7 +79,6 @@ export function MapCanvas({
   showGrid = true,
   showCellGrid = false,
   preview,
-  onPreviewChange,
   onDraw,
   onSelect,
   onSelectFeatures,
@@ -103,14 +99,8 @@ export function MapCanvas({
 }: MapCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const adapterRef = useRef<RealmMapRenderer | null>(null);
-  const [localPreview, setLocalPreview] = useState(false);
-  const isPreview = preview ?? localPreview;
+  const isPreview = preview ?? false;
   const rendererMode = isPreview ? "pan" : mode;
-
-  const setPreview = (nextPreview: boolean): void => {
-    if (preview === undefined) setLocalPreview(nextPreview);
-    onPreviewChange?.(nextPreview);
-  };
 
   const {
     strokeRadius,
@@ -206,17 +196,6 @@ export function MapCanvas({
       <p id="map-help" className="sr-only">{mapHelp}</p>
       {isPreview ? null : toolPalette}
       <div className="map-canvas-frame">
-        <button
-          className="map-preview-toggle"
-          type="button"
-          aria-label={isPreview ? "編集画面に戻る" : "レンダリングプレビューを表示"}
-          aria-pressed={isPreview}
-          title={isPreview ? "編集画面に戻る" : "レンダリングプレビューを表示"}
-          onClick={() => setPreview(!isPreview)}
-        >
-          {isPreview ? <PencilSimple aria-hidden="true" size={18} weight="bold" /> : <Eye aria-hidden="true" size={18} weight="bold" />}
-        </button>
-        {isPreview ? <span className="map-preview-status" role="status">閲覧専用</span> : null}
         <div
           ref={hostRef}
           className={`map-canvas ${modeClass}${rendererMode === "pan" ? "" : " map-canvas-draw"}${disabled ? " map-canvas-disabled" : ""}`}

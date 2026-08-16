@@ -31,6 +31,7 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .editor-history button { display: grid; width: 32px; height: 32px; min-width: 32px; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; font-size: 13px; }
 .editor-history button, .editor-history nav { -webkit-app-region: no-drag; }
 .editor-history button:hover:not(:disabled) { background: #f1f4f5; }
+.editor-preview-toggle[aria-pressed="true"] { background: #eef8f8; color: #006c77; }
 .editor-body { display: grid; grid-template-columns: minmax(0, 1fr) 296px; grid-template-rows: minmax(0, 1fr); min-height: 0; }
 .editor-body.object-manager-is-closed { grid-template-columns: minmax(0, 1fr); }
 .map-region { position: relative; grid-column: 1; grid-row: 1; min-width: 0; min-height: 0; background: #fff; }
@@ -106,9 +107,6 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .map-canvas-frame { position: relative; width: 100%; height: auto; max-height: 100%; aspect-ratio: 4 / 3; overflow: hidden; border: 1px solid #d6dadd; background: #fff; box-shadow: 0 8px 28px rgba(29, 32, 37, .08); }
 .map-canvas-shell > .map-canvas-frame { align-self: center; justify-self: center; }
 .map-canvas-shell.map-canvas-preview { grid-template-columns: minmax(0, 1fr); }
-.map-preview-toggle { position: absolute; top: 12px; right: 12px; z-index: 4; display: grid; width: 34px; height: 34px; place-items: center; padding: 0; border: 1px solid #cbd4d8; border-radius: 6px; background: rgba(255, 255, 255, .94); color: #53616a; box-shadow: 0 2px 8px rgba(29, 32, 37, .14); }
-.map-preview-toggle:hover:not(:disabled), .map-preview-toggle[aria-pressed="true"] { border-color: #078c98; background: #eef8f8; color: #006c77; }
-.map-preview-status { position: absolute; top: 20px; right: 56px; z-index: 4; padding: 4px 8px; border: 1px solid #b9dfe1; border-radius: 999px; background: rgba(255, 255, 255, .94); color: #006c77; font-size: 11px; font-weight: 650; pointer-events: none; }
 .map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .map-canvas:focus-visible { outline: 2px solid #078c98; outline-offset: -3px; }
 .map-canvas .ol-viewport { background: transparent; }
