@@ -163,11 +163,15 @@ export function useMapAdapterLifecycle({
     adapter.setSelectedFeatures(selectedFeatureIds);
     onZoomChangeRef.current(adapter.getZoom());
 
-    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => adapter.updateSize());
+    const updateMapSize = () => adapter.updateSize();
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateMapSize);
     resizeObserver?.observe(host);
+    updateMapSize();
+    const animationFrame = host.ownerDocument.defaultView?.requestAnimationFrame(updateMapSize);
 
     return () => {
       resizeObserver?.disconnect();
+      if (animationFrame !== undefined) host.ownerDocument.defaultView?.cancelAnimationFrame(animationFrame);
       stopZoomListener();
       stopDrawListener();
       stopSelectListener();
