@@ -102,7 +102,7 @@ check_commit_path() {
 check_commit() {
   commit=$1
   paths_file=$(mktemp "${TMPDIR:-/tmp}/realm-guard-paths.XXXXXX")
-  git diff-tree --root --no-commit-id --name-only --diff-filter=ACMRT -m -r "$commit" > "$paths_file"
+  git -c core.quotePath=false diff-tree --root --no-commit-id --name-only --diff-filter=ACMRT -m -r "$commit" > "$paths_file"
   if [ -s "$paths_file" ]; then
     while IFS= read -r path; do
       check_commit_path "$commit" "$path" || blocked=1
@@ -113,7 +113,7 @@ check_commit() {
 
 check_staged() {
   paths_file=$(mktemp "${TMPDIR:-/tmp}/realm-guard-paths.XXXXXX")
-  git diff --cached --name-only --diff-filter=ACMRT > "$paths_file"
+  git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMRT > "$paths_file"
   if [ -s "$paths_file" ]; then
     while IFS= read -r path; do
       check_staged_path "$path" || blocked=1
