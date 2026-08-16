@@ -102,6 +102,7 @@ export function MapCanvas({
     eraseRadius,
     toolPalette,
     regionColor: paletteRegionColor,
+    sidebarOpen,
   } = usePaletteFlyouts({ hostRef, mode, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange });
   const paintRadius = cellPaintRadiusForRange(paintRange);
   const effectivePaintRadius = mode === "cell-select" ? paintRadius : 0;
@@ -183,7 +184,7 @@ export function MapCanvas({
       ? "map-canvas-mode-cell-erase"
       : mode === "cell-region" ? "map-canvas-mode-cell-region" : mode === "grab" ? "map-canvas-mode-grab" : mode === "shape" ? "map-canvas-mode-shape" : mode === "region" ? "map-canvas-mode-region" : "map-canvas-mode-cell-select";
   return (
-    <div className="map-canvas-shell">
+    <div className={`map-canvas-shell${sidebarOpen ? "" : " map-canvas-sidebar-collapsed"}`}>
       <p id="map-help" className="sr-only">{mapHelp}</p>
       {toolPalette}
       <div className="map-canvas-frame">

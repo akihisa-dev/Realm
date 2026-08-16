@@ -92,6 +92,33 @@ describe("MapCanvas", () => {
     expect(onMapPointerDown).toHaveBeenCalledOnce();
   });
 
+  it("switches the left sidebar to an icon rail and reopens it", () => {
+    const renderer = createPaletteRenderer();
+    render(<MapCanvas onZoomChange={vi.fn()} createRenderer={() => renderer} />);
+
+    const palette = screen.getByRole("complementary", { name: "地図ツールパレット" });
+    const shell = palette.parentElement;
+    const closeButton = screen.getByRole("button", { name: "地図ツールパレットを閉じる" });
+    expect(closeButton).toHaveAttribute("aria-expanded", "true");
+    expect(palette).not.toHaveClass("is-collapsed");
+    expect(shell).not.toHaveClass("map-canvas-sidebar-collapsed");
+
+    fireEvent.click(closeButton);
+
+    expect(palette).toHaveClass("is-collapsed");
+    expect(shell).toHaveClass("map-canvas-sidebar-collapsed");
+    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-sidebar-button"))).toHaveLength(5);
+    expect(palette.querySelectorAll(".tool-sidebar-button > svg")).toHaveLength(5);
+    const openButton = screen.getByRole("button", { name: "地図ツールパレットを開く" });
+    expect(openButton).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(openButton);
+
+    expect(palette).not.toHaveClass("is-collapsed");
+    expect(shell).not.toHaveClass("map-canvas-sidebar-collapsed");
+    expect(screen.getByRole("button", { name: "地図ツールパレットを閉じる" })).toBeInTheDocument();
+  });
+
   it("cleans each adapter instance exactly once across StrictMode effect replay", () => {
     const firstRenderer = createPaletteRenderer();
     const secondRenderer = createPaletteRenderer();
