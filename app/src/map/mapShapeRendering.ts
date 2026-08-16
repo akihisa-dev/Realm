@@ -16,6 +16,55 @@ export const cloneMapShapes = (shapes: readonly MapShape[]): MapShape[] => shape
   },
 }));
 
+const coordinatesEqual = (left: readonly (readonly (readonly number[])[])[], right: readonly (readonly (readonly number[])[])[]): boolean =>
+  left.length === right.length
+  && left.every((ring, ringIndex) => {
+    const other = right[ringIndex];
+    return other !== undefined
+      && ring.length === other.length
+      && ring.every(([x, y], pointIndex) => x === other[pointIndex]?.[0] && y === other[pointIndex]?.[1]);
+  });
+
+const exactFeatureForShape = (shape: MapShape): Feature => {
+  const feature = new Feature({
+    geometry: new Polygon(shape.geometry.coordinates),
+    ...(shape.layer === "region" ? { regionColor: shape.value, regionIdentity: shape.regionId } : {}),
+  });
+  feature.setId(shape.id);
+  return feature;
+};
+
+const firstFeature = (value: Feature | Feature[] | null): Feature | undefined =>
+  Array.isArray(value) ? value[0] : value ?? undefined;
+
+/** Updates one exact canonical feature in place during a grab preview. */
+export const updateCanonicalMapShapeFeature = (
+  shape: MapShape,
+  terrainSource: VectorSource,
+  regionSource: VectorSource,
+): boolean => {
+  const source = shape.layer === "terrain" ? terrainSource : regionSource;
+  const feature = firstFeature(source.getFeatureById(shape.id));
+  const geometry = feature?.getGeometry();
+  if (!(feature instanceof Feature) || !(geometry instanceof Polygon)) return false;
+  let changed = false;
+  if (!coordinatesEqual(geometry.getCoordinates(), shape.geometry.coordinates)) {
+    feature.setGeometry(new Polygon(shape.geometry.coordinates));
+    changed = true;
+  }
+  if (shape.layer === "region") {
+    if (feature.get("regionColor") !== shape.value) {
+      feature.set("regionColor", shape.value, true);
+      changed = true;
+    }
+    if (feature.get("regionIdentity") !== shape.regionId) {
+      feature.set("regionIdentity", shape.regionId, true);
+      changed = true;
+    }
+  }
+  return changed;
+};
+
 export const renderCanonicalMapShapes = (
   shapes: readonly MapShape[],
   terrainSource: VectorSource,
@@ -30,7 +79,7 @@ export const renderCanonicalMapShapes = (
     if (shape.layer === "terrain") {
       terrainCount += 1;
       if (!renderSmoothShapes) {
-        terrainSource.addFeature(new Feature({ geometry: new Polygon(shape.geometry.coordinates) }));
+        terrainSource.addFeature(exactFeatureForShape(shape));
         continue;
       }
       let cellIds: Set<string>;
@@ -40,7 +89,7 @@ export const renderCanonicalMapShapes = (
     } else {
       regionCount += 1;
       if (!renderSmoothShapes) {
-        regionSource.addFeature(new Feature({ geometry: new Polygon(shape.geometry.coordinates), regionColor: shape.value, regionIdentity: shape.regionId }));
+        regionSource.addFeature(exactFeatureForShape(shape));
         continue;
       }
       let cellIds: Set<string>;

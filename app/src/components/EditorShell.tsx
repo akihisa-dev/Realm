@@ -43,6 +43,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     error,
     setError,
     locked,
+    editingLocked,
     run,
     commitMapShapes,
   } = useEditorPersistence({
@@ -83,8 +84,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   };
 
   useEffect(() => {
-    if (locked) setSelectedCellIds([]);
-  }, [activeTool, locked]);
+    if (editingLocked) setSelectedCellIds([]);
+  }, [activeTool, editingLocked]);
 
   const selectRegionObject = (region: RegionObject): void => {
     setSelectedRegionIds([region.id]);
@@ -135,7 +136,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const applyCellSelection = (ids: readonly string[]) => {
     const nextIds = [...new Set(ids)];
     const tool = activeToolRef.current;
-    if (locked) {
+    if (editingLocked) {
       setSelectedCellIds([]);
       return;
     }
@@ -170,7 +171,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     commitMapShapes(next, fallback, { normalize: false });
   };
   const commitShapeEdit = (edit: MapShapeEdit): void => {
-    commitMapShapes(edit.shapes, activeToolRef.current === "shape" ? "領域を地形に合わせられませんでした。" : "図形を更新できませんでした。");
+    commitMapShapes(edit.shapes, activeToolRef.current === "shape" ? "領域を地形に合わせられませんでした。" : "図形を更新できませんでした。", { normalize: false });
   };
 
   const mergeRegions = (): void => {
@@ -187,7 +188,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     setRegionPaintTargetId(target.id);
     setRegionColor(target.color);
     setSelectedCellIds([]);
-    commitMapShapes(shapes, "領域を統合できませんでした。");
+    commitMapShapes(shapes, "領域を統合できませんでした。", { normalize: false });
   };
 
   const splitRegionComponent = (region: RegionObject, component: RegionComponent): void => {
@@ -198,7 +199,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     setSelectedComponentId(null);
     setRegionPaintTargetId(null);
     setSelectedCellIds([]);
-    commitMapShapes(next, "領域の塊を分離できませんでした。");
+    commitMapShapes(next, "領域の塊を分離できませんでした。", { normalize: false });
   };
 
   useEffect(() => {
@@ -214,7 +215,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         void run(() => redo ? backend.redoProject() : backend.undoProject(), redo ? "操作を進められませんでした。" : "操作を戻せませんでした。");
         return;
       }
-      if (locked || previewMode || event.altKey || event.shiftKey) return;
+      if (editingLocked || previewMode || event.altKey || event.shiftKey) return;
       if (key === "c" || key === "z") {
         event.preventDefault();
         selectTool("terrain");
@@ -231,7 +232,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [backend, locked, previewMode, viewedSnapshot.canRedo, viewedSnapshot.canUndo]);
+  }, [backend, editingLocked, locked, previewMode, viewedSnapshot.canRedo, viewedSnapshot.canUndo]);
 
   return (
     <main className="editor-shell" aria-label="Realm地形編集画面">
@@ -267,7 +268,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             // rendered or created by the cell-region editor.
             features={[]}
             mapShapes={mapShapes}
-            mode={locked ? "pan" : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "cell-region" : activeTool === "grab" ? "grab" : activeTool === "shape" ? "shape" : "cell-select"}
+            mode={editingLocked ? "pan" : activeTool === "erase" ? "cell-erase" : activeTool === "region" ? "cell-region" : activeTool === "grab" ? "grab" : activeTool === "shape" ? "shape" : "cell-select"}
             disabled={busy}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}

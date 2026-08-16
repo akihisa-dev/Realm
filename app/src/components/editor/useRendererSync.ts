@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { CellAttributeSnapshot, MapShape, RealmFeature } from "../../backend";
 import { canonicalValueSignature } from "../../canonicalValue";
 import type {
@@ -54,15 +54,15 @@ export function useRendererSync({
   selectedFeatureIds,
   regionColor,
 }: RendererSyncOptions): void {
-  const featuresSignature = canonicalValueSignature(features);
-  const themeOverridesSignature = canonicalValueSignature(themeOverrides);
-  const gridOptionsSignature = canonicalValueSignature(gridOptions);
-  const cellGridOptionsSignature = canonicalValueSignature(cellGridOptions);
-  const drawingOptionsSignature = canonicalValueSignature(drawingOptions);
-  const mapShapesSignature = canonicalValueSignature(mapShapes);
-  const cellAttributesSignature = canonicalValueSignature(cellAttributes);
-  const selectedCellIdsSignature = canonicalValueSignature(selectedCellIds);
-  const selectedFeatureIdsSignature = canonicalValueSignature(selectedFeatureIds);
+  const featuresSignature = useMemo(() => canonicalValueSignature(features), [features]);
+  const themeOverridesSignature = useMemo(() => canonicalValueSignature(themeOverrides), [themeOverrides]);
+  const gridOptionsSignature = useMemo(() => canonicalValueSignature(gridOptions), [gridOptions]);
+  const cellGridOptionsSignature = useMemo(() => canonicalValueSignature(cellGridOptions), [cellGridOptions]);
+  const drawingOptionsSignature = useMemo(() => canonicalValueSignature(drawingOptions), [drawingOptions]);
+  const mapShapesSignature = useMemo(() => canonicalValueSignature(mapShapes), [mapShapes]);
+  const cellAttributesSignature = useMemo(() => canonicalValueSignature(cellAttributes), [cellAttributes]);
+  const selectedCellIdsSignature = useMemo(() => canonicalValueSignature(selectedCellIds), [selectedCellIds]);
+  const selectedFeatureIdsSignature = useMemo(() => canonicalValueSignature(selectedFeatureIds), [selectedFeatureIds]);
 
   useEffect(() => { adapterRef.current?.setFeatures(features); }, [adapterRef, featuresSignature]);
   useEffect(() => { adapterRef.current?.setTheme(themeId); }, [adapterRef, themeId]);

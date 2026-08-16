@@ -12,7 +12,7 @@ import * as SelectModule from "ol/interaction/Select";
 import DragPan from "ol/interaction/DragPan";
 import KeyboardPan from "ol/interaction/KeyboardPan";
 import MouseWheelZoom from "ol/interaction/MouseWheelZoom";
-import { primaryAction, singleClick } from "ol/events/condition";
+import { click, primaryAction } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, MapShape, MapShapeEdit, Position, RealmFeature } from "../backend";
@@ -30,7 +30,7 @@ import { exportMapRaster } from "./mapRasterExporter";
 import { MapShapeGrabController } from "./MapShapeGrabController";
 import { RegionShapeController } from "./RegionShapeController";
 import { GrabHoverController } from "./GrabHoverController";
-import { cloneMapShapes, renderCanonicalMapShapes, renderTransientCellGeometry } from "./mapShapeRendering";
+import { cloneMapShapes, renderCanonicalMapShapes, renderTransientCellGeometry, updateCanonicalMapShapeFeature } from "./mapShapeRendering";
 import { hitTestMapShapes } from "../shared/mapShapeGeometry";
 import { nudgeGeometry, resolutionForFillingExtent, snapFinalGeometry, straightenLine } from "./mapAdapterGeometry";
 import { MiddleButtonDragPan, MiddleButtonSafeDraw } from "./middleButtonPan";
@@ -50,6 +50,10 @@ class CancelablePointerInteraction extends PointerInteraction {
     this.targetPointers = [];
   }
 }
+
+const sameStringSet = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
+  left.size === right.size && [...left].every((value) => right.has(value));
+
 export class RealmMapAdapter implements RealmMapRenderer {
   private readonly map: Map;
   private readonly worldExtent = WORLD_EXTENT;
@@ -63,6 +67,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly selection: SelectModule.default;
   private readonly modify: Modify;
   private readonly translate: Translate;
+  private readonly dragPan = new DragPan({ kinetic: undefined });
   private readonly lasso: PointerInteraction;
   private readonly middleDragPan = new MiddleButtonDragPan();
   private readonly target: HTMLElement;
@@ -87,6 +92,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private cellAttributesById = new globalThis.Map<string, CellAttributeSnapshot[]>();
   private mapShapes: MapShape[] = [];
   private mapShapesControlled = false;
+  private mapShapePreviewShapes: globalThis.Map<string, MapShape> | null = null;
   private presentationPreview = false;
   private selectedCellIds = new Set<string>();
   private hoveredCellIds = new Set<string>();
@@ -201,7 +207,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.selection = new SelectModule.default({
       layers: [this.featureLayer],
       multi: true,
-      condition: (event) => Date.now() >= this.suppressSelectionUntil && singleClick(event),
+      condition: (event) => Date.now() >= this.suppressSelectionUntil && click(event),
       filter: (feature) => this.selectableFeature(feature),
     });
     this.modify = new Modify({ features: this.selection.getFeatures() });
@@ -258,8 +264,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
         enableRotation: false,
       }),
       controls: defaultControls({ zoom: false, rotate: false, attribution: false }),
-      interactions: defaultInteractions({ altShiftDragRotate: false, pinchRotate: false, mouseWheelZoom: false, doubleClickZoom: false }).extend([
-        new MouseWheelZoom({ constrainResolution: true }),
+      interactions: defaultInteractions({ altShiftDragRotate: false, pinchRotate: false, mouseWheelZoom: false, dragPan: false, doubleClickZoom: false }).extend([
+        new MouseWheelZoom({ constrainResolution: true, duration: 0, timeout: 0 }),
+        this.dragPan,
         this.middleDragPan,
       ]),
     });
@@ -801,6 +808,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private setHoveredCells(cellIds: readonly string[]): void {
     const next = new Set(this.validCellIds(cellIds));
     const previous = this.hoveredCellIds;
+    if (sameStringSet(previous, next)) return;
     const erasing = this.activeMode === "cell-erase";
     this.hoveredCellIds = next;
     for (const id of previous) {
@@ -857,9 +865,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellFeatures.delete(id);
   }
 
-  private syncSelectedCellFlags(): void {
+  private syncSelectedCellFlags(ids: Iterable<string> = this.cellFeatures.keys()): void {
     const erasing = this.activeMode === "cell-erase";
-    for (const [id, feature] of [...this.cellFeatures]) {
+    for (const id of ids) {
+      const feature = this.getCellFeature(id);
+      if (!feature) continue;
       const selected = this.selectedCellIds.has(id);
       feature.set("selected", selected && !erasing, true);
       feature.set("erasePreview", selected && erasing, true); feature.set("paintPreview", selected && !erasing, true);
@@ -888,10 +898,12 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   setSelectedCells(cellIds: readonly string[]): void {
     const validIds = this.validCellIds(cellIds);
-    this.ensureCells(validIds);
     const next = new Set(validIds);
+    if (sameStringSet(this.selectedCellIds, next)) return;
+    const affectedIds = new Set([...this.selectedCellIds, ...next]);
     this.selectedCellIds = next;
-    this.syncSelectedCellFlags();
+    this.ensureCells(next);
+    this.syncSelectedCellFlags(affectedIds);
     this.cellLayer.changed();
   }
 
@@ -899,7 +911,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
   setMapShapes(shapes: readonly MapShape[]): void {
     this.mapShapesControlled = true;
     this.mapShapes = cloneMapShapes(shapes);
-    this.setMapShapePreview(null);
+    this.renderMapShapes(this.mapShapes, this.presentationPreview);
     this.refreshGrabHover();
   }
 
@@ -918,14 +930,58 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.selection.setActive(this.activeMode === "pan" && !preview);
     this.lasso.setActive(this.activeMode === "pan" && !preview);
     this.layers.setPresentationMode(preview);
-    if (this.mapShapesControlled) this.setMapShapePreview(null);
+    if (this.mapShapesControlled) this.renderMapShapes(this.mapShapes, preview);
     else this.setCellAttributes([...this.cellAttributesById.values()].flat());
   }
 
   /** Renders a continuous edit preview without changing the canonical shapes. */
   private setMapShapePreview(shapes: readonly MapShape[] | null): void {
-    const renderedShapes = shapes === null ? this.mapShapes : shapes;
-    const { terrainCount, regionCount } = renderCanonicalMapShapes(renderedShapes, this.terrainSmoothSource, this.regionSmoothSource, shapes === null && this.presentationPreview);
+    if (!this.mapShapesControlled || this.presentationPreview) {
+      this.renderMapShapes(shapes ?? this.mapShapes, shapes === null && this.presentationPreview);
+      return;
+    }
+
+    if (shapes === null) {
+      const previous = this.mapShapePreviewShapes;
+      if (!previous) return;
+      const canonical = new globalThis.Map(this.mapShapes.map((shape) => [shape.id, shape] as const));
+      if (!sameStringSet(new Set(previous.keys()), new Set(canonical.keys()))) {
+        this.renderMapShapes(this.mapShapes, false);
+        return;
+      }
+      let changed = false;
+      for (const shape of canonical.values()) {
+        changed = updateCanonicalMapShapeFeature(shape, this.terrainSmoothSource, this.regionSmoothSource) || changed;
+      }
+      this.mapShapePreviewShapes = null;
+      if (changed) {
+        this.terrainSmoothSource.changed();
+        this.regionSmoothSource.changed();
+      }
+      return;
+    }
+
+    const next = new globalThis.Map(shapes.map((shape) => [shape.id, shape] as const));
+    const previous = this.mapShapePreviewShapes ?? new globalThis.Map(this.mapShapes.map((shape) => [shape.id, shape] as const));
+    if (!sameStringSet(new Set(previous.keys()), new Set(next.keys()))) {
+      this.renderMapShapes(shapes, false);
+      this.mapShapePreviewShapes = next;
+      return;
+    }
+    let changed = false;
+    for (const shape of next.values()) {
+      changed = updateCanonicalMapShapeFeature(shape, this.terrainSmoothSource, this.regionSmoothSource) || changed;
+    }
+    this.mapShapePreviewShapes = next;
+    if (changed) {
+      this.terrainSmoothSource.changed();
+      this.regionSmoothSource.changed();
+    }
+  }
+
+  private renderMapShapes(shapes: readonly MapShape[], renderSmoothShapes: boolean): void {
+    this.mapShapePreviewShapes = null;
+    const { terrainCount, regionCount } = renderCanonicalMapShapes(shapes, this.terrainSmoothSource, this.regionSmoothSource, renderSmoothShapes);
     this.terrainOutlineLayer.setVisible(false);
     this.terrainSmoothLayer.setVisible(terrainCount > 0);
     this.regionSmoothLayer.setVisible(regionCount > 0);
@@ -946,7 +1002,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     // layers are independent, so hiding region rows here can make a moved or
     // otherwise terrainless region impossible to find again.
     const renderedByCell = byCell;
-    this.ensureCells(byCell.keys());
+    if (!this.mapShapesControlled) this.ensureCells(byCell.keys());
     const changedIds = new Set([...this.cellAttributesById.keys(), ...byCell.keys()]);
     for (const id of changedIds) {
       const next = renderedByCell.get(id) ?? [];
@@ -967,8 +1023,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
       renderSmoothShapes: !this.mapShapesControlled && this.presentationPreview,
       renderShapes: !this.mapShapesControlled,
     });
-    this.terrainOutlineAnimator.update(terrainCellIds);
-    this.cellRegion.animateChanges(previous, renderedByCell, (id) => this.getCellFeature(id));
+    if (!this.mapShapesControlled) {
+      this.terrainOutlineAnimator.update(terrainCellIds);
+      this.cellRegion.animateChanges(previous, renderedByCell, (id) => this.getCellFeature(id));
+    }
     this.cellLayer.changed();
     this.refreshGrabHover();
   }
@@ -1117,6 +1175,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.cellFeatures.clear();
     this.cellAttributesById.clear();
     this.mapShapes = [];
+    this.mapShapePreviewShapes = null;
     this.selectedCellIds.clear();
     this.hoveredCellIds.clear();
     this.grabHover.dispose();

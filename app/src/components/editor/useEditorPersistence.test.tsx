@@ -84,6 +84,37 @@ describe("useEditorPersistence", () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
+  it("accepts the next map edit while saving and persists only the latest queued state", async () => {
+    const backend = new MemoryRealmBackend();
+    const snapshot = await backend.createProject({ path: "browser://queued.realmmap", name: "Queued" });
+    const firstShape = terrain(["1:1"]);
+    const secondShape = terrain(["2:2"]);
+    let releaseFirst: (() => void) | undefined;
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const onSaved = vi.fn();
+    const update = vi.spyOn(backend, "updateMapShapes").mockImplementation(async ({ shapes }) => {
+      if (update.mock.calls.length === 1) await firstGate;
+      return { ...snapshot, mapShapes: shapes };
+    });
+    const { result } = renderHook((props: EditorPersistenceOptions) => useEditorPersistence(props), { initialProps: hookProps(snapshot, backend, onSaved) });
+
+    act(() => { result.current.commitMapShapes([firstShape], "保存に失敗しました。", { normalize: false }); });
+    await waitFor(() => expect(result.current.saving).toBe(true));
+    expect(result.current.editingLocked).toBe(false);
+
+    act(() => { result.current.commitMapShapes([secondShape], "保存に失敗しました。", { normalize: false }); });
+    expect(result.current.mapShapes).toEqual([secondShape]);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(result.current.locked).toBe(true);
+
+    releaseFirst?.();
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.saving).toBe(false));
+    expect(update.mock.calls[1]?.[0].shapes).toEqual([secondShape]);
+    expect(result.current.viewedSnapshot.mapShapes).toEqual([secondShape]);
+    expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps stale failures from changing the current error and respects a busy editor", async () => {
     const backend = new MemoryRealmBackend();
     const snapshot = await backend.createProject({ path: "browser://stale.realmmap", name: "Stale" });

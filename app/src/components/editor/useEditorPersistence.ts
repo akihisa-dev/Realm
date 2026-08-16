@@ -11,6 +11,13 @@ type CommitMapShapesOptions = {
   normalize?: boolean;
 };
 
+type PendingMapShapeSave = {
+  identity: string;
+  generation: number;
+  shapes: MapShape[];
+  fallback: string;
+};
+
 export type EditorPersistenceOptions = {
   snapshot: RealmSnapshot;
   backend: RealmBackend;
@@ -43,10 +50,14 @@ export function useEditorPersistence({
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
   const [mapShapes, setMapShapes] = useState<MapShape[]>(snapshot.mapShapes ?? []);
   const [operating, setOperating] = useState(false);
+  const [savingMapShapes, setSavingMapShapes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const viewedIdentity = useRef(projectIdentity);
   const mounted = useRef(true);
   const commandTail = useRef<Promise<void>>(Promise.resolve());
+  const mapShapeSavePending = useRef<PendingMapShapeSave | null>(null);
+  const mapShapeSaveRunning = useRef(false);
+  const mapShapeSaveGeneration = useRef(0);
   const onProjectChangedRef = useRef(onProjectChanged);
   const onOperationSettledRef = useRef(onOperationSettled);
   onProjectChangedRef.current = onProjectChanged;
@@ -62,6 +73,8 @@ export function useEditorPersistence({
     viewedIdentity.current = projectIdentity;
     setViewedSnapshot(snapshot);
     if (identityChanged) {
+      mapShapeSaveGeneration.current += 1;
+      mapShapeSavePending.current = null;
       setMapShapes(snapshot.mapShapes ?? []);
       setError(null);
       onProjectChangedRef.current?.();
@@ -72,6 +85,46 @@ export function useEditorPersistence({
     const openSnapshot = await backend.getOpenProject();
     if (mounted.current && viewedIdentity.current === identity && openSnapshot) setMapShapes(openSnapshot.mapShapes ?? []);
   }, [backend]);
+
+  /**
+   * Saves only the latest optimistic map state after the current write ends.
+   * Pointer edits stay local and responsive while SQLite/IPC work is in flight;
+   * intermediate states are safe to skip because each request replaces the
+   * complete current map-shape set.
+   */
+  const flushMapShapeSaves = useCallback(async (): Promise<void> => {
+    if (mapShapeSaveRunning.current) return;
+    mapShapeSaveRunning.current = true;
+    setSavingMapShapes(true);
+    try {
+      while (mounted.current) {
+        const pending = mapShapeSavePending.current;
+        if (!pending) break;
+        mapShapeSavePending.current = null;
+        if (pending.identity !== viewedIdentity.current) continue;
+        const isLatest = (): boolean => mounted.current
+          && viewedIdentity.current === pending.identity
+          && mapShapeSaveGeneration.current === pending.generation;
+        try {
+          const next = await backend.updateMapShapes({ shapes: pending.shapes });
+          if (!isLatest()) continue;
+          setViewedSnapshot(next);
+          // The optimistic state is already visible. Avoid replacing it with
+          // an equivalent array and triggering a second renderer pass.
+          onSaved(next);
+          onOperationSettledRef.current?.();
+        } catch (cause) {
+          if (!isLatest()) continue;
+          await recoverMapShapes(pending.identity);
+          if (isLatest()) setError(errorMessage(cause, pending.fallback));
+        }
+      }
+    } finally {
+      mapShapeSaveRunning.current = false;
+      if (mounted.current) setSavingMapShapes(false);
+      if (mounted.current && mapShapeSavePending.current !== null) void flushMapShapeSaves();
+    }
+  }, [backend, onSaved, recoverMapShapes]);
 
   const run = useCallback(async (
     action: () => Promise<RealmSnapshot>,
@@ -117,22 +170,25 @@ export function useEditorPersistence({
       setError(errorMessage(cause, fallback));
       return;
     }
+    const identity = viewedIdentity.current;
+    const generation = mapShapeSaveGeneration.current + 1;
+    mapShapeSaveGeneration.current = generation;
+    mapShapeSavePending.current = { identity, generation, shapes, fallback };
+    setError(null);
     setMapShapes(shapes);
-    void run(
-      () => backend.updateMapShapes({ shapes }),
-      fallback,
-      { recover: recoverMapShapes },
-    );
-  }, [backend, busy, operating, recoverMapShapes, run]);
+    void flushMapShapeSaves();
+  }, [busy, flushMapShapeSaves, operating]);
 
   return {
     viewedSnapshot,
     mapShapes,
     setMapShapes,
     operating,
+    saving: savingMapShapes,
     error,
     setError,
-    locked: busy || operating,
+    locked: busy || operating || savingMapShapes,
+    editingLocked: busy || operating,
     run,
     commitMapShapes,
   };

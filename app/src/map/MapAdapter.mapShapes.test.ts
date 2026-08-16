@@ -117,6 +117,34 @@ describe("RealmMapAdapter canonical map shapes", () => {
     host.remove();
   });
 
+  it("updates grab preview geometry in place without rebuilding the feature", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const source = (adapter.getMap().getLayers().item(8) as VectorLayer).getSource()!;
+    const shape = {
+      id: "11111111-1111-4111-8111-111111111111",
+      layer: "terrain" as const,
+      value: "terrain",
+      geometryVersion: 1,
+      snapGridVersion: 2,
+      geometry: { type: "Polygon" as const, coordinates: [[[0, 0], [12, 0], [12, 12], [0, 0]].map(([x, y]) => [x, y] as [number, number])] },
+    };
+    adapter.setMapShapes?.([shape]);
+    const feature = source.getFeatureById(shape.id);
+    const setPreview = (adapter as unknown as { setMapShapePreview: (shapes: Array<typeof shape> | null) => void }).setMapShapePreview.bind(adapter);
+    setPreview([{ ...shape, geometry: { ...shape.geometry, coordinates: [[[1, 0], [13, 0], [13, 12], [1, 0]].map(([x, y]) => [x, y] as [number, number])] } }]);
+
+    expect(source.getFeatureById(shape.id)).toBe(feature);
+    expect((feature?.getGeometry() as Polygon).getCoordinates()).toEqual([[[1, 0], [13, 0], [13, 12], [1, 0]]]);
+    setPreview(null);
+    expect(source.getFeatureById(shape.id)).toBe(feature);
+    expect((feature?.getGeometry() as Polygon).getCoordinates()).toEqual(shape.geometry.coordinates);
+
+    adapter.dispose();
+    host.remove();
+  });
+
   it("uses the exact canonical Polygon for the grab affordance instead of cell attributes", () => {
     const host = document.createElement("div");
     document.body.append(host);
