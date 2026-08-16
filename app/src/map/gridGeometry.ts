@@ -33,6 +33,12 @@ export const cellCenter = (row: number, column: number): [number, number] => [
   FIRST_CELL_CENTER_Y + row * CELL_ROW_STEP,
 ];
 
+export const cellCenterWithinWorld = (row: number, column: number): boolean => {
+  const [longitude, latitude] = cellCenter(row, column);
+  return longitude >= WORLD_EXTENT[0] && longitude <= WORLD_EXTENT[2]
+    && latitude >= WORLD_EXTENT[1] && latitude <= WORLD_EXTENT[3];
+};
+
 const clipPolygonToWorld = (polygon: readonly CellPosition[]): CellPosition[] => {
   let clipped = polygon.map(([x, y]) => [x, y] as CellPosition);
   const edges: readonly ((point: CellPosition) => boolean)[] = [
@@ -128,6 +134,7 @@ export const cellIdsWithinPaintPath = (path: readonly [number, number][], radius
   const selected: string[] = [];
   for (let row = minRow; row <= maxRow; row += 1) {
     for (let column = minColumn; column <= maxColumn; column += 1) {
+      if (!cellCenterWithinWorld(row, column)) continue;
       const point: [number, number] = [column + (row % 2 === 0 ? 0 : 0.5), row];
       let distanceSquared = Number.POSITIVE_INFINITY;
       for (let index = 1; index < gridPath.length; index += 1) {
@@ -165,6 +172,7 @@ export const cellIdsWithinPaintPosition = (position: [number, number], radiusCel
   const selected: string[] = [];
   for (let row = Math.max(0, centerRow - radius); row <= Math.min(CELL_GRID_ROWS - 1, centerRow + radius); row += 1) {
     for (let column = Math.max(0, centerColumn - radius - 1); column <= Math.min(CELL_GRID_COLUMNS - 1, centerColumn + radius + 1); column += 1) {
+      if (!cellCenterWithinWorld(row, column)) continue;
       const axialQ = column - (row - (row & 1)) / 2;
       const axialR = row;
       const distance = Math.max(Math.abs(axialQ - centerAxialQ), Math.abs(axialR - centerRow), Math.abs((axialQ + axialR) - (centerAxialQ + centerRow)));

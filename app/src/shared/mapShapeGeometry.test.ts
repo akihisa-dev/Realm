@@ -108,6 +108,10 @@ describe("grid-snapped continuous map shapes", () => {
     expect(mapShapeCellIds(retracted[0]!)).toEqual(new Set(["5:5"]));
   });
 
+  it("does not turn out-of-world edge cells into empty Polygon shapes", () => {
+    expect(() => applyGridSelectionToMapShapes([], { cellIds: ["127:30"], layer: "terrain", value: "terrain" })).toThrow("セルを選択してください。");
+  });
+
   it("uses Polygon boolean operations for grid selection without persisting cell rows", () => {
     const first = cellIdsToPolygonGeometries(["10:10", "11:10"])[0]!;
     const second = cellIdsToPolygonGeometries(["11:10", "12:10"])[0]!;

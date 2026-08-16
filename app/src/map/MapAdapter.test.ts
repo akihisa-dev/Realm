@@ -20,6 +20,12 @@ import CircleStyle from "ol/style/Circle";
 import Style from "ol/style/Style";
 
 describe("RealmMapAdapter", () => {
+  it("does not select a fixed-grid cell whose center lies outside the world", () => {
+    const center = cellCenter(30, 127);
+    expect(cellPolygon(30, 127)).not.toBeNull();
+    expect(cellIdsWithinPaintPosition([Math.min(WORLD_EXTENT[2], center[0]), center[1]], 0)).not.toContain("127:30");
+  });
+
   it("converts a freehand cell-region polygon into cell ids without creating a feature", () => {
     const host = document.createElement("div");
     document.body.append(host);

@@ -128,8 +128,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     try {
       const copied = next.map((shape) => ({ ...shape, geometry: { type: "Polygon" as const, coordinates: shape.geometry.coordinates.map((ring) => ring.map(([x, y]) => [x, y] as [number, number])) } }));
       shapes = normalizeMapShapes(copied);
-    } catch {
-      setError(fallback);
+    } catch (cause) {
+      setError(errorMessage(cause, fallback));
       return;
     }
     setMapShapes(shapes);
@@ -208,9 +208,17 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       : undefined;
     const regionId = tool === "region" ? targetRegion?.persistentId ?? crypto.randomUUID() : undefined;
     const clearRegion = tool === "erase" && attribute === "terrain";
-    const next = applyGridSelectionToMapShapes(mapShapes, { cellIds: nextIds, layer: attribute, value, ...(regionId ? { regionId } : {}), ...(clearRegion ? { clearRegion: true } : {}) });
+    const fallback = attribute === "region" ? "セル選択から領域を更新できませんでした。" : "セル選択から地形を更新できませんでした。";
+    let next: MapShape[];
+    try {
+      next = applyGridSelectionToMapShapes(mapShapes, { cellIds: nextIds, layer: attribute, value, ...(regionId ? { regionId } : {}), ...(clearRegion ? { clearRegion: true } : {}) });
+    } catch (cause) {
+      setSelectedCellIds([]);
+      setError(errorMessage(cause, fallback));
+      return;
+    }
     setSelectedCellIds([]);
-    commitMapShapes(next, attribute === "region" ? "セル選択から領域を更新できませんでした。" : "セル選択から地形を更新できませんでした。");
+    commitMapShapes(next, fallback);
   };
   const commitShapeEdit = (edit: MapShapeEdit): void => {
     commitMapShapes(edit.shapes, activeToolRef.current === "shape" ? "領域を地形に合わせられませんでした。" : "図形を更新できませんでした。");

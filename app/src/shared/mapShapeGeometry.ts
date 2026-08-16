@@ -67,6 +67,12 @@ export const mapShapeCellCenter = (cell: Cell): Position => [
   firstCenter[1] + cell.row * rowStep,
 ];
 
+const cellCenterWithinWorld = (cell: Cell): boolean => {
+  const [x, y] = mapShapeCellCenter(cell);
+  return x >= MAP_SHAPE_WORLD_EXTENT[0] && x <= MAP_SHAPE_WORLD_EXTENT[2]
+    && y >= MAP_SHAPE_WORLD_EXTENT[1] && y <= MAP_SHAPE_WORLD_EXTENT[3];
+};
+
 export const mapShapeCellPolygon = (cell: Cell): Position[] | null => {
   if (cell.row < 0 || cell.row >= MAP_SHAPE_GRID_ROWS || cell.column < 0 || cell.column >= MAP_SHAPE_GRID_COLUMNS) return null;
   const [centerX, centerY] = mapShapeCellCenter(cell);
@@ -582,7 +588,10 @@ export const deriveMapGridCells = (shapes: readonly MapShape[]) => groupsFromSha
 
 export type MapGridSelectionInput = { cellIds: readonly string[]; layer: "terrain" | "region"; value: string | null; regionId?: string; clearRegion?: boolean };
 export const applyGridSelectionToMapShapes = (shapes: readonly MapShape[], input: MapGridSelectionInput): MapShape[] => {
-  const selected = new Set(input.cellIds.filter((id) => parseCellId(id)));
+  const selected = new Set(input.cellIds.flatMap((id) => {
+    const cell = parseCellId(id);
+    return cell && cellCenterWithinWorld(cell) ? [id] : [];
+  }));
   if (selected.size === 0) throw new Error("セルを選択してください。");
   const groups = groupsFromShapes(shapes);
   if (input.layer === "terrain") {
