@@ -1,13 +1,13 @@
 import { readdirSync } from "node:fs";
 import { join, extname } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { RealmBackend, RealmSnapshot, ProjectSummary, CreateFeatureInput, CreateFeaturesBatchInput, ReviseFeaturesBatchInput, ReviseFeatureInput, DeleteFeaturesBatchInput, SetFeaturesLockedInput, ProjectSettings, ImportAssetInput, ImportAssetsBatchInput, AssetRead, FeatureProperties, MapShape, CreateMapShapesInput, UpdateMapShapesInput, DeleteMapShapesInput } from "../../shared/realmContract";
+import type { RealmBackend, RealmSnapshot, ProjectSummary, CreateFeatureInput, CreateFeaturesBatchInput, ReviseFeaturesBatchInput, ReviseFeatureInput, DeleteFeaturesBatchInput, SetFeaturesLockedInput, ProjectSettings, ImportAssetInput, ImportAssetsBatchInput, AssetRead, FeatureProperties, CreateMapShapesInput, UpdateMapShapesInput, DeleteMapShapesInput } from "../../shared/realmContract";
 import { RealmError, invalid } from "../domain/errors";
 import { validateName, validateGeometry, validateProperties } from "../domain/geometry";
+import { canonicalUuid } from "../domain/identifiers";
 import { validateSettings } from "../domain/settings";
 import { MAX_ASSET_BYTES, sha256Hex, validateAsset } from "../domain/assets";
 import { projectSnapshot } from "../read-model/snapshot";
-import { validateMapShapes } from "../../shared/mapShapeGeometry";
 import { captureState } from "../edit/operations";
 import { transaction } from "../storage/schema";
 import { copyBytesAtomic, copySqliteSnapshot } from "../storage/atomic";
@@ -15,6 +15,7 @@ import { canonicalParentPath, preflightExistingProject, validateProjectPath } fr
 import { assertLibraryDirectory, libraryIdFromFilename, libraryProjectPath, newLibraryProjectPath, validateLibraryDirectory, type LibraryDirectoryIdentity } from "../storage/library";
 import { createProject, openProject } from "../storage/project";
 import type { OpenProjectSession } from "../state/session";
+import { createMapShapes as createMapShapesCommand, deleteMapShapes as deleteMapShapesCommand, updateMapShapes as updateMapShapesCommand } from "./mapShapeCommands";
 
 const PROJECT_EXTENSION = ".realmmap";
 const MAX_FEATURE_BATCH = 2048;
@@ -22,12 +23,6 @@ const MAX_ASSET_BATCH = 256;
 const assetKeys = new Set(["assetId", "assetIds", "asset_id", "asset_ids", "asset"]);
 const containsAsset = (value: unknown, id: string, key?: string): boolean => typeof value === "string" ? Boolean(key && assetKeys.has(key) && value === id) : Array.isArray(value) ? value.some((item) => containsAsset(item, id, key)) : Boolean(value && typeof value === "object" && Object.entries(value as Record<string, unknown>).some(([nestedKey, nestedValue]) => containsAsset(nestedValue, id, nestedKey)));
 const fileExtension = (path: string): string => extname(path).toLowerCase();
-const canonicalUuid = (raw: string, label: string): string => {
-  if (typeof raw !== "string") throw invalid(`The ${label} identifier is invalid.`);
-  const value = raw.trim();
-  if (value.length > 128 || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(value)) throw invalid(`The ${label} identifier is invalid.`);
-  return value.toLowerCase();
-};
 const canonicalFeatureId = (raw: string): string => canonicalUuid(raw, "feature");
 const canonicalAssetId = (raw: string): string => canonicalUuid(raw, "asset");
 function assertRecord(input: unknown): asserts input is Record<string, unknown> { if (!input || typeof input !== "object" || Array.isArray(input)) throw invalid("The request input is invalid."); }
@@ -121,43 +116,9 @@ export class RealmCommands implements RealmBackend {
   }
   async deleteAsset(input: { id: string }): Promise<RealmSnapshot> { return this.deleteAssetsBatch({ ids: [input.id] }); }
   async deleteAssetsBatch(input: { ids: string[] }): Promise<RealmSnapshot> { assertRecord(input); if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > MAX_ASSET_BATCH) throw invalid("The asset batch is invalid."); const ids = input.ids.map(canonicalAssetId); if (new Set(ids).size !== ids.length) throw invalid("An asset batch cannot contain duplicate identifiers."); const session = this.current(); const rows = ids.map((id) => session.database.prepare("SELECT id FROM assets WHERE id=?").get(id)); if (rows.some((row) => !row)) throw new RealmError("not_found", "The asset was not found."); const features = session.database.prepare("SELECT properties_json AS propertiesJson FROM features").all() as Record<string, unknown>[]; try { if (ids.some((id) => features.some((row) => containsAsset(JSON.parse(String(row.propertiesJson)), id)))) throw new RealmError("asset_in_use", "The asset is still referenced by a feature."); } catch (error) { if (error instanceof RealmError) throw error; throw new RealmError("corrupt_project", "A feature contains invalid properties."); } const before = captureState(session.database, { assetBytesFor: ids }); transaction(session.database, () => { const statement = session.database.prepare("DELETE FROM assets WHERE id=?"); for (const id of ids) statement.run(id); }); session.checkpoint(before, "delete-assets"); return projectSnapshot(session); }
-  private persistMapShapes(shapes: readonly MapShape[], label: string): RealmSnapshot {
-    try { validateMapShapes(shapes); } catch { throw invalid("The map shape geometry is invalid or overlaps another shape."); }
-    const session = this.current();
-    const before = captureState(session.database);
-    transaction(session.database, () => {
-      session.database.exec("DELETE FROM map_shapes");
-      const statement = session.database.prepare("INSERT INTO map_shapes(id,layer,region_id,value,geometry_version,snap_grid_version,geometry_json) VALUES (?,?,?,?,?,?,?)");
-      for (const shape of shapes) statement.run(shape.id, shape.layer, shape.regionId ?? null, shape.value, shape.geometryVersion, shape.snapGridVersion, JSON.stringify(shape.geometry));
-    });
-    session.checkpoint(before, label);
-    return projectSnapshot(session);
-  }
-
-  async createMapShapes(input: CreateMapShapesInput): Promise<RealmSnapshot> {
-    assertRecord(input);
-    if (!Array.isArray(input.shapes)) throw invalid("The map shape batch is invalid.");
-    const current = projectSnapshot(this.current()).mapShapes;
-    const ids = new Set(current.map((shape) => shape.id));
-    if (input.shapes.some((shape) => ids.has(shape.id))) throw invalid("A map shape identifier already exists.");
-    return this.persistMapShapes([...current, ...input.shapes], "map-shapes-create");
-  }
-
-  async updateMapShapes(input: UpdateMapShapesInput): Promise<RealmSnapshot> {
-    assertRecord(input);
-    if (!Array.isArray(input.shapes)) throw invalid("The map shape batch is invalid.");
-    return this.persistMapShapes(input.shapes, "map-shapes-update");
-  }
-
-  async deleteMapShapes(input: DeleteMapShapesInput): Promise<RealmSnapshot> {
-    assertRecord(input);
-    if (!Array.isArray(input.ids) || input.ids.length === 0 || input.ids.length > 4096 || input.ids.some((id) => typeof id !== "string")) throw invalid("The map shape identifier batch is invalid.");
-    const ids = input.ids.map((id) => canonicalUuid(id, "map shape"));
-    if (new Set(ids).size !== ids.length) throw invalid("The map shape identifiers must be unique.");
-    const current = projectSnapshot(this.current()).mapShapes;
-    if (ids.some((id) => !current.some((shape) => shape.id === id))) throw new RealmError("not_found", "The map shape was not found.");
-    return this.persistMapShapes(current.filter((shape) => !ids.includes(shape.id)), "map-shapes-delete");
-  }
+  async createMapShapes(input: CreateMapShapesInput): Promise<RealmSnapshot> { return createMapShapesCommand(this.current(), input); }
+  async updateMapShapes(input: UpdateMapShapesInput): Promise<RealmSnapshot> { return updateMapShapesCommand(this.current(), input); }
+  async deleteMapShapes(input: DeleteMapShapesInput): Promise<RealmSnapshot> { return deleteMapShapesCommand(this.current(), input); }
   async undoProject(): Promise<RealmSnapshot> { const session = this.current(); session.undo(); return projectSnapshot(session); }
   async redoProject(): Promise<RealmSnapshot> { const session = this.current(); session.redo(); return projectSnapshot(session); }
   async closeProject(): Promise<void> {

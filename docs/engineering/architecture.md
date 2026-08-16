@@ -39,6 +39,8 @@ Asset bytes are not part of the normal project snapshot path: the first snapshot
 
 Map-shape validation derives each shape's grid-cell set once and reuses it for layer-overlap and region-connectivity checks. Cell-center reconstruction first narrows the scan to the Polygon bounding box while retaining the fixed EPSG:4326 grid and canonical Polygon round-trip checks.
 
+Map-shape commands now own their request validation, canonical snapshot lookup, transactional replacement, and history checkpointing in `app/src/main/commands/mapShapeCommands.ts`; `RealmCommands` remains the public backend adapter and session/library owner. UUID normalization is shared by command domains through `app/src/main/domain/identifiers.ts`, so feature, asset, and map-shape IDs use one boundary rule.
+
 ## Safety invariants
 
 - Resolve the app-data directory in the Electron main process, address library entries by validated UUID, and validate user-selected import/export paths; never concatenate user input into SQL or filesystem paths.

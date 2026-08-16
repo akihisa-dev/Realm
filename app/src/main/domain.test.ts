@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { validateAsset, sha256Hex } from "./domain/assets";
 import { RealmError, asRealmError, corrupt, invalid } from "./domain/errors";
 import { validateGeometry, validateName, validateProperties } from "./domain/geometry";
+import { canonicalUuid } from "./domain/identifiers";
 import { DEFAULT_SETTINGS, parseStoredSettings, validateSettings } from "./domain/settings";
 
 const png = [137, 80, 78, 71, 13, 10, 26, 10, 0];
@@ -49,5 +50,10 @@ describe("main domain validation", () => {
     expect(asRealmError(new Error("disk"))).toMatchObject({ code: "storage_error", message: "disk" });
     expect(asRealmError("unknown", "fallback")).toMatchObject({ code: "storage_error", message: "fallback" });
     expect(corrupt().code).toBe("corrupt_project");
+  });
+
+  it("canonicalizes UUID identifiers at the domain boundary", () => {
+    expect(canonicalUuid("  ABCDEFAB-CDEF-4ABC-8DEF-ABCDEFABCDEF  ", "feature")).toBe("abcdefab-cdef-4abc-8def-abcdefabcdef");
+    expect(() => canonicalUuid("not-an-id", "feature")).toThrow("identifier");
   });
 });
