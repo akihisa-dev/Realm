@@ -1,7 +1,15 @@
 import { cellCenter, cellId, cellPolygon } from "./gridGeometry";
 import { exactCellBoundaryRings, smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments, terrainCellCenters, terrainOutlineSegments } from "./terrainOutline";
+import { mapShapeCellCenter, mapShapeCellPolygon } from "../shared/mapShapeGeometry";
 
 describe("terrainOutlineSegments", () => {
+  it("uses the persisted map-shape grid geometry for the renderer grid", () => {
+    for (const [row, column] of [[0, 0], [1, 0], [36, 63], [72, 127]] as const) {
+      expect(cellCenter(row, column)).toEqual(mapShapeCellCenter({ row, column }));
+      expect(cellPolygon(row, column)).toEqual(mapShapeCellPolygon({ row, column }));
+    }
+  });
+
   it("keeps every edge of one interior terrain cell", () => {
     expect(terrainOutlineSegments([cellId(10, 10)])).toHaveLength(6);
   });

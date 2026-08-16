@@ -1,12 +1,20 @@
-export const CELL_GRID_COLUMNS = 128;
-export const CELL_GRID_ROWS = 73;
+import {
+  MAP_SHAPE_GRID_COLUMNS,
+  MAP_SHAPE_GRID_ROWS,
+  MAP_SHAPE_WORLD_EXTENT,
+  mapShapeCellCenter,
+  mapShapeCellPolygon,
+} from "../shared/mapShapeGeometry";
+
+export const CELL_GRID_COLUMNS = MAP_SHAPE_GRID_COLUMNS;
+export const CELL_GRID_ROWS = MAP_SHAPE_GRID_ROWS;
 export const CELL_GRID_CELL_COUNT = CELL_GRID_COLUMNS * CELL_GRID_ROWS;
 export const CELL_PAINT_RADII = { small: 2, medium: 4, large: 8 } as const;
 export const CELL_PAINT_RANGE_MIN = 1;
 export const CELL_PAINT_RANGE_MAX = 5;
 export type CellPaintSize = keyof typeof CELL_PAINT_RADII;
 export type CellPosition = [number, number];
-export const WORLD_EXTENT = [-180, -90, 180, 90] as const;
+export const WORLD_EXTENT = MAP_SHAPE_WORLD_EXTENT;
 
 export const availableViewportSize = (width: number, height: number): [number, number] => {
   const padding = Math.min(160, Math.max(40, Math.min(width, height) * 0.1));
@@ -19,19 +27,14 @@ export const cellPaintRadiusForRange = (range: number): number => {
   return Math.max(0, Math.min(CELL_PAINT_RANGE_MAX - 1, Math.round(range) - 1) * 2);
 };
 
-const CELL_RADIUS = 180 / (1.5 * CELL_GRID_ROWS + 0.5);
-const CELL_COLUMN_STEP = Math.sqrt(3) * CELL_RADIUS;
-const CELL_ROW_STEP = 1.5 * CELL_RADIUS;
-const FIRST_CELL_CENTER_X = -180 + CELL_COLUMN_STEP / 2;
-const FIRST_CELL_CENTER_Y = -90 + CELL_RADIUS;
+const FIRST_CELL_CENTER = mapShapeCellCenter({ row: 0, column: 0 });
+const CELL_COLUMN_STEP = mapShapeCellCenter({ row: 0, column: 1 })[0] - FIRST_CELL_CENTER[0];
+const CELL_ROW_STEP = mapShapeCellCenter({ row: 1, column: 0 })[1] - FIRST_CELL_CENTER[1];
 
 /** Stable persisted identity: x (column) first, then y (row). */
 export const cellId = (row: number, column: number): string => `${column}:${row}`;
 
-export const cellCenter = (row: number, column: number): [number, number] => [
-  FIRST_CELL_CENTER_X + (column + (row % 2 === 0 ? 0 : 0.5)) * CELL_COLUMN_STEP,
-  FIRST_CELL_CENTER_Y + row * CELL_ROW_STEP,
-];
+export const cellCenter = (row: number, column: number): [number, number] => mapShapeCellCenter({ row, column });
 
 export const cellCenterWithinWorld = (row: number, column: number): boolean => {
   const [longitude, latitude] = cellCenter(row, column);
@@ -39,51 +42,11 @@ export const cellCenterWithinWorld = (row: number, column: number): boolean => {
     && latitude >= WORLD_EXTENT[1] && latitude <= WORLD_EXTENT[3];
 };
 
-const clipPolygonToWorld = (polygon: readonly CellPosition[]): CellPosition[] => {
-  let clipped = polygon.map(([x, y]) => [x, y] as CellPosition);
-  const edges: readonly ((point: CellPosition) => boolean)[] = [
-    ([x]) => x >= WORLD_EXTENT[0],
-    ([, y]) => y >= WORLD_EXTENT[1],
-    ([x]) => x <= WORLD_EXTENT[2],
-    ([, y]) => y <= WORLD_EXTENT[3],
-  ];
-  const intersections: readonly ((start: CellPosition, end: CellPosition) => CellPosition)[] = [
-    ([x1, y1], [x2, y2]) => [WORLD_EXTENT[0], y1 + (y2 - y1) * (WORLD_EXTENT[0] - x1) / (x2 - x1)],
-    ([x1, y1], [x2, y2]) => [x1 + (x2 - x1) * (WORLD_EXTENT[1] - y1) / (y2 - y1), WORLD_EXTENT[1]],
-    ([x1, y1], [x2, y2]) => [WORLD_EXTENT[2], y1 + (y2 - y1) * (WORLD_EXTENT[2] - x1) / (x2 - x1)],
-    ([x1, y1], [x2, y2]) => [x1 + (x2 - x1) * (WORLD_EXTENT[3] - y1) / (y2 - y1), WORLD_EXTENT[3]],
-  ];
-  for (let edge = 0; edge < edges.length && clipped.length > 0; edge += 1) {
-    const inside = edges[edge]!;
-    const intersect = intersections[edge]!;
-    const next: CellPosition[] = [];
-    for (let index = 0; index < clipped.length; index += 1) {
-      const start = clipped[index]!;
-      const end = clipped[(index + 1) % clipped.length]!;
-      const startInside = inside(start);
-      const endInside = inside(end);
-      if (startInside !== endInside) next.push(intersect(start, end));
-      if (endInside) next.push(end);
-    }
-    clipped = next;
-  }
-  return clipped;
-};
-
 /**
  * Returns one regular point-topped hexagon in the fixed odd-row offset grid.
  */
-export const cellPolygon = (row: number, column: number): CellPosition[] | null => {
-  if (!Number.isInteger(row) || !Number.isInteger(column)
-    || row < 0 || row >= CELL_GRID_ROWS || column < 0 || column >= CELL_GRID_COLUMNS) return null;
-  const [centerX, centerY] = cellCenter(row, column);
-  const polygon = Array.from({ length: 6 }, (_, vertex): CellPosition => {
-    const angle = ((-90 + vertex * 60) * Math.PI) / 180;
-    return [centerX + CELL_RADIUS * Math.cos(angle), centerY + CELL_RADIUS * Math.sin(angle)];
-  });
-  const clipped = clipPolygonToWorld(polygon);
-  return clipped.length >= 3 ? [...clipped, [...clipped[0]!] as CellPosition] : null;
-};
+export const cellPolygon = (row: number, column: number): CellPosition[] | null =>
+  mapShapeCellPolygon({ row, column });
 
 export const parseCellId = (value: string): [number, number] | null => {
   const match = /^(\d+):(\d+)$/.exec(value);
@@ -96,8 +59,8 @@ export const parseCellId = (value: string): [number, number] | null => {
 };
 
 const gridCoordinate = (coordinate: [number, number]): [number, number] => [
-  (coordinate[0] - FIRST_CELL_CENTER_X) / CELL_COLUMN_STEP,
-  (coordinate[1] - FIRST_CELL_CENTER_Y) / CELL_ROW_STEP,
+  (coordinate[0] - FIRST_CELL_CENTER[0]) / CELL_COLUMN_STEP,
+  (coordinate[1] - FIRST_CELL_CENTER[1]) / CELL_ROW_STEP,
 ];
 
 const distanceSquaredToSegment = (point: [number, number], start: [number, number], end: [number, number]): number => {

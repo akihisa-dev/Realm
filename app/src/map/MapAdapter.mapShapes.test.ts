@@ -31,6 +31,24 @@ describe("RealmMapAdapter canonical map shapes", () => {
     host.remove();
   });
 
+  it("keeps terrain and region outlines identical when they cover the same cells", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const adapter = new RealmMapAdapter({ target: host });
+    const geometry = cellIdsToPolygonGeometries(["10:10", "11:10", "11:11"])[0]!;
+    adapter.setMapShapes?.([
+      { id: "11111111-1111-4111-8111-111111111111", layer: "terrain", value: "terrain", geometryVersion: 1, snapGridVersion: 2, geometry },
+      { id: "22222222-2222-4222-8222-222222222222", layer: "region", regionId: "33333333-3333-4333-8333-333333333333", value: "#2468AC", geometryVersion: 1, snapGridVersion: 2, geometry },
+    ]);
+
+    const terrain = (adapter.getMap().getLayers().item(8) as VectorLayer).getSource()?.getFeatures()[0]?.getGeometry() as MultiLineString;
+    const region = (adapter.getMap().getLayers().item(7) as VectorLayer).getSource()?.getFeatures()[0]?.getGeometry() as Polygon;
+    expect(terrain.getCoordinates()).toEqual([region.getCoordinates()[0]]);
+
+    adapter.dispose();
+    host.remove();
+  });
+
   it("keeps holes and disconnected region parts when smoothing canonical shapes", () => {
     const host = document.createElement("div");
     document.body.append(host);
