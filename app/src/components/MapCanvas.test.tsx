@@ -64,6 +64,8 @@ describe("MapCanvas", () => {
     expect(map).toHaveClass("map-canvas-mode-cell-region", "map-canvas-draw");
     expect(map.parentElement).toHaveClass("map-canvas-frame");
     expect(screen.getByText("自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときはグラブに切り替えます。")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "領域の色" })).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(10);
     const regionButton = screen.getByRole("button", { name: "領域" });
     expect(regionButton).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(regionButton);
@@ -103,6 +105,11 @@ describe("MapCanvas", () => {
     expect(closeButton).toHaveAttribute("aria-expanded", "true");
     expect(palette).not.toHaveClass("is-collapsed");
     expect(shell).not.toHaveClass("map-canvas-sidebar-collapsed");
+    expect(screen.getByText("地形を描く")).toBeInTheDocument();
+    expect(screen.getByText("グラブ")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "領域の色" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "消しゴムの対象" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "地形削除" })).toBeInTheDocument();
 
     fireEvent.click(closeButton);
 
@@ -110,6 +117,8 @@ describe("MapCanvas", () => {
     expect(shell).toHaveClass("map-canvas-sidebar-collapsed");
     expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-sidebar-button"))).toHaveLength(5);
     expect(palette.querySelectorAll(".tool-sidebar-button > svg")).toHaveLength(5);
+    expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "消しゴムの対象" })).not.toBeInTheDocument();
     const openButton = screen.getByRole("button", { name: "地図ツールパレットを開く" });
     expect(openButton).toHaveAttribute("aria-expanded", "false");
 
@@ -118,6 +127,21 @@ describe("MapCanvas", () => {
     expect(palette).not.toHaveClass("is-collapsed");
     expect(shell).not.toHaveClass("map-canvas-sidebar-collapsed");
     expect(screen.getByRole("button", { name: "地図ツールパレットを閉じる" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "領域の色" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "消しゴムの対象" })).toBeInTheDocument();
+  });
+
+  it("keeps the hidden tool settings available from the collapsed rail", () => {
+    const renderer = createPaletteRenderer();
+    render(<MapCanvas onZoomChange={vi.fn()} createRenderer={() => renderer} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "地図ツールパレットを閉じる" }));
+    fireEvent.click(screen.getByRole("button", { name: "領域" }));
+    expect(screen.getAllByRole("radio")).toHaveLength(10);
+
+    fireEvent.click(screen.getByRole("button", { name: "消しゴム" }));
+    expect(screen.getByRole("group", { name: "消しゴムの対象" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
   });
 
   it("renders the controlled renderer preview without map-frame controls", () => {
@@ -310,7 +334,7 @@ describe("MapCanvas", () => {
     fireEvent.pointerDown(map, { button: 0 });
     expect(onMapPointerDown).not.toHaveBeenCalled();
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByRole("group", { name: "消しゴムの対象" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "消しゴムの対象" })).toBeInTheDocument();
     rerender(<MapCanvas mode="cell-select" strokeRange={3} zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
     expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(cellPaintRadiusForRange(3));
     rerender(<MapCanvas mode="cell-erase" strokeRange={3} zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
@@ -412,7 +436,7 @@ describe("MapCanvas", () => {
     expect(regionEraseButton).toHaveAttribute("aria-pressed", "true");
     expect(terrainEraseButton).toHaveAttribute("aria-pressed", "false");
     expect(eraserTargetPill).toHaveStyle({ left: "84px", width: "80px" });
-    expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(10);
   });
 
   it("exposes shaping as an accessible palette tool", () => {

@@ -43,7 +43,7 @@ export type PaletteFlyoutState = {
   toolPalette: ReactNode;
 };
 
-/** Owns the collapsible left tool sidebar, icon rail, and transient controls. */
+/** Owns the collapsible left tool sidebar, icon rail, and inline/flyout controls. */
 export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANGE_MIN, regionColor, onToolChange, onEraseTargetChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
   const paletteRef = useRef<HTMLElement>(null);
   const eraserTargetButtonsRef = useRef<HTMLDivElement>(null);
@@ -54,6 +54,8 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
   const [localRegionColor, setLocalRegionColor] = useState("#7A6FA8");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const effectiveRegionColor = regionColor ?? localRegionColor;
+  const showRegionControls = sidebarOpen || regionFlyoutOpen;
+  const showEraseControls = sidebarOpen || eraseFlyoutOpen;
 
   const closeFlyouts = (): void => {
     setEraseFlyoutOpen(false);
@@ -89,7 +91,7 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
     if (!pill || !activeButton) return;
     pill.style.left = `${activeButton.offsetLeft}px`;
     pill.style.width = `${activeButton.offsetWidth}px`;
-  }, [eraseFlyoutOpen, eraseTarget]);
+  }, [eraseFlyoutOpen, eraseTarget, sidebarOpen]);
 
   const selectPaintTool = (event: ReactMouseEvent<HTMLButtonElement>): void => {
     onToolChange?.("terrain");
@@ -99,14 +101,14 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
 
   const openRegionFlyout = (event: ReactMouseEvent<HTMLButtonElement>): void => {
     onToolChange?.("region");
-    setRegionFlyoutOpen((current) => !current);
+    setRegionFlyoutOpen((current) => sidebarOpen || !current);
     setEraseFlyoutOpen(false);
     event.stopPropagation();
   };
 
   const openEraseFlyout = (event: ReactMouseEvent<HTMLButtonElement>): void => {
     onToolChange?.("erase");
-    setEraseFlyoutOpen((current) => !current);
+    setEraseFlyoutOpen((current) => sidebarOpen || !current);
     setRegionFlyoutOpen(false);
     event.stopPropagation();
   };
@@ -160,7 +162,7 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
               onClick={selectPaintTool}
             >
               <Mountains aria-hidden="true" size={17} weight="bold" />
-              <span className="sr-only">地形を描く</span>
+              <span className="tool-sidebar-button-label">地形を描く</span>
             </button>
           </div>
 
@@ -170,16 +172,16 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
               type="button"
               aria-label="領域"
               aria-pressed={mode === "cell-region" || mode === "region"}
-              aria-haspopup="true"
-              aria-expanded={regionFlyoutOpen}
+              aria-haspopup={sidebarOpen ? undefined : "true"}
+              aria-expanded={showRegionControls}
               aria-controls={REGION_FLYOUT_ID}
               title="領域"
               onClick={openRegionFlyout}
             >
               <Hexagon aria-hidden="true" size={17} weight="fill" color={effectiveRegionColor} />
-              <span className="sr-only">領域</span>
+              <span className="tool-sidebar-button-label">領域</span>
             </button>
-            {regionFlyoutOpen ? (
+            {showRegionControls ? (
             <div id={REGION_FLYOUT_ID} className="tool-flyout tool-flyout-region" role="group" aria-label="領域の色">
               <span className="tool-flyout-label">領域の色</span>
               <div className="region-color-options" role="radiogroup" aria-label="領域色の候補">
@@ -207,16 +209,16 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
               type="button"
               aria-label="消しゴム"
               aria-pressed={mode === "cell-erase"}
-              aria-haspopup="true"
-              aria-expanded={eraseFlyoutOpen}
+              aria-haspopup={sidebarOpen ? undefined : "true"}
+              aria-expanded={showEraseControls}
               aria-controls={ERASE_FLYOUT_ID}
               title="消しゴム"
               onClick={openEraseFlyout}
             >
               <Eraser aria-hidden="true" size={17} weight="bold" />
-              <span className="sr-only">消しゴム</span>
+              <span className="tool-sidebar-button-label">消しゴム</span>
             </button>
-            {eraseFlyoutOpen ? (
+            {showEraseControls ? (
             <div id={ERASE_FLYOUT_ID} className="tool-flyout tool-flyout-erase" role="group" aria-label="消しゴムの対象">
               <div className="eraser-targets" role="group" aria-label="削除対象">
                 <span className="tool-flyout-label">削除対象</span>
@@ -233,7 +235,7 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
                       onClick={() => selectEraseTarget(target.id)}
                     >
                       {target.id === "terrain" ? <Mountains aria-hidden="true" size={16} weight="bold" /> : <Hexagon aria-hidden="true" size={16} weight="fill" />}
-                      <span className="sr-only">{target.label}</span>
+                      <span className="eraser-target-button-label">{target.label}</span>
                     </button>
                   ))}
                 </div>
@@ -245,17 +247,17 @@ export function usePaletteFlyouts({ hostRef, mode, strokeRange = CELL_PAINT_RANG
           <div className="tool-sidebar-item">
             <button className={`tool-sidebar-button${mode === "grab" ? " is-active" : ""}`} type="button" aria-label="グラブ" aria-pressed={mode === "grab"} title="グラブ" onClick={() => selectSimpleTool("grab")}>
               <HandGrabbing aria-hidden="true" size={17} weight="bold" />
-              <span className="sr-only">グラブ</span>
+              <span className="tool-sidebar-button-label">グラブ</span>
             </button>
           </div>
           <div className="tool-sidebar-item">
             <button className={`tool-sidebar-button${mode === "shape" ? " is-active" : ""}`} type="button" aria-label="シェイピング" aria-pressed={mode === "shape"} title="シェイピング" onClick={() => selectSimpleTool("shape")}>
               <Magnet aria-hidden="true" size={17} weight="bold" />
-              <span className="sr-only">シェイピング</span>
+              <span className="tool-sidebar-button-label">シェイピング</span>
             </button>
           </div>
         </div>
-        <p className="tool-sidebar-help">ツールを選択すると、必要な調整項目がここに開きます。</p>
+        <p className="tool-sidebar-help">開いたサイドバーではツール名と調整項目を表示します。閉じたときはアイコンから開けます。</p>
       </div>
     </aside>
   );
