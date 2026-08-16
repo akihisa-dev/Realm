@@ -377,4 +377,33 @@ describe("Electron storage parity: transactional CRUD and session history", () =
     await commands.closeProject();
     void featureId;
   });
+
+  it("restores deleted asset bytes through undo and removes them again through redo", async () => {
+    const directory = fixtureDirectory();
+    const commands = new RealmCommands({ libraryDirectory: directory });
+    let snapshot = await commands.createProject({ name: "Asset undo" });
+    snapshot = await commands.importAsset({ mime: "image/png", bytes: png, width: 1, height: 1, metadata: { role: "undo" } });
+    const assetId = snapshot.assets[0]!.id;
+    snapshot = await commands.deleteAsset({ id: assetId });
+    expect(snapshot.assets).toEqual([]);
+    snapshot = await commands.undoProject();
+    expect(snapshot.assets.map(({ id }) => id)).toEqual([assetId]);
+    expect((await commands.readAsset({ id: assetId })).bytes).toEqual(png);
+    snapshot = await commands.redoProject();
+    expect(snapshot.assets).toEqual([]);
+    await commands.closeProject();
+  });
+
+  it("checks asset bytes when a project is opened while later snapshots use manifests", async () => {
+    const directory = fixtureDirectory();
+    const commands = new RealmCommands({ libraryDirectory: directory });
+    const initial = await commands.createProject({ name: "Asset integrity" });
+    const snapshot = await commands.importAsset({ mime: "image/png", bytes: png, width: 1, height: 1 });
+    const path = snapshot.path;
+    await commands.closeProject();
+    const database = new DatabaseSync(path);
+    try { database.prepare("UPDATE assets SET bytes=? WHERE id=?").run(Uint8Array.from([...png.slice(0, -1), 0]), snapshot.assets[0]!.id); } finally { database.close(); }
+    await expect(commands.openProject({ libraryId: basename(initial.path, ".realmmap") })).rejects.toMatchObject({ code: "corrupt_project" });
+    await commands.closeProject();
+  });
 });

@@ -35,6 +35,8 @@ React coordinates launch restoration through `app/src/state/useRealmOperations.t
 
 Electron keeps `app/src/main/main.ts` as the process composition root and `app/src/main/ipc/registerIpcHandlers.ts` as the IPC registry. IPC data contracts, domain validation, open-session state, read models, edit application, command handlers, and storage concerns live in separate modules. Within storage, schema verification, path validation, atomic publication, library lookup, project connection setup, and artifact output are separate dependencies. Storage modules do not depend on IPC handlers.
 
+Asset bytes are not part of the normal project snapshot path: the first snapshot of an opened session verifies each BLOB, later snapshots expose only validated manifest fields, and bytes cross the command boundary only through an explicit asset read. Undo state keeps bytes only for assets added or removed by that edit; ordinary feature, setting, and map-shape checkpoints retain asset descriptors without copying the full BLOB set.
+
 ## Safety invariants
 
 - Resolve the app-data directory in the Electron main process, address library entries by validated UUID, and validate user-selected import/export paths; never concatenate user input into SQL or filesystem paths.
