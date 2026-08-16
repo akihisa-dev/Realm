@@ -24,7 +24,7 @@ import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, MapShape, MapShapeEdit, Position, RealmFeature } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
-import { CELL_PAINT_RADII, WORLD_EXTENT, availableViewportSize, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
+import { CELL_PAINT_RADII, WORLD_EXTENT, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
 import { MAX_SMOOTHING_PASSES, refineDrawnGeometry } from "./drawingGeometry";
 import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
@@ -1108,8 +1108,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (width <= 0 || height <= 0) return;
 
     const currentRelativeZoom = this.getZoom();
-    const availableSize = availableViewportSize(width, height);
-    const fitResolution = resolutionForFittingExtent(this.worldExtent, availableSize);
+    // OpenLayers applies the extent constraint to the full viewport. Use the
+    // same dimensions here so the relative minimum zoom and rendered extent
+    // stay aligned when the canvas is resized or zoomed out.
+    const viewportSize: [number, number] = [width, height];
+    const fitResolution = resolutionForFittingExtent(this.worldExtent, viewportSize);
     if (!Number.isFinite(fitResolution)) return;
     const fitZoom = view.getZoomForResolution(fitResolution);
     if (fitZoom === undefined) return;
