@@ -19,8 +19,9 @@ function assertRecord(input: unknown): asserts input is Record<string, unknown> 
 
 const canonicalAssetId = (raw: string): string => canonicalUuid(raw, "asset");
 
-export function importAsset(session: OpenProjectSession, input: ImportAssetInput): RealmSnapshot {
+export function importAsset(getSession: () => OpenProjectSession, input: ImportAssetInput): RealmSnapshot {
   const prepared = validateAsset(input);
+  const session = getSession();
   const existing = session.database.prepare("SELECT id FROM assets WHERE sha256=?").get(prepared.sha256);
   if (existing) return projectSnapshot(session);
   const before = captureState(session.database);
@@ -31,13 +32,14 @@ export function importAsset(session: OpenProjectSession, input: ImportAssetInput
   return projectSnapshot(session);
 }
 
-export function importAssetsBatch(session: OpenProjectSession, input: ImportAssetsBatchInput): RealmSnapshot {
+export function importAssetsBatch(getSession: () => OpenProjectSession, input: ImportAssetsBatchInput): RealmSnapshot {
   assertRecord(input);
   if (typeof input.packName !== "string" || !Array.isArray(input.assets)) throw invalid("The asset pack is invalid.");
   const packName = validateName(input.packName);
   if ([...packName].length > 128 || input.assets.length < 1 || input.assets.length > MAX_ASSET_BATCH || input.assets.reduce((sum, asset) => sum + (Array.isArray(asset?.bytes) ? asset.bytes.length : Number.POSITIVE_INFINITY), 0) > 64 * 1024 * 1024) throw invalid("The asset pack is invalid.");
   const prepared = input.assets.map((asset, ordinal) => ({ ordinal, asset: validateAsset(asset) }));
   if (prepared.some(({ asset }) => Object.keys(asset.metadata).some((key) => ["packId", "packName", "packOrdinal"].includes(key)))) throw invalid("Asset metadata contains reserved pack fields.");
+  const session = getSession();
   const known = new Set((session.database.prepare("SELECT sha256 FROM assets").all() as Record<string, unknown>[]).map((row) => String(row.sha256)));
   const additions = prepared.filter(({ asset }) => { if (known.has(asset.sha256)) return false; known.add(asset.sha256); return true; });
   if (!additions.length) return projectSnapshot(session);
@@ -51,8 +53,9 @@ export function importAssetsBatch(session: OpenProjectSession, input: ImportAsse
   return projectSnapshot(session);
 }
 
-export function readAsset(session: OpenProjectSession, input: { id: string }): AssetRead {
+export function readAsset(getSession: () => OpenProjectSession, input: { id: string }): AssetRead {
   const id = canonicalAssetId(input.id);
+  const session = getSession();
   const row = session.database.prepare("SELECT id,sha256,mime,length(bytes) AS byteLength,bytes,width,height,metadata_json AS metadata FROM assets WHERE id=?").get(id) as Record<string, unknown> | undefined;
   if (!row) throw new RealmError("not_found", "The asset was not found.");
   const bytes = row.bytes instanceof Uint8Array ? [...row.bytes] : Array.isArray(row.bytes) ? row.bytes : [];
@@ -63,11 +66,12 @@ export function readAsset(session: OpenProjectSession, input: { id: string }): A
   return { manifest: { id, sha256, mime: String(row.mime), byteLength: bytes.length, width: Number(row.width), height: Number(row.height), metadata }, bytes };
 }
 
-export function deleteAssetsBatch(session: OpenProjectSession, input: DeleteAssetsBatchInput): RealmSnapshot {
+export function deleteAssetsBatch(getSession: () => OpenProjectSession, input: DeleteAssetsBatchInput): RealmSnapshot {
   assertRecord(input);
   if (!Array.isArray(input.ids) || !input.ids.length || input.ids.length > MAX_ASSET_BATCH) throw invalid("The asset batch is invalid.");
   const ids = input.ids.map(canonicalAssetId);
   if (new Set(ids).size !== ids.length) throw invalid("An asset batch cannot contain duplicate identifiers.");
+  const session = getSession();
   const rows = ids.map((id) => session.database.prepare("SELECT id FROM assets WHERE id=?").get(id));
   if (rows.some((row) => !row)) throw new RealmError("not_found", "The asset was not found.");
   const features = session.database.prepare("SELECT properties_json AS propertiesJson FROM features").all() as Record<string, unknown>[];

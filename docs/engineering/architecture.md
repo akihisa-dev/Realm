@@ -43,6 +43,8 @@ Map-shape commands now own their request validation, canonical snapshot lookup, 
 
 Asset commands use the same boundary: `app/src/main/commands/assetCommands.ts` owns asset validation, BLOB reads, reference checks, transactional import/delete, and asset-specific history capture. The public adapter only resolves the current session and returns the resulting read model.
 
+Feature commands similarly keep feature batch validation, lock checks, geometry/property serialization, and transactional history updates in `app/src/main/commands/featureCommands.ts`. This leaves the public command class with one consistent lazy-session delegation path for feature, asset, and map-shape mutations.
+
 ## Safety invariants
 
 - Resolve the app-data directory in the Electron main process, address library entries by validated UUID, and validate user-selected import/export paths; never concatenate user input into SQL or filesystem paths.
