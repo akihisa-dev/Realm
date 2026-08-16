@@ -74,4 +74,32 @@ describe("RealmCommands user-visible operations", () => {
     const path = join(dir, "artifact.png"); await commands.writeArtifact({ path, bytes: png });
     await expect(commands.writeArtifact({ path: join(dir, "bad.png"), bytes: [1, 2] })).rejects.toBeInstanceOf(RealmError);
   });
+
+  it("preserves feature locking, validation, deletion, and undo through the command boundary", async () => {
+    const commands = new RealmCommands({ libraryDirectory: directory() });
+    await commands.createProject({ name: "Feature commands" });
+    let snapshot = await commands.createFeaturesBatch({ features: [{ featureType: "city", name: "City", geometry: point, properties: { role: "city" } }] });
+    const featureId = snapshot.features[0]!.id;
+    snapshot = await commands.reviseFeaturesBatch({ features: [{ id: featureId, name: "Revised city", geometry: point, properties: { role: "revised" } }] });
+    expect(snapshot.features[0]?.name).toBe("Revised city");
+    snapshot = await commands.setFeaturesLocked({ ids: [featureId], locked: true });
+    expect(snapshot.features[0]?.properties.locked).toBe(true);
+    await expect(commands.reviseFeature({ id: featureId, name: "Blocked", geometry: point })).rejects.toMatchObject({ code: "feature_locked" });
+    snapshot = await commands.setFeaturesLocked({ ids: [featureId], locked: false });
+    snapshot = await commands.deleteFeature({ id: featureId });
+    expect(snapshot.features).toEqual([]);
+    snapshot = await commands.undoProject();
+    expect(snapshot.features[0]?.id).toBe(featureId);
+    await commands.closeProject();
+  });
+
+  it("keeps asset pack metadata and explicit byte reads across the command boundary", async () => {
+    const commands = new RealmCommands({ libraryDirectory: directory() });
+    await commands.createProject({ name: "Asset commands" });
+    const snapshot = await commands.importAssetsBatch({ packName: "  Pack  ", assets: [{ mime: "image/png", bytes: png, width: 1, height: 1, metadata: { source: "pack" } }] });
+    const asset = snapshot.assets[0]!;
+    expect(asset.metadata).toMatchObject({ source: "pack", packName: "Pack", packOrdinal: 0 });
+    expect((await commands.readAsset({ id: asset.id })).bytes).toEqual(png);
+    await commands.closeProject();
+  });
 });
