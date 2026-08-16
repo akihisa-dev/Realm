@@ -67,8 +67,9 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 .object-manager-component { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: 8px; padding: 5px 7px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #53616a; font-size: 11px; text-align: left; }
 .object-manager-component:hover, .object-manager-component[aria-pressed="true"] { border-color: #b9dfe1; background: #f0fbfb; color: #006c77; }
 .object-manager-help { margin: auto 18px 18px; padding-top: 14px; border-top: 1px solid #e3e7e9; color: #68757c; font-size: 11px; line-height: 1.6; }
-.map-canvas-shell { position: relative; width: 100%; height: 100%; overflow: hidden; }
-.map-canvas { width: 100%; height: 100%; }
+.map-canvas-shell { position: relative; display: grid; width: 100%; height: 100%; place-items: center; padding: clamp(16px, 3vw, 48px); overflow: hidden; background: #f7f9f9; container-type: size; }
+.map-canvas-frame { position: relative; width: min(100%, 1600px, 200cqh); aspect-ratio: 2 / 1; overflow: hidden; border: 1px solid #d6dadd; background: #fff; box-shadow: 0 8px 28px rgba(29, 32, 37, .08); }
+.map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .map-canvas:focus-visible { outline: 2px solid #078c98; outline-offset: -3px; }
 .map-canvas .ol-viewport { background: transparent; }
 .map-canvas-mode-pan .ol-viewport {

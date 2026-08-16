@@ -195,16 +195,18 @@ export function MapCanvas({
       onPointerDown={handleShellPointerDown}
     >
       <p id="map-help" className="sr-only">{mapHelp}</p>
-      <div
-        ref={hostRef}
-        className={`map-canvas ${modeClass}${mode === "pan" ? "" : " map-canvas-draw"}${disabled ? " map-canvas-disabled" : ""}`}
-        role="region"
-        tabIndex={0}
-        aria-label="世界地図"
-        aria-describedby="map-help"
-        onContextMenu={handleContextMenu}
-      />
-      <span className={`map-texture map-texture-${themeId}`} aria-hidden="true" />
+      <div className="map-canvas-frame">
+        <div
+          ref={hostRef}
+          className={`map-canvas ${modeClass}${mode === "pan" ? "" : " map-canvas-draw"}${disabled ? " map-canvas-disabled" : ""}`}
+          role="region"
+          tabIndex={0}
+          aria-label="世界地図"
+          aria-describedby="map-help"
+          onContextMenu={handleContextMenu}
+        />
+        <span className={`map-texture map-texture-${themeId}`} aria-hidden="true" />
+      </div>
       {radialPalette}
       {paintRangeFlyout}
       {eraseFlyout}

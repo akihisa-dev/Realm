@@ -75,6 +75,7 @@ describe("MapCanvas", () => {
 
     const map = screen.getByRole("region", { name: "世界地図" });
     expect(map).toHaveClass("map-canvas-mode-cell-region", "map-canvas-draw");
+    expect(map.parentElement).toHaveClass("map-canvas-frame");
     expect(screen.getByText("自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときはグラブに切り替えます。")).toBeInTheDocument();
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     const regionButton = screen.getByRole("button", { name: "領域" });
