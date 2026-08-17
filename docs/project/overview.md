@@ -27,10 +27,13 @@ The header contains icon controls for renderer preview, `戻す`, `進む`, and 
 | Term | Meaning |
 | --- | --- |
 | World | One app-managed SQLite database and its current three-layer map state. |
-| Terrain layer | The current terrain polygons. It has no surface, water-system, biome, or terrain-kind subtypes. |
-| Region layer | Regions and their grid-snapped polygon parts. It is independent of terrain and is not an object layer. |
-| Object layer | Objects placed above terrain and regions. Initial kinds are city, text, mountain, and forest. |
-| Object | A persisted object-layer record with a kind, label, geometry, properties, order, and lock state. |
+| Terrain layer / 地形 | The current terrain itself, stored as grid-snapped polygons. It does not encode a surface, water system, biome, mountain type, or catalogue of terrain kinds. |
+| Terrain draw / 地形を描く | A terrain-layer operation that paints selected cells on the fixed hexagonal grid and changes only terrain polygons. It does not place forests, mountains, or other objects. |
+| Region layer / 領域 | Named or colored regions and their grid-snapped polygon parts. It is independent of terrain and is not an object layer. |
+| Region draw / 領域を描く | A region-layer operation that uses freehand enclosure selection to create or update region polygon parts and region identity. It does not paint terrain. |
+| Object layer / オブジェクト | Objects placed above terrain and regions. Initial kinds are city, text, mountain, and forest. Forests and mountains are object kinds, not terrain kinds. |
+| Object / オブジェクト | A persisted object-layer record with a kind, label, geometry, properties, order, and lock state. |
+| Draw / 描く | A shared visual entry in the editor, not a shared meaning: the active layer determines whether the operation is terrain cell painting or region enclosure drawing. |
 | Cell ID | A temporary `x:y` identifier used only during grid interaction; it is never saved. |
 | Transfer data | A `.realmmap` copy used only to move or back up editable data outside the app library. |
 
