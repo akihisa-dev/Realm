@@ -53,8 +53,36 @@ describe("LayerManager", () => {
 
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
     expect(screen.getByRole("tree", { name: "レイヤー階層" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "レイヤー1" })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("textbox", { name: "レイヤー1の名前" })).toHaveValue("レイヤー1");
+    expect(screen.getByRole("treeitem")).toHaveAttribute("aria-selected", "true");
     expect(onLayerChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps each layer name in one editable row and exposes compact actions", () => {
+    const onLayerChange = vi.fn();
+    const onDeleteLayerNode = vi.fn();
+    render(<LayerManager {...props(LEAF_LAYER, onLayerChange)} onDeleteLayerNode={onDeleteLayerNode} />);
+
+    fireEvent.focus(screen.getByRole("textbox", { name: "レイヤー1の名前" }));
+    expect(onLayerChange).toHaveBeenCalledWith(LEAF_LAYER);
+    expect(screen.getAllByDisplayValue("レイヤー1")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "レイヤー1を非表示" })).toHaveAttribute("title", "レイヤー1を非表示");
+    fireEvent.click(screen.getByRole("button", { name: "レイヤー1を削除" }));
+    expect(onDeleteLayerNode).toHaveBeenCalledWith(LEAF_LAYER);
+  });
+
+  it("distinguishes group rows from leaf rows", () => {
+    const groupId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const tree = { nodes: [
+      { id: groupId, parentId: null, kind: "group" as const, name: "地形グループ", order: 0, visible: true, locked: false },
+      { id: LEAF_LAYER, parentId: groupId, kind: "leaf" as const, name: "レイヤー1", order: 0, visible: true, locked: false },
+    ] };
+    render(<LayerManager {...props(LEAF_LAYER)} layerTree={tree} />);
+
+    const treeItems = screen.getAllByRole("treeitem");
+    expect(treeItems[0]).toHaveAttribute("aria-level", "1");
+    expect(treeItems[1]).toHaveAttribute("aria-level", "2");
+    expect(screen.getByRole("textbox", { name: "地形グループの名前" })).toHaveValue("地形グループ");
   });
 
   it("shows object kind operations in the selected leaf panel", () => {

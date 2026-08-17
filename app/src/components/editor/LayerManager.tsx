@@ -1,3 +1,14 @@
+import { ArrowDown } from "@phosphor-icons/react/dist/csr/ArrowDown";
+import { ArrowLeft } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { ArrowRight } from "@phosphor-icons/react/dist/csr/ArrowRight";
+import { ArrowUp } from "@phosphor-icons/react/dist/csr/ArrowUp";
+import { Eye } from "@phosphor-icons/react/dist/csr/Eye";
+import { EyeSlash } from "@phosphor-icons/react/dist/csr/EyeSlash";
+import { FolderSimple } from "@phosphor-icons/react/dist/csr/FolderSimple";
+import { Lock } from "@phosphor-icons/react/dist/csr/Lock";
+import { LockOpen } from "@phosphor-icons/react/dist/csr/LockOpen";
+import { Stack } from "@phosphor-icons/react/dist/csr/Stack";
+import { Trash } from "@phosphor-icons/react/dist/csr/Trash";
 import { X } from "@phosphor-icons/react/dist/csr/X";
 import type { CSSProperties, ReactNode } from "react";
 import type { ActiveKind, LayerId, LayerNode, LayerTree, MapObject, ObjectKind } from "../../backend";
@@ -69,18 +80,19 @@ export function LayerManager({ activeLayer, onLayerChange, onClose, disabled = f
     const siblings = children(node.parentId);
     const nodeIndex = siblings.findIndex((candidate) => candidate.id === node.id);
     const indentTarget = siblings.slice(0, nodeIndex).reverse().find((candidate) => candidate.kind === "group");
-    return <div className="layer-tree-node" key={node.id} data-layer-id={node.id} style={{ "--layer-depth": depth } as CSSProperties}>
-      <div className={`layer-tree-row${selectedLeafId === node.id ? " is-selected" : ""}`}>
-        {node.kind === "group" ? <span className="layer-tree-group-mark" aria-hidden="true">▾</span> : <span className="layer-tree-leaf-mark" aria-hidden="true">•</span>}
-        <button type="button" className="layer-tree-select" onClick={() => node.kind === "leaf" && onLayerChange(node.id)} disabled={disabled || node.kind === "group"} aria-current={selectedLeafId === node.id ? "true" : undefined}>{node.name}</button>
-        <input className="layer-tree-name" aria-label={`${node.name}の名前`} defaultValue={node.name} disabled={disabled} onBlur={(event) => { const name = event.target.value.trim() || node.name; event.target.value = name; updateNode(node.id, { name }); }} />
-        <button type="button" aria-label={`${node.name}を${node.visible ? "非表示" : "表示"}`} aria-pressed={node.visible} onClick={() => updateNode(node.id, { visible: !node.visible })} disabled={disabled}>{node.visible ? "表示" : "非表示"}</button>
-        <button type="button" aria-label={`${node.name}を${node.locked ? "編集可能" : "ロック"}`} aria-pressed={node.locked} onClick={() => updateNode(node.id, { locked: !node.locked })} disabled={disabled}>{node.locked ? "🔒" : "🔓"}</button>
-        <button type="button" aria-label={`${node.name}を上へ`} onClick={() => shiftNode(node, -1)} disabled={disabled}>↑</button>
-        <button type="button" aria-label={`${node.name}を下へ`} onClick={() => shiftNode(node, 1)} disabled={disabled}>↓</button>
-        {node.parentId !== null ? <button type="button" aria-label={`${node.name}を階層の外へ移動`} onClick={() => { const parent = treeNodes.find((candidate) => candidate.id === node.parentId); const parentId = parent?.parentId ?? null; const order = Math.max(-1, ...children(parentId).map((candidate) => candidate.order)) + 1; updateNode(node.id, { parentId, order }); }} disabled={disabled}>←</button> : null}
-        <button type="button" aria-label={`${node.name}をグループ内へ移動`} onClick={() => { if (!indentTarget) return; const order = Math.max(-1, ...children(indentTarget.id).map((candidate) => candidate.order)) + 1; updateNode(node.id, { parentId: indentTarget.id, order }); }} disabled={disabled || !indentTarget}>→</button>
-        {onDeleteLayerNode ? <button type="button" aria-label={`${node.name}を削除`} onClick={() => onDeleteLayerNode(node.id)} disabled={disabled}>×</button> : null}
+    return <div className="layer-tree-node" key={node.id} data-layer-id={node.id} role="treeitem" aria-level={depth + 1} aria-selected={selectedLeafId === node.id} style={{ "--layer-depth": depth } as CSSProperties}>
+      <div className={`layer-tree-row${selectedLeafId === node.id ? " is-selected" : ""}${node.kind === "group" ? " is-group" : " is-leaf"}`}>
+        <span className="layer-tree-kind" aria-hidden="true">{node.kind === "group" ? <FolderSimple size={16} weight="duotone" /> : <span className="layer-tree-leaf-mark" />}</span>
+        <input className="layer-tree-name" aria-label={`${node.name}の名前`} title={`${node.name}の名前`} defaultValue={node.name} disabled={disabled} onFocus={() => node.kind === "leaf" && onLayerChange(node.id)} onBlur={(event) => { const name = event.target.value.trim() || node.name; event.target.value = name; updateNode(node.id, { name }); }} />
+        <div className="layer-tree-controls" aria-label={`${node.name}の操作`}>
+          <button type="button" className="layer-tree-icon-button" aria-label={`${node.name}を${node.visible ? "非表示" : "表示"}`} title={`${node.name}を${node.visible ? "非表示" : "表示"}`} aria-pressed={node.visible} onClick={() => updateNode(node.id, { visible: !node.visible })} disabled={disabled}>{node.visible ? <Eye aria-hidden="true" size={15} /> : <EyeSlash aria-hidden="true" size={15} />}</button>
+          <button type="button" className="layer-tree-icon-button" aria-label={`${node.name}を${node.locked ? "編集可能" : "ロック"}`} title={`${node.name}を${node.locked ? "編集可能" : "ロック"}`} aria-pressed={node.locked} onClick={() => updateNode(node.id, { locked: !node.locked })} disabled={disabled}>{node.locked ? <Lock aria-hidden="true" size={15} /> : <LockOpen aria-hidden="true" size={15} />}</button>
+          <button type="button" className="layer-tree-icon-button" aria-label={`${node.name}を上へ`} title={`${node.name}を上へ`} onClick={() => shiftNode(node, -1)} disabled={disabled}><ArrowUp aria-hidden="true" size={15} /></button>
+          <button type="button" className="layer-tree-icon-button" aria-label={`${node.name}を下へ`} title={`${node.name}を下へ`} onClick={() => shiftNode(node, 1)} disabled={disabled}><ArrowDown aria-hidden="true" size={15} /></button>
+          {node.parentId !== null ? <button type="button" className="layer-tree-icon-button" aria-label={`${node.name}を階層の外へ移動`} title={`${node.name}を階層の外へ移動`} onClick={() => { const parent = treeNodes.find((candidate) => candidate.id === node.parentId); const parentId = parent?.parentId ?? null; const order = Math.max(-1, ...children(parentId).map((candidate) => candidate.order)) + 1; updateNode(node.id, { parentId, order }); }} disabled={disabled}><ArrowLeft aria-hidden="true" size={15} /></button> : null}
+          <button type="button" className="layer-tree-icon-button" aria-label={`${node.name}をグループ内へ移動`} title={`${node.name}をグループ内へ移動`} onClick={() => { if (!indentTarget) return; const order = Math.max(-1, ...children(indentTarget.id).map((candidate) => candidate.order)) + 1; updateNode(node.id, { parentId: indentTarget.id, order }); }} disabled={disabled || !indentTarget}><ArrowRight aria-hidden="true" size={15} /></button>
+          {onDeleteLayerNode ? <button type="button" className="layer-tree-icon-button is-danger" aria-label={`${node.name}を削除`} title={`${node.name}を削除`} onClick={() => onDeleteLayerNode(node.id)} disabled={disabled}><Trash aria-hidden="true" size={15} /></button> : null}
+        </div>
       </div>
       {nodeChildren.map((child) => renderNode(child, depth + 1))}
     </div>;
@@ -89,7 +101,7 @@ export function LayerManager({ activeLayer, onLayerChange, onClose, disabled = f
     <aside className="layer-manager" aria-label="レイヤー管理">
       <header className="layer-manager-header"><div><p className="layer-manager-kicker">編集対象</p><h2>レイヤー</h2></div><button type="button" aria-label="右パネルを閉じる" title="右パネルを閉じる" onClick={onClose}><X aria-hidden="true" size={17} weight="bold" /></button></header>
       {layerTree ? <>
-        <div className="layer-tree-actions"><button type="button" onClick={() => onAddLayerNode?.("group", selectedLeafId ?? null)} disabled={disabled}>グループ追加</button><button type="button" onClick={() => onAddLayerNode?.("leaf", selectedLeafId ?? null)} disabled={disabled}>レイヤー追加</button></div>
+        <div className="layer-tree-actions"><button type="button" onClick={() => onAddLayerNode?.("group", selectedLeafId ?? null)} disabled={disabled}><FolderSimple aria-hidden="true" size={15} />グループ追加</button><button type="button" onClick={() => onAddLayerNode?.("leaf", selectedLeafId ?? null)} disabled={disabled}><Stack aria-hidden="true" size={15} />レイヤー追加</button></div>
         <div className="layer-tree" role="tree" aria-label="レイヤー階層">{children(null).map((node) => renderNode(node, 0))}</div>
       </> : <p className="layer-panel-empty">レイヤー階層を読み込めません。</p>}
       <div id={`layer-panel-${activeLayer}`} className="layer-manager-content" aria-label="選択レイヤーの内容">
