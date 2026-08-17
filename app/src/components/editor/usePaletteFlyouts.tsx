@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type R
 import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
 import { HandGrabbing } from "@phosphor-icons/react/dist/csr/HandGrabbing";
 import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
+import { PlusCircle } from "@phosphor-icons/react/dist/csr/PlusCircle";
 import { CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
 import type { LayerId, ObjectKind } from "../../backend";
 
@@ -30,6 +31,8 @@ export type PaletteFlyoutOptions = {
   regionColor?: string | undefined;
   onToolChange: ((tool: "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void) | undefined;
   onRegionColorChange: ((color: string) => void) | undefined;
+  onCreateProject?: (() => void) | undefined;
+  createProjectDisabled?: boolean | undefined;
 };
 
 export type PaletteFlyoutState = {
@@ -40,7 +43,7 @@ export type PaletteFlyoutState = {
 };
 
 /** Owns the fixed left tool rail and its contextual flyouts. */
-export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CELL_PAINT_RANGE_MIN, regionColor, onToolChange, onRegionColorChange }: PaletteFlyoutOptions): PaletteFlyoutState {
+export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CELL_PAINT_RANGE_MIN, regionColor, onToolChange, onRegionColorChange, onCreateProject, createProjectDisabled = false }: PaletteFlyoutOptions): PaletteFlyoutState {
   const paletteRef = useRef<HTMLElement>(null);
   const [eraseFlyoutOpen, setEraseFlyoutOpen] = useState(false);
   const [regionFlyoutOpen, setRegionFlyoutOpen] = useState(false);
@@ -173,6 +176,18 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
             <HandGrabbing aria-hidden="true" size={20} weight="bold" />
           </button>
         </div>
+      </div>
+      <div className="tool-rail-footer">
+        <button
+          className="tool-rail-button tool-rail-new-button"
+          type="button"
+          aria-label="新規作成"
+          title="新規作成"
+          onClick={onCreateProject}
+          disabled={createProjectDisabled || !onCreateProject}
+        >
+          <PlusCircle aria-hidden="true" size={20} weight="bold" />
+        </button>
       </div>
     </aside>
   );

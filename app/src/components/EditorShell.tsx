@@ -27,7 +27,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [activeTool, setActiveTool] = useState<Tool>("terrain");
   const [activeLayer, setActiveLayer] = useState<LayerId>("terrain");
   const [objectKind, setObjectKind] = useState<ObjectKind>("city");
-  const [objectLabel, setObjectLabel] = useState("新しい都市");
+  const [objectLabel, setObjectLabel] = useState("");
   const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
   const [regionColor, setRegionColor] = useState("#7A6FA8");
   const [selectedCellIds, setSelectedCellIds] = useState<string[]>([]);
@@ -233,6 +233,10 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   };
   const selectObjectFromPanel = (id: string): void => { selectLayer("object"); setActiveTool("select"); activeToolRef.current = "select"; setSelectedObjectIds([id]); };
   const deleteObjectFromPanel = (id: string): void => { eraseObjects([id]); };
+  const createNewProject = (): void => {
+    if (locked || previewMode) return;
+    void run(() => backend.createProject({ name: "無題の世界" }), "新しい世界を作成できませんでした。");
+  };
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -320,6 +324,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             onToolChange={selectTool}
             onObjectKindChange={(kind) => { setObjectKind(kind); selectLayer("object"); selectTool("object"); }}
             onRegionColorChange={changeRegionColor}
+            onCreateProject={createNewProject}
+            createProjectDisabled={locked || previewMode}
             preview={previewMode}
             onError={(code) => setError(mapErrorMessage(code, activeLayer === "region" ? "region" : "terrain"))}
             onZoomChange={setZoom}

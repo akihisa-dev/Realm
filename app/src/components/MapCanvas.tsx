@@ -48,6 +48,8 @@ type MapCanvasProps = {
   onToolChange?: (tool: "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void;
   onObjectKindChange?: (kind: "city" | "text" | "mountain" | "forest") => void;
   onRegionColorChange?: (color: string) => void;
+  onCreateProject?: () => void;
+  createProjectDisabled?: boolean;
   regionColor?: string;
   onModify?: (objectId: string, geometry: GeoJsonGeometry) => void;
   onModifyObjects?: (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void;
@@ -87,6 +89,8 @@ export function MapCanvas({
   onMapShapeEdit,
   onToolChange,
   onRegionColorChange,
+  onCreateProject,
+  createProjectDisabled = false,
   regionColor,
   onModify,
   onModifyObjects,
@@ -107,7 +111,7 @@ export function MapCanvas({
     eraseRadius,
     toolPalette,
     regionColor: paletteRegionColor,
-  } = usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange, regionColor, onToolChange, onRegionColorChange });
+  } = usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange, regionColor, onToolChange, onRegionColorChange, onCreateProject, createProjectDisabled });
   const effectivePaintRadius = mode === "cell-select" ? strokeRadius : 0;
   const effectiveRegionColor = regionColor ?? paletteRegionColor;
   const mapHelp = isPreview

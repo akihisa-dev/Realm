@@ -16,6 +16,8 @@ vi.mock("./MapCanvas", () => ({
     onMapShapeEdit?: (edit: { shapes: MapShape[] }) => void;
     onToolChange?: (tool: "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void;
     onRegionColorChange?: (color: string) => void;
+    onCreateProject?: () => void;
+    createProjectDisabled?: boolean;
     onDraw?: (geometry: GeoJsonGeometry) => void;
     onObjectKindChange?: (kind: ObjectKind) => void;
     onSelectObjects?: (ids: readonly string[]) => void;
@@ -40,6 +42,7 @@ vi.mock("./MapCanvas", () => ({
       <button type="button" onClick={() => props.onToolChange?.("grab")}>テストグラブ</button>
       <button type="button" onClick={() => props.onToolChange?.("shape")}>テストシェイピング</button>
       <button type="button" onClick={() => props.onRegionColorChange?.("#2468AC")}>テスト領域色</button>
+      <button type="button" aria-label="新規作成" onClick={props.onCreateProject} disabled={props.createProjectDisabled}>新規作成</button>
       <button type="button" onClick={() => props.onObjectKindChange?.("city")}>テスト都市種別</button>
       <button type="button" onClick={() => props.onObjectKindChange?.("text")}>テストテキスト種別</button>
       <button type="button" onClick={() => props.onObjectKindChange?.("forest")}>テスト森種別</button>
@@ -72,6 +75,39 @@ it("keeps the editor shell and layer manager while rendering the three layers", 
   expect(screen.getByRole("region", { name: "世界地図" })).toBeInTheDocument();
 });
 
+it("creates a new empty world from the rail and keeps the previous world", async () => {
+  const backend = new MemoryRealmBackend();
+  const initial = await backend.createProject({ path: "browser://existing.realmmap", name: "Existing" });
+  const saved = await backend.replaceTerrainLayer({ shapes: [{ id: "11111111-1111-4111-8111-111111111111", geometry: cellIdsToPolygonGeometries(["1:1"])[0]! }] });
+  renderEditor(backend, saved);
+
+  fireEvent.click(screen.getByRole("button", { name: "新規作成" }));
+
+  await waitFor(async () => expect((await backend.getOpenProject())?.world.name).toBe("無題の世界"));
+  const current = await backend.getOpenProject();
+  expect(current?.path).not.toBe(initial.path);
+  expect(current?.layers).toEqual({ terrain: [], regions: [], objects: [] });
+  expect(current?.assets).toEqual([]);
+  expect(await backend.listProjects()).toEqual([
+    { libraryId: initial.path, name: "Existing" },
+    { libraryId: current!.path, name: "無題の世界" },
+  ]);
+  expect(screen.getByRole("status", { name: "保存中の図形数" })).toHaveTextContent("0");
+});
+
+it("keeps the current world when creating a new world fails", async () => {
+  const backend = new MemoryRealmBackend();
+  const snapshot = await backend.createProject({ path: "browser://failure.realmmap", name: "Failure" });
+  const createProject = vi.spyOn(backend, "createProject").mockRejectedValue(new Error("作成失敗"));
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "新規作成" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("作成失敗");
+  expect(createProject).toHaveBeenCalledWith({ name: "無題の世界" });
+  expect((await backend.getOpenProject())?.path).toBe(snapshot.path);
+});
+
 it("switches the active layer and keeps object operations on the object layer", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://layer-operations.realmmap", name: "Layer operations" });
@@ -85,6 +121,7 @@ it("switches the active layer and keeps object operations on the object layer", 
   expect(screen.getByRole("button", { name: "消す" })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("tab", { name: "オブジェクト" }));
+  expect(screen.getByLabelText("ラベル")).toHaveValue("");
   expect(screen.getByRole("radio", { name: "都市" })).toBeChecked();
   fireEvent.change(screen.getByLabelText("ラベル"), { target: { value: "" } });
   fireEvent.click(screen.getByRole("button", { name: "キャンバスに配置" }));
@@ -141,6 +178,7 @@ it("disables editing controls while the map preview is open", async () => {
   expect(previewButton).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("button", { name: "戻す" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "新しい領域" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "新規作成" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "選択した領域を統合" })).toBeDisabled();
 
   fireEvent.click(screen.getByRole("button", { name: "編集画面に戻る" }));
