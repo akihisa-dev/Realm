@@ -1,4 +1,5 @@
 import { BrowserWindow, type BrowserWindowConstructorOptions } from "electron";
+import packageJson from "../../package.json";
 
 export function createMainWindowOptions(preloadPath: string): BrowserWindowConstructorOptions {
   return {
@@ -7,6 +8,7 @@ export function createMainWindowOptions(preloadPath: string): BrowserWindowConst
     minWidth: 960,
     minHeight: 640,
     show: false,
+    title: `Realm ${packageJson.version}`,
     backgroundColor: "#f7f8fa",
     webPreferences: {
       preload: preloadPath,

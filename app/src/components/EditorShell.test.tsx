@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
-import packageJson from "../../package.json";
 import { MemoryRealmBackend, type GeoJsonGeometry, type LayerId, type MapShape, type ObjectKind, type RealmSnapshot } from "../backend";
 import { cellIdsToPolygonGeometries, mapShapeCellIds } from "../shared/mapShapeGeometry";
 import { mapShapesFromLayers } from "../shared/layerProjection";
@@ -71,17 +70,6 @@ it("keeps the editor shell and layer manager while rendering the three layers", 
   expect(screen.getByRole("navigation", { name: "編集履歴" })).toBeInTheDocument();
   expect(screen.getByRole("complementary", { name: "レイヤー管理" })).toBeInTheDocument();
   expect(screen.getByRole("region", { name: "世界地図" })).toBeInTheDocument();
-});
-
-it("shows the app version beside Realm in the top header", async () => {
-  const backend = new MemoryRealmBackend();
-  const snapshot = await backend.createProject({ path: "browser://header.realmmap", name: "Header" });
-  renderEditor(backend, snapshot);
-
-  const version = screen.getByLabelText(`バージョン ${packageJson.version}`);
-  expect(version).toHaveTextContent(packageJson.version);
-  expect(version.parentElement).toHaveClass("editor-app-identity");
-  expect(screen.getByText("Realm")).toBeInTheDocument();
 });
 
 it("switches the active layer and keeps object operations on the object layer", async () => {

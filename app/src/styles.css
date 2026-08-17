@@ -22,9 +22,6 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 
 .editor-shell { display: grid; grid-template-rows: 48px minmax(0, 1fr); height: 100vh; min-height: 480px; overflow: hidden; background: #fff; }
 .editor-history { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; padding: 0 20px; border-bottom: 1px solid #d6dadd; background: #fff; -webkit-app-region: drag; }
-.editor-app-identity { display: flex; flex: 0 0 auto; align-items: baseline; gap: 7px; color: #292f35; white-space: nowrap; }
-.editor-app-name { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
-.editor-app-version { color: #8a969c; font-size: 10px; letter-spacing: .04em; }
 .editor-thickness-control { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; gap: 8px; color: #53616a; font-size: 12px; }
 .editor-thickness-control, .editor-thickness-control * { -webkit-app-region: no-drag; }
 .editor-thickness-control label { flex: 0 0 auto; font-weight: 650; }
@@ -181,9 +178,6 @@ textarea:focus-visible { outline: 2px solid #078c98; outline-offset: 2px; }
 @media (max-width: 660px) {
   .editor-shell { grid-template-rows: 40px minmax(0, 1fr); }
   .editor-history { gap: 8px; padding: 0 8px; }
-  .editor-app-identity { gap: 4px; }
-  .editor-app-name { font-size: 12px; }
-  .editor-app-version { font-size: 9px; }
   .editor-thickness-control { gap: 5px; font-size: 11px; }
   .editor-thickness-control input[type="range"] { flex: 1 1 72px; width: auto; max-width: 120px; min-width: 52px; }
   .editor-thickness-control output { min-width: 34px; }

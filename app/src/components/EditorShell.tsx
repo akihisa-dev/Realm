@@ -4,7 +4,6 @@ import { ArrowCounterClockwise } from "@phosphor-icons/react/dist/csr/ArrowCount
 import { Eye } from "@phosphor-icons/react/dist/csr/Eye";
 import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { Stack } from "@phosphor-icons/react/dist/csr/Stack";
-import packageJson from "../../package.json";
 import { errorMessage, type CellAttributeSnapshot, type LayerId, type MapObject, type MapShape, type MapShapeEdit, type ObjectKind, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { LayerManager } from "./editor/LayerManager";
@@ -270,10 +269,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   return (
     <main className="editor-shell" aria-label="Realm地形編集画面">
       <header className="editor-history" data-electron-drag-region="deep">
-        <div className="editor-app-identity">
-          <span className="editor-app-name">Realm</span>
-          <span className="editor-app-version" aria-label={`バージョン ${packageJson.version}`}>{packageJson.version}</span>
-        </div>
         <div className="editor-thickness-control" role="group" aria-label="描画と削除の太さ">
           <label htmlFor="editor-stroke-range">太さ</label>
           <input

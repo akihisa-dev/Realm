@@ -1,11 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
+import packageJson from "../../package.json";
 
 describe("window security and options", () => {
   it("accepts only the renderer origin and configures a hardened window", async () => {
     const { createMainWindowOptions, showWhenReady } = await import("./windowOptions");
     const options = createMainWindowOptions("/tmp/preload.js");
-    expect(options).toMatchObject({ width: 1440, height: 920, show: false, webPreferences: { preload: "/tmp/preload.js", contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true } });
+    expect(options).toMatchObject({ width: 1440, height: 920, show: false, title: `Realm ${packageJson.version}`, webPreferences: { preload: "/tmp/preload.js", contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true } });
     const listeners = new Map<string, () => void>();
     const window = { once: (name: string, callback: () => void) => { listeners.set(name, callback); }, isDestroyed: () => false, show: vi.fn() };
     showWhenReady(window as never);
