@@ -1,36 +1,38 @@
-# Release checklist
+# リリースチェックリスト
 
-Release operations are explicit approvals. This repository does not use GitHub Actions. A commit does not authorize a branch push, tag creation, tag push, Draft Release creation, or publication.
+リリース操作には明示的な承認が必要です。
+このリポジトリではGitHub Actionsを使いません。
+コミットは、branch push、tag作成、tag push、Draft Release作成、公開を許可するものではありません。
 
-## Before a tag
+## tagの前に
 
-- [ ] Version sources and the committed SBOM agree on the intended semver.
-- [ ] Schema migrations and `.realmmap` compatibility notes are current.
-- [ ] `verify:local:push` passed on Apple Silicon.
-- [ ] `verify:local:release` passed, including the arm64 build and static bundle inspection without launching the built package.
-- [ ] The DMG checksum, notices, and committed CycloneDX SBOM exist under `release-assets/`.
-- [ ] Any earlier `release-assets/` evidence was inspected and moved explicitly; the staging command did not overwrite it.
-- [ ] The complete diff, secret guard, and untracked files were reviewed.
-- [ ] The unsigned and unnotarized status is acceptable for this release candidate.
+- [ ] versionの正本とコミット済みSBOMが、予定するsemverで一致している
+- [ ] schema migrationと`.realmmap`互換性の注記が最新である
+- [ ] Apple Silicon上で`verify:local:push`が成功している
+- [ ] build済みパッケージを起動せず、arm64 buildとbundleの静的検査を含む`verify:local:release`が成功している
+- [ ] DMGのchecksum、通知、コミット済みCycloneDX SBOMが`release-assets/`に存在する
+- [ ] 以前の`release-assets/`の証拠を検査して明示的に移動しており、stageコマンドが上書きしていない
+- [ ] 完全な差分、secret guard、未追跡ファイルを確認している
+- [ ] 署名なし、notarizationなしの状態をこのリリース候補で受け入れられる
 
-## Before pushing
+## pushの前に
 
-- [ ] Owner explicitly authorized this exact branch or tag push.
-- [ ] `.githooks/secret-guard.sh --range <outgoing-range>` passed.
-- [ ] The ref points at the locally verified commit.
-- [ ] The corresponding local gate was rerun immediately before push.
+- [ ] オーナーがこのbranchまたはtagのpushを明示的に許可している
+- [ ] `.githooks/secret-guard.sh --range <outgoing-range>`が成功している
+- [ ] refがローカルで検証済みのコミットを指している
+- [ ] 対応するローカルゲートをpush直前に再実行している
 
-## Before creating a Draft Release
+## Draft Releaseを作成する前に
 
-- [ ] Owner explicitly authorized Draft Release creation after the tag push.
-- [ ] The tag is exact `MAJOR.MINOR.PATCH`, equals `app/package.json`, and points at the verified commit.
-- [ ] The Draft contains only the staged DMG, SHA-256 file, notices, and SBOM.
-- [ ] No artifact was rebuilt, changed, or overwritten during upload.
-- [ ] No existing or published asset was overwritten.
-- [ ] The Release remains a draft.
+- [ ] オーナーがtag push後のDraft Release作成を明示的に許可している
+- [ ] tagが正確な`MAJOR.MINOR.PATCH`であり、`app/package.json`と一致し、検証済みのコミットを指している
+- [ ] Draftにはstage済みのDMG、SHA-256ファイル、通知、SBOMだけが含まれている
+- [ ] upload中に成果物をbuildし直したり、変更したり、上書きしたりしていない
+- [ ] 既存または公開済みのassetを上書きしていない
+- [ ] Releaseがdraftのままになっている
 
-## Publication
+## 公開
 
-- [ ] Signing and notarization were handled under a separately approved credential process.
-- [ ] Gatekeeper validation passed on the final notarized artifact.
-- [ ] Owner explicitly authorized public GitHub Release publication.
+- [ ] 署名とnotarizationを、別途承認された認証情報の手順で実施している
+- [ ] 最終notarization済み成果物でGatekeeper検証が成功している
+- [ ] オーナーがGitHub Releaseの公開を明示的に許可している

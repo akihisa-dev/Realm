@@ -1,62 +1,99 @@
-# Data model
+# データモデル
 
-## File contract
+## ファイル契約
 
-Each library world is one SQLite database stored below Realm's macOS application-data directory under a UUID filename. SQLite journal sidecars may exist while the world is open; they are not separate Realm documents.
+ライブラリ内の各世界は、RealmのmacOSアプリケーションデータディレクトリ以下にUUIDのファイル名で保存する1つのSQLiteデータベースです。
+世界を開いている間にSQLiteのjournal sidecarが存在することはありますが、それらは別のRealm文書ではありません。
 
-The same single-database representation is copied to a `.realmmap` file only for explicit transfer export. Import validates the selected source through a read-only connection, file identity, and SHA-256 content digests for the main/WAL/SHM bundle, takes a SQLite online-backup snapshot into private create-new siblings, synchronizes that staging file, publishes it with no-replace rename, and then opens the new library copy. A source replacement, digest/content change, sidecar-set change, non-regular sidecar, or SQLite `SQLITE_FCNTL_HAS_MOVED` signal is rejected; the selected source remains unchanged.
+同じ単一データベース表現は、明示的な転送出力のときだけ`.realmmap`ファイルへコピーします。
+インポートでは、読み取り専用接続、ファイル同一性、main、WAL、SHMの組に対するSHA-256内容digestで選択したソースを検証します。
+その後、非公開の新規作成専用sidecarへSQLite online-backup snapshotを取り、stagingファイルを同期し、置き換えなしのrenameで公開してから、新しいライブラリのコピーを開きます。
+ソースの置き換え、digestまたは内容の変更、sidecar集合の変更、通常ファイルでないsidecar、SQLiteの`SQLITE_FCNTL_HAS_MOVED`シグナルは拒否します。
+選択したソースは変更しません。
 
-Schema version 12 is the only accepted storage format. It records the same version in `PRAGMA user_version` and `schema_migrations`; disagreement is corruption. Versions 1 through 11 are rejected during read-only preflight without opening a writable connection or changing the source. Realm does not migrate `features`, `map_shapes`, `cell_grid`, or any other older table into schema 12. A newer version, partial SQLite file, integrity failure, retired table, or schema whose columns, keys, indexes, foreign keys, or checks do not preserve the declared format is also rejected before a writable open.
+schema version 12だけが受け入れられる保存形式です。
+`PRAGMA user_version`と`schema_migrations`に同じversionを記録し、不一致は破損として扱います。
+version 1から11は、書き込み可能な接続を開いたりソースを変更したりせず、読み取り専用の事前検査で拒否します。
+Realmは`features`、`map_shapes`、`cell_grid`など古いテーブルをschema 12へ移行しません。
+新しいversion、部分的なSQLiteファイル、整合性検査の失敗、廃止済みテーブル、宣言した形式を保たない列、キー、index、外部キー、checkを持つschemaも、書き込み可能な接続を開く前に拒否します。
 
-## Identity and current state
+## 識別と現在状態
 
-- A world has one stable identifier, one current name, and one bounded project-settings object.
-- The editable map is split into exactly three layers: `terrain`, `region`, and `object`.
-- `terrain` is the current terrain itself. It does not encode surface, water system, biome, mountain type, or another terrain classification.
-- `region` is a separate logical layer. A region is not an object and is never stored in the object table.
-- `object` contains things placed above terrain and regions. Initial kinds are `city`, `text`, `mountain`, and `forest`.
-- The canonical snapshot exposes `layers.terrain`, `layers.regions`, and `layers.objects` separately. The renderer-only `MapShape[]` projection is derived in memory and is not a storage row.
-- Undo and redo are session state. Each successful layer replacement or other command records a complete before/after state in one transaction and one history step.
-- Reopening a project clears undo and redo without changing the saved current state.
+- 世界は、安定した識別子を1つ、現在の名前を1つ、範囲を限定したプロジェクト設定オブジェクトを1つ持つ
+- 編集可能な地図は、`terrain`、`region`、`object`のちょうど3つのレイヤーに分かれる
+- `terrain`は現在の地形そのものであり、地表、水系、バイオーム、山の種類、その他の地形分類を表さない
+- `region`は独立した論理レイヤーである。領域はオブジェクトではなく、オブジェクトテーブルへ保存しない
+- `object`は地形と領域の上に置くものを含む。初期種類は`city`、`text`、`mountain`、`forest`である
+- 正規snapshotは`layers.terrain`、`layers.regions`、`layers.objects`を分けて公開する。renderer専用の`MapShape[]`投影はメモリで導出し、保存行にはしない
+- undoとredoはセッション状態である。レイヤーの置き換えやその他のコマンドが成功するたびに、完全な変更前後の状態を1つのトランザクションと1つの履歴ステップで記録する
+- プロジェクトを再オープンするとundoとredoを消去するが、保存済みの現在状態は変更しない
 
-## SQLite tables
+## SQLiteテーブル
 
-| Table | Persistent responsibility |
+| テーブル | 永続化する責務 |
 | --- | --- |
-| `world` | One world name and bounded project settings |
-| `terrain_shapes` | Terrain grid-snapped `Polygon` rows (`id`, `geometry_json`) |
-| `regions` | Region identity, name, and `#RRGGBB` color |
-| `region_shapes` | Region polygon parts linked to `regions` by `region_id` |
-| `objects` | Object identity, kind, label, geometry, validated properties, `z_index`, lock state, and optional asset reference |
-| `assets` | Validated local image bytes and manifests |
+| `world` | 1つの世界の名前と範囲を限定したプロジェクト設定 |
+| `terrain_shapes` | グリッドに吸着した地形`Polygon`行（`id`、`geometry_json`） |
+| `regions` | 領域の識別、名前、`#RRGGBB`色 |
+| `region_shapes` | `region_id`で`regions`に結びつく領域ポリゴン部分 |
+| `objects` | オブジェクトの識別、種類、ラベル、ジオメトリ、検証済みプロパティ、`z_index`、ロック状態、任意のアセット参照 |
+| `assets` | 検証済みのローカル画像バイト列とmanifest |
 
-There is deliberately no generic `features` table and no table that mixes terrain, regions, and objects. Old `features`, `map_shapes`, `cell_grid`, `cell_attributes`, and history tables are retired names; their presence causes rejection rather than an automatic conversion.
+汎用の`features`テーブルや、地形、領域、オブジェクトを混在させるテーブルは意図的に持ちません。
+古い`features`、`map_shapes`、`cell_grid`、`cell_attributes`、履歴テーブルは廃止名です。
+これらが存在する場合は自動変換せずに拒否します。
 
-Terrain and region shapes use grid-snapped `Polygon` geometry. Same-layer polygon overlap is rejected. Terrain and region geometry may occupy the same cells because they are independent layers. Region shapes must refer to an existing region. Objects may overlap terrain, regions, and other objects; their `z_index` controls order within the object layer.
+地形と領域の形状は、グリッドに吸着した`Polygon`ジオメトリを使います。
+同じレイヤー内のポリゴン重複は拒否します。
+地形と領域のジオメトリは独立したレイヤーなので、同じセルを占めても構いません。
+領域形状は、存在する領域を参照しなければなりません。
+オブジェクトは地形、領域、他のオブジェクトと重なってよく、`z_index`でオブジェクトレイヤー内の順序を決めます。
 
-Object geometry is validated by kind:
+オブジェクトのジオメトリは種類ごとに検証します。
 
-| Kind | Geometry | Meaning |
+| 種類 | ジオメトリ | 意味 |
 | --- | --- | --- |
-| `city` | `Point` | City or settlement marker |
-| `text` | `Point` | Text anchor and label |
-| `mountain` | `Point` | Mountain marker |
-| `forest` | `Polygon` | Forest area placed above the base layers |
+| `city` | `Point` | 都市または集落のマーカー |
+| `text` | `Point` | テキストの基準点とラベル |
+| `mountain` | `Point` | 山のマーカー |
+| `forest` | `Polygon` | 基本レイヤーの上に置く森林区域 |
 
-Coordinates are EPSG:4326 longitude/latitude pairs within the bounded world. Lines and polygons use closed, non-self-intersecting rings where applicable; zero-area and malformed geometry is rejected. Object properties are bounded JSON objects. No object kind is generated implicitly from an old feature class. Adding a kind requires its registry, geometry validator, renderer style, UI control, tests, and documentation to change together.
+座標は、範囲を限定した世界内のEPSG:4326経度緯度の組です。
+線とポリゴンは、該当する場合、閉じた自己交差しないringを使います。
+面積が0のジオメトリや不正なジオメトリは拒否します。
+オブジェクトのプロパティは範囲を限定したJSONオブジェクトです。
+古いfeatureクラスからオブジェクト種類を暗黙に生成しません。
+種類を追加する場合は、レジストリ、ジオメトリ検証、rendererのstyle、UI操作、テスト、文書をまとめて変更します。
 
-## Layer edits and transient grid data
+## レイヤー編集と一時的なグリッドデータ
 
-The active editor uses a fixed 128 by 73 odd-row-offset hexagonal grid. Cell IDs such as `x:y` exist only while rendering, hit testing, and collecting a pointer selection. They are never persisted and are not part of undo state.
+現在のエディタは、128×73の奇数行オフセット六角形グリッドを固定で使います。
+`x:y`のようなセルIDは、描画、ヒットテスト、ポインター選択の収集を行う間だけ存在します。
+永続化せず、undo状態にも含めません。
 
-Terrain painting and terrain erasing convert the transient selection into complete terrain polygon rows. Region drawing and region erasing perform the equivalent operation against region polygon parts and region identity. The shared toolbar entry may be labelled “draw”, but the terrain handler and region handler have different input modes and storage results. The eraser is likewise layer-specific: terrain eraser changes only `terrain_shapes`, region eraser changes only `regions` and `region_shapes`, and object eraser changes only `objects`.
+地形のペイントと消去は、一時的な選択を完全な地形ポリゴン行へ変換します。
+領域の描画と消去は、領域ポリゴン部分と領域の識別情報に対して同等の操作を行います。
+共有ツールバーの入口を「描く」と表示することはありますが、地形ハンドラーと領域ハンドラーでは入力モードと保存結果が異なります。
+消しゴムは共通のレイヤー削除操作です。active layerに応じて、地形では`terrain_shapes`、領域では`regions`と`region_shapes`、オブジェクトでは`objects`だけを変更します。オブジェクトは選択または一覧からも削除できます。
 
-The layer switch is a hard gesture boundary. In-progress pointer interactions, selection, and previews are cancelled before the new layer becomes active. The selected layer is the only layer that accepts primary-pointer creation, selection, movement, deletion, and shape editing. Other layers remain visible. Middle-button, right-button, Space, and wheel navigation are shared across all layers.
+レイヤー切り替えは強いジェスチャー境界です。
+進行中のポインター操作、選択、プレビューをキャンセルしてから、新しいレイヤーをactiveにします。
+選択したレイヤーだけが主ポインターによる作成、選択、移動、削除、形状編集を受け付けます。
+他のレイヤーは表示したままにします。
+中ボタン、右ボタン、Space、ホイールによるナビゲーションは、すべてのレイヤーで共通です。
 
-## Assets
+## アセット
 
-Assets remain local rows in the same database. Project snapshots expose bounded manifests; bytes cross the command boundary only through an explicit asset read. Identical bytes deduplicate by SHA-256. An object may refer to an asset by `asset_id`; deletion and undo refuse to remove a referenced asset. Absolute paths and network locations are never persisted.
+アセットは同じデータベース内のローカル行として保持します。
+プロジェクトsnapshotは範囲を限定したmanifestを公開し、バイト列は明示的なアセット読み取りを通じてのみコマンド境界を越えます。
+同一バイト列はSHA-256で重複排除します。
+オブジェクトは`asset_id`でアセットを参照できます。
+参照中のアセットは、削除やundoで取り除けないようにします。
+絶対パスとネットワーク上の場所は保存しません。
 
-## Internal schema evolution
+## 内部schemaの進化
 
-Schema changes to app-managed worlds require a declared version, a complete fixture for the accepted format, source-preservation tests for rejected versions, and rollback-safe failure tests. This release intentionally accepts only schema 12 and has no automatic migration path from older `.realmmap` files. Transfer data has no independent long-term compatibility promise; accepting an older transfer is an explicit, separately tested capability rather than the normal opening model.
+アプリが管理する世界のschemaを変更する場合は、宣言したversion、受け入れる形式の完全なfixture、拒否したversionでソースを保持するテスト、ロールバック可能な失敗テストが必要です。
+このリリースはschema 12だけを受け入れ、古い`.realmmap`ファイルからの自動移行経路を持ちません。
+転送データに長期的な互換性を別途約束することもありません。
+古い転送データを受け入れる場合は、通常のオープン処理ではなく、明示して別にテストする機能として扱います。

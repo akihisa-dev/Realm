@@ -1,59 +1,77 @@
-# Project overview
+# プロジェクト概要
 
-## Purpose
+## 目的
 
-Realm is a local editor for fictional maps built from three independent editing layers:
+Realmは、次の3つの独立した編集レイヤーで架空の地図を作るローカルエディタです。
 
-1. `terrain` — the current terrain itself.
-2. `region` — named or colored areas laid over the terrain; a region is not an object.
-3. `object` — things placed above the other layers, such as cities, text, forests, and mountains.
+1. `terrain`：現在の地形そのもの
+2. `region`：地形の上に置く名前付きまたは色付きの領域。領域はオブジェクトではない
+3. `object`：都市、テキスト、森、山など、他のレイヤーの上に置くもの
 
-The editor is manual. It does not infer geography from images, generate maps, synchronize to a service, or reinterpret terrain as a catalogue of surface or water types.
+編集は手動で行います。
+画像から地理を推測せず、地図を生成せず、サービスへ同期せず、地形を地表や水系の種類の一覧として再解釈しません。
 
-## Current 0.x scope
+## 現在の0.x系の範囲
 
-The first release targets macOS on Apple Silicon and an app-managed local library. Each world remains one SQLite database. Terrain and region shapes are grid-snapped polygons over a fixed 128 by 73 odd-row-offset hexagonal editing grid. Objects are stored separately with a kind, label, geometry, properties, order, and lock state. Initial object kinds are `city` and `text` points, `mountain` points, and `forest` polygons.
+初期リリースは、Apple Silicon搭載macOSとアプリが管理するローカルライブラリを対象にします。
+各世界は1つのSQLiteデータベースで管理します。
+地形と領域の形状は、固定された128×73の奇数行オフセット六角形編集グリッドに吸着したポリゴンです。
+オブジェクトは、種類、ラベル、ジオメトリ、プロパティ、順序、ロック状態を持つ別のデータとして保存します。
+初期のオブジェクト種類は、`city`と`text`の点、`mountain`の点、`forest`のポリゴンです。
 
-Realm enters the editor directly. It restores the open world when available, otherwise opens the first existing library world, or creates `無題の世界` when the library is empty. Valid layer edits save automatically. The renderer draws terrain first, region second, and objects last.
+Realmはエディタを直接開きます。
+開いていた世界があれば復元し、なければライブラリにある最初の世界を開き、ライブラリが空なら`無題の世界`を作成します。
+有効なレイヤー編集は自動保存します。
+rendererは地形、領域、オブジェクトの順に描画します。
 
-The left sidebar shows operations for the selected layer. “Draw” can be a common visual entry, but terrain drawing uses hex-cell painting and region drawing uses freehand enclosure selection; their handlers and saved results remain different. The eraser is explicitly layer-specific: terrain eraser, region eraser, or object eraser. Pan and zoom gestures are common to all layers.
+左サイドバーには、選択中のレイヤーの操作を表示します。
+「描く」は共通の見た目の入口にできますが、地形の描画は六角形セルへのペイント、領域の描画は自由な囲い込み選択を使い、ハンドラーと保存結果は別のままです。
+消しゴムもレイヤーごとに分かれます。見た目の入口は共通でも、active layerに応じて地形、領域、またはオブジェクトだけを削除対象にします。
+パンとズームのジェスチャーはすべてのレイヤーで共通です。
 
-The right `レイヤー管理` panel has three tabs. The selected tab is the active editing layer; non-selected layers remain visible but cannot be selected or changed on the canvas. Switching tabs cancels an in-progress gesture, selection, and preview. The terrain tab reports terrain shapes, the region tab manages logical regions and disconnected polygon parts, and the object tab manages object kinds, labels, placement, selection, movement, and deletion.
+右側の`レイヤー管理`パネルには3つのタブがあります。
+選択したタブが編集対象のレイヤーになり、選択していないレイヤーは表示されますが、キャンバス上で選択や変更はできません。
+タブを切り替えると、進行中のジェスチャー、選択、プレビューをキャンセルします。
+地形タブは地形形状を表示し、領域タブは論理的な領域と分離したポリゴン部分を管理し、オブジェクトタブは種類、ラベル、配置、選択、移動、削除を管理します。
 
-The header contains icon controls for renderer preview, `戻す`, `進む`, and the layer-panel toggle. Preview is read-only for all three layers while pan and zoom remain available.
+ヘッダーにはrendererプレビュー、`戻す`、`進む`、レイヤーパネル切り替えのアイコン操作があります。
+プレビュー中は3つのレイヤーすべてが読み取り専用になりますが、パンとズームは使えます。
 
-## Terminology
+## 用語
 
-| Term | Meaning |
+| 用語 | 意味 |
 | --- | --- |
-| World | One app-managed SQLite database and its current three-layer map state. |
-| Terrain layer / 地形 | The current terrain itself, stored as grid-snapped polygons. It does not encode a surface, water system, biome, mountain type, or catalogue of terrain kinds. |
-| Terrain draw / 地形を描く | A terrain-layer operation that paints selected cells on the fixed hexagonal grid and changes only terrain polygons. It does not place forests, mountains, or other objects. |
-| Region layer / 領域 | Named or colored regions and their grid-snapped polygon parts. It is independent of terrain and is not an object layer. |
-| Region draw / 領域を描く | A region-layer operation that uses freehand enclosure selection to create or update region polygon parts and region identity. It does not paint terrain. |
-| Object layer / オブジェクト | Objects placed above terrain and regions. Initial kinds are city, text, mountain, and forest. Forests and mountains are object kinds, not terrain kinds. |
-| Object / オブジェクト | A persisted object-layer record with a kind, label, geometry, properties, order, and lock state. |
-| Object placement / オブジェクトを配置 | A kind-specific point or polygon placement operation above terrain and regions. It changes neither terrain nor regions. |
-| Object eraser / オブジェクト消しゴム | An operation that removes only objects. It changes neither terrain nor regions. |
-| Draw / 描く | A shared visual entry in the editor, not a shared meaning: the active layer determines whether the operation is terrain cell painting or region enclosure drawing; the object layer uses object placement. |
-| Cell ID | A temporary `x:y` identifier used only during grid interaction; it is never saved. |
-| Transfer data | A `.realmmap` copy used only to move or back up editable data outside the app library. |
+| 世界（World） | アプリが管理するSQLiteデータベース1つと、その中にある現在の3層地図状態 |
+| 地形レイヤー（Terrain layer） | グリッドに吸着したポリゴンとして保存する現在の地形。地表、水系、バイオーム、山の種類、地形種類の一覧は持たない |
+| 地形を描く（Terrain draw） | 固定六角形グリッド上で選択したセルを塗り、地形ポリゴンだけを変更する地形レイヤーの操作。森、山などのオブジェクトは配置しない |
+| 領域レイヤー（Region layer） | 名前付きまたは色付きの領域と、グリッドに吸着した領域ポリゴン部分。地形から独立し、オブジェクトレイヤーではない |
+| 領域を描く（Region draw） | 自由な囲い込み選択で領域ポリゴン部分と領域の識別情報を作成または更新する領域レイヤーの操作。地形は塗らない |
+| オブジェクトレイヤー（Object layer） | 地形と領域の上に置くオブジェクト。初期種類はcity、text、mountain、forest。森と山は地形種類ではなくオブジェクト種類である |
+| オブジェクト（Object） | 種類、ラベル、ジオメトリ、プロパティ、順序、ロック状態を持つ永続化されたオブジェクトレイヤーのレコード |
+| オブジェクトを配置（Object placement） | オブジェクトの種類に応じた点またはポリゴンを、地形と領域の上に置く操作。地形と領域は変更しない |
+| 消しゴム（Eraser） | 共通の削除操作。active layerに応じて地形、領域、またはオブジェクトだけを対象にする。オブジェクトは選択または一覧からも削除できる |
+| 描く（Draw） | エディタで共通に見える入口だが、意味は共通ではない。active layerによって地形セルのペイントか領域の囲い込み描画かが決まり、オブジェクトレイヤーでは「オブジェクトを配置」を使う |
+| セルID（Cell ID） | グリッド操作中だけ使う一時的な`x:y`識別子。保存しない |
+| 転送データ（Transfer data） | アプリのライブラリ外で編集データを移動またはバックアップするためだけに使う`.realmmap`のコピー |
 
-## Product boundaries
+## 製品の境界
 
-Realm is a three-layer map authoring tool, not a GIS exchange service or hosted collaboration system. Additional object kinds, asset placement workflows, procedural geography, chronology, political simulation, external network requests, remote storage, and multi-platform support require a separate product decision and synchronized updates to the object registry, geometry validator, renderer, UI, tests, and documentation.
+Realmは3層の地図作成ツールであり、GIS交換サービスやホスト型の共同編集システムではありません。
+追加のオブジェクト種類、アセット配置の手順、手続き的な地理生成、年代管理、政治シミュレーション、外部ネットワーク要求、リモート保存、マルチプラットフォーム対応を加えるには、別の製品判断が必要です。
+その判断を行う場合は、オブジェクトレジストリ、ジオメトリ検証、renderer、UI、テスト、文書を同時に更新します。
 
-## Functional acceptance
+## 機能受入条件
 
-- Launch enters the editor without a startup screen, opening an existing library world before creating a blank one.
-- The right panel exposes exactly three layer tabs. The selected tab becomes `activeLayer`; the other layers remain visible but cannot receive primary-pointer selection or mutation.
-- The left sidebar exposes only the active layer's operations. Common-looking draw and erase entries dispatch to layer-specific handlers and storage commands.
-- Terrain draw and terrain eraser modify only terrain polygons. Region draw and region eraser modify only regions and region polygons. Object placement, movement, selection, and eraser modify only objects.
-- Objects can be created and rendered as city, text, forest, and mountain; they can be selected, moved, and deleted, and object overlap is allowed.
-- The render order is terrain → region → object. Same-layer terrain or region polygon overlap is rejected; cross-layer overlap is allowed.
-- Middle-button, right-button, Space, and wheel pan/zoom work in every layer. Escape, pointercancel, blur, lost capture, and layer switching do not save an incomplete gesture.
-- Preview disables all editing controls and canvas mutation for all layers while retaining navigation.
-- Valid edits save automatically. Three-layer state survives save, reopen, undo, and redo. A failed validation or transaction leaves the previous state intact.
-- Schema 11 and earlier files, old generic tables, retired tables, corrupt files, and future schemas are rejected during read-only inspection without changing the source bytes.
+- 起動すると開始画面を表示せずにエディタへ入り、空の世界を作る前にライブラリの既存世界を開く
+- 右パネルには正確に3つのレイヤータブを表示する。選択したタブが`activeLayer`になり、他のレイヤーは表示したまま、主ポインターによる選択や変更を受け付けない
+- 左サイドバーにはactive layerの操作だけを表示する。共通に見える描画と消去の入口も、レイヤー固有のハンドラーと保存コマンドへ振り分ける
+- 地形の描画と消しゴムは地形ポリゴンだけを変更する。領域の描画と消しゴムは領域と領域ポリゴンだけを変更する。オブジェクトの配置、移動、選択、削除、消しゴムはオブジェクトだけを変更する
+- オブジェクトをcity、text、forest、mountainとして作成して描画できる。選択、移動、削除ができ、オブジェクト同士の重なりを許可する
+- 描画順は地形 → 領域 → オブジェクトとする。同じレイヤー内の地形ポリゴンまたは領域ポリゴンの重なりは拒否し、レイヤーをまたぐ重なりは許可する
+- 中ボタン、右ボタン、Space、ホイールによるパンとズームはすべてのレイヤーで機能する。Escape、pointercancel、blur、ポインターキャプチャ喪失、レイヤー切り替えでは未完了のジェスチャーを保存しない
+- プレビュー中はすべてのレイヤーの編集操作とキャンバス変更を無効にし、ナビゲーションだけを残す
+- 有効な編集は自動保存する。3層の状態は保存、再オープン、undo、redoを経ても維持する。検証またはトランザクションに失敗した場合は直前の状態を維持する
+- schema 11以前のファイル、古い汎用テーブル、廃止済みテーブル、破損ファイル、将来のschemaは、ソースバイトを変更せずに読み取り専用検査で拒否する
 
-The current editor intentionally keeps transfer and raster-export commands behind compatibility infrastructure without adding extra toolbars or settings panels. There is no required account, hosted backend, cloud synchronization, procedural map generation, or image-to-geography conversion.
+現在のエディタでは、互換性基盤の背後に転送とラスター出力のコマンドを置いていますが、余分なツールバーや設定パネルは追加しません。
+アカウント、ホスト型バックエンド、クラウド同期、手続き的な地図生成、画像から地理への変換は必要ありません。

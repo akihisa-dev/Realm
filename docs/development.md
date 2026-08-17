@@ -1,17 +1,19 @@
-# Development
+# 開発
 
-## Start here
+## 最初に読むもの
 
-1. Work on Apple Silicon macOS 14 or later.
-2. Read [AGENTS.md](../AGENTS.md), [docs/INDEX.md](INDEX.md), and the source-of-truth document related to the change.
-3. Keep test databases in temporary directories. Never point a test at a personal `.realmmap`.
-4. Inspect `git status --short`, the lockfiles, and current target files before writing.
+1. Apple Silicon搭載macOS 14以降で作業する
+2. [AGENTS.md](../AGENTS.md)、[docs/INDEX.md](INDEX.md)、変更に対応する正本文書を読む
+3. テスト用データベースは一時ディレクトリに置く。個人の`.realmmap`をテストへ指定しない
+4. 書き込む前に`git status --short`、ロックファイル、現在の対象ファイルを確認する
 
-## Pinned environment
+## 固定環境
 
-Realm requires the exact Node.js version in `.node-version` and the exact Node.js and pnpm versions in `app/package.json`. The runtime gate rejects another OS, architecture, or pinned tool version. Node.js 24 supplies the main-process `node:sqlite` API used for local persistence.
+Realmは`.node-version`に記載した正確なNode.js versionと、`app/package.json`に記載した正確なNode.jsおよびpnpm versionを必要とします。
+runtime gateは、別のOS、アーキテクチャ、固定値と異なるtool versionを拒否します。
+Node.js 24は、ローカル保存に使うmain processの`node:sqlite` APIを提供します。
 
-A Homebrew-based local setup is:
+Homebrewを使うローカルセットアップは次のとおりです。
 
 ```sh
 brew install node@24 pnpm
@@ -21,17 +23,18 @@ cd app
 pnpm install --frozen-lockfile
 ```
 
-Do not commit global configuration or machine-specific paths. Each developer is responsible for using the pinned environment locally; this repository does not use GitHub Actions.
+グローバル設定やマシン固有のパスをコミットしてはいけません。
+各開発者がローカルで固定環境を使う責任を持ちます。
+このリポジトリではGitHub Actionsを使いません。
 
-Electron Forge owns the development and packaging lifecycle. Vite builds the
-main process, preload bridge, and renderer as separate targets. The main process
-uses Node's built-in `node:sqlite`; no additional native toolchain or hosted
-service is required. The runtime resolver changes only the current process and never edits
-shell dotfiles.
+Electron Forgeが開発とパッケージのライフサイクルを管理します。
+Viteはmain process、preload bridge、rendererを別々の対象としてbuildします。
+main processはNode組み込みの`node:sqlite`を使い、追加のnative toolchainやホスト型サービスを必要としません。
+runtime resolverが変更するのは現在のprocessだけであり、shellのdotfileは編集しません。
 
-## Development and verification
+## 開発と検証
 
-From `app/`:
+`app/`から次を実行します。
 
 ```sh
 pnpm start
@@ -40,118 +43,127 @@ pnpm skills:check
 pnpm verify:full
 ```
 
-`verify` covers strict TypeScript and the automated test suite. `skills:check`
-validates the repository-owned Realm Skills, their routing metadata, and stale
-cross-project assumptions. `verify:full` adds that Skill gate plus source-boundary,
-documentation, transitive-license, committed-SBOM, renderer production-build,
-package-content, and Node runtime checks. `verify:ci` is a reusable strict local
-command that additionally runs production dependency advisories; it is not
-connected to GitHub Actions.
+`verify`はstrict TypeScriptと自動テストを対象にします。
+`skills:check`はリポジトリ所有のRealm Skill、そのrouting metadata、他プロジェクト由来の古い前提を検証します。
+`verify:full`はそれに加えて、Skillゲート、ソース境界、文書、推移ライセンス、コミット済みSBOM、rendererのproduction build、パッケージ内容、Node runtimeを検査します。
+`verify:ci`はproduction依存関係のadvisoryも加えて実行する再利用可能なstrict local commandです。
+GitHub Actionsには接続しません。
 
-The standard `verify` command also runs the secret-guard regression matrix, so
-staged, commit-range, new-ref, file-type-change, merge-resolution, and safe
-deletion behavior is checked during development rather than only immediately
-before a push.
+通常の`verify`はsecret-guardの回帰行列も実行します。
+そのため、push直前だけでなく開発中にも、stage済み、commit-range、new-ref、file-type-change、merge-resolution、安全な削除の挙動を確認します。
 
-The public verification scripts (`verify`, `verify:full`, `verify:ci`, and both
-`verify:local:*` gates) enter through `script/with_node_runtime.sh`. If the
-interactive shell currently exposes another Node version, the resolver checks
-the repository's `.node-version`, then validates an explicitly supplied local
-runtime, configured version-manager locations, Homebrew's discovered prefix,
-and any later PATH entry. It never downloads or changes a tool installation.
-Every candidate must report the exact pinned version; if none is available the
-gate stops with the required version and a local setup instruction. The inner
-scripts are intentionally separate so verification cannot perform its first
-dependency or test command under an unpinned Node process. Run
-`pnpm node:runtime:test` to exercise normal, mismatch, argument/exit-status,
-and missing-runtime cases in isolation.
+公開用の検証スクリプト（`verify`、`verify:full`、`verify:ci`、2つの`verify:local:*`ゲート）は、`script/with_node_runtime.sh`を入口にします。
+対話shellが別のNode versionを公開している場合、resolverはリポジトリの`.node-version`を確認し、明示されたローカルruntime、設定済みのversion managerの場所、Homebrewから見つけたprefix、PATHの後方にある候補を順に検証します。
+toolのインストールをダウンロードしたり変更したりすることはありません。
+すべての候補は固定された正確なversionを報告しなければなりません。
+候補がない場合、ゲートは必要なversionとローカルセットアップの案内を示して停止します。
+内部スクリプトを分けているのは、最初の依存関係またはテストコマンドを固定されていないNode processで実行しないためです。
+通常、version不一致、引数または終了ステータス、runtime不足のケースを単独で確認するには`pnpm node:runtime:test`を使います。
 
-### Finder shortcuts
+### Finderショートカット
 
-From Finder, use the executable shortcuts at the repository root:
+Finderからは、リポジトリルートにある実行可能なショートカットを使います。
 
-- Double-click [`Realmをテスト起動.command`](../Realmをテスト起動.command) to start the Electron application in development mode. It does not open a `.realmmap` automatically.
-- Double-click [`Realmをビルド.command`](../Realmをビルド.command) to build and inspect the Apple Silicon `.app` and DMG without launching the packaged application.
+- [`Realmをテスト起動.command`](../Realmをテスト起動.command)をダブルクリックすると、Electronアプリケーションを開発モードで起動する。`.realmmap`は自動で開かない
+- [`Realmをビルド.command`](../Realmをビルド.command)をダブルクリックすると、Apple Silicon向けの`.app`とDMGをbuildして検査する。パッケージ済みアプリは起動しない
 
-Both shortcuts use the pinned local environment and the already-installed dependencies under `app/`; they never install tools or packages automatically. Before starting, Realm compares the committed `pnpm-lock.yaml` with pnpm's installed lock snapshot. A dependency change fails closed and asks for `pnpm install --frozen-lockfile`, while an application-version-only change does not invalidate an otherwise current installation. When the Homebrew setup above is present, the shortcuts resolve its pinned Node.js path even if Finder did not inherit the interactive shell's `PATH`. The development launcher uses a repository-specific directory under the system temporary area for Electron `userData`; it rejects symlinks, another owner, non-directories, and permissions other than `0700`. Development worlds therefore never share the packaged application's user-data directory. The Terminal window waits for Return after completion so that errors remain visible. Their reusable shell entrypoints are `script/build_and_run.sh` and `script/build_macos.sh`; the Codex Run action uses the former.
+どちらのショートカットも固定されたローカル環境と`app/`内のインストール済み依存関係を使い、toolやパッケージを自動インストールしません。
+起動前にRealmは、コミット済みの`pnpm-lock.yaml`とpnpmが保持するインストール済みlock snapshotを比較します。
+依存関係が変わっている場合は安全側に停止して`pnpm install --frozen-lockfile`を求めますが、アプリケーションversionだけの変更では、それ以外が最新のインストールを無効にしません。
+上記のHomebrew環境があれば、Finderが対話shellの`PATH`を引き継いでいなくても、ショートカットは固定Node.jsのパスを解決します。
+開発ランチャーは、一時領域内のリポジトリ固有ディレクトリをElectronの`userData`に使います。
+シンボリックリンク、別所有者、ディレクトリでない対象、`0700`以外の権限は拒否します。
+そのため、開発用の世界がパッケージ済みアプリのuser-dataディレクトリを共有することはありません。
+エラーを見える状態に保つため、Terminal windowは完了後にReturn入力を待ちます。
+再利用可能なshellの入口は`script/build_and_run.sh`と`script/build_macos.sh`で、CodexのRun操作は前者を使います。
 
-Any test that requires Realm to be running must use `Realmをテスト起動.command` or its `script/build_and_run.sh` entrypoint. Do not test with a built, packaged, or installed `.app`. Package verification is static and may inspect the bundle, executable architecture, metadata, signatures, DMG, and checksums without launching it.
+Realmの起動を必要とするテストは、`Realmをテスト起動.command`またはその入口である`script/build_and_run.sh`を使わなければなりません。
+build済み、package済み、インストール済みの`.app`ではテストしません。
+パッケージ検証は静的に行い、起動せずにbundle、実行ファイルのアーキテクチャ、metadata、署名、DMG、checksumを検査できます。
 
-With explicit permission to launch the development application, `pnpm smoke:electron`
-starts Electron with a fresh temporary `userData` directory, authenticates a fixed
-preload readiness channel, verifies the main window, renderer, preload API, and empty
-library, writes a JSON report, and exits. `pnpm smoke:package` is intentionally static
-in normal and release gates: it records executable and platform evidence without
-launching the packaged app.
+開発アプリケーションを起動する明示的な許可がある場合、`pnpm smoke:electron`は新しい一時`userData`ディレクトリでElectronを起動します。
+固定されたpreload readiness channelを認証し、main window、renderer、preload API、空のライブラリを検証し、JSONレポートを書いて終了します。
+`pnpm smoke:package`は通常のゲートとリリースゲートでは意図的に静的に動作し、パッケージアプリを起動せずに実行ファイルとプラットフォームの証拠を記録します。
 
-The dependency and license checks inspect the pnpm lockfile and packaged
-Electron/Vite graph. They fail closed on stale package artifacts, missing
-licenses, unexpected package contents, or a stale SBOM.
+依存関係とライセンスの検査は、pnpmロックファイルとパッケージ済みElectron/Viteの依存関係グラフを調べます。
+古いパッケージ成果物、欠落したライセンス、想定外のパッケージ内容、古いSBOMがあると安全側に停止します。
 
-The SBOM is deterministic after normalization and must be refreshed whenever either lockfile changes:
+SBOMは正規化後に決定的になり、どちらかのロックファイルが変わったときは更新しなければなりません。
 
 ```sh
 pnpm sbom:generate
 pnpm sbom:check
 ```
 
-To exercise the resolver's normal-PATH, mismatch, and fail-closed cases:
+resolverの通常PATH、不一致、安全側で停止するケースを確認するには、次を実行します。
 
 ```sh
 pnpm node:runtime:test
 ```
 
-## Version updates
+## versionの更新
 
-`app/package.json` is the application-version source of truth. The Electron Forge
-package metadata, CycloneDX application version, and Git tag use
-`MAJOR.MINOR.PATCH`.
+`app/package.json`がアプリケーションversionの正本です。
+Electron Forgeのパッケージmetadata、CycloneDXのアプリケーションversion、Git tagには`MAJOR.MINOR.PATCH`を使います。
 
-Every committed change advances the version. Without an explicit MAJOR direction from the owner, `feat` increments MINOR and every other approved commit type increments PATCH. A MAJOR update additionally requires `Version-Impact: major` in the commit message. A commit marked with `!` or `BREAKING CHANGE:` must not be created without that explicit MAJOR direction.
+すべてのコミットでversionを進めます。
+オーナーから明示的なMAJOR指示がない場合、`feat`はMINORを、それ以外の承認済みcommit typeはPATCHを増やします。
+MAJORの更新には、コミットメッセージの`Version-Impact: major`が必要です。
+明示的なMAJOR指示なしに、`!`や`BREAKING CHANGE:`を付けたコミットを作成してはいけません。
 
-Independent objectives are separate commits, and each commit advances the version in sequence. The version update belongs in the same commit as its change; do not create a version-only commit. Calculate the next value from `app/` with:
+独立した目的は別のコミットに分け、各コミットでversionを順番に進めます。
+versionの更新は変更と同じコミットに含め、versionだけのコミットは作りません。
+`app/`から次の値を計算するには、次を実行します。
 
 ```sh
 pnpm version:next -- <current-version> <type>
 ```
 
-### Commit timing
+### コミットのタイミング
 
-Finish the complete requested task, synchronize its source-of-truth documents, and run the required verification before creating any commit. Create the planned commit or sequence of independent commits immediately before the final result report to the owner. Intermediate progress reports do not authorize or trigger a commit.
+依頼された作業全体を終え、正本文書を同期し、必要な検証を実行してからコミットします。
+計画したコミットまたはコミット列は、オーナーへ最終結果を報告する直前にだけ作成します。
+途中の進捗報告はコミットを許可したり、コミットを開始したりするものではありません。
 
-Immediately before staging, re-read the current working tree because other work may have arrived concurrently. Stage only the files for the corresponding objective, verify the staged version artifacts, create each planned commit in order, and then report the resulting commits. If a commit cannot be created, leave the work uncommitted and report the reason instead of claiming completion.
+stageの直前には最新の作業ツリーを読み直します。
+独立した目的に属するファイルだけをstageし、version成果物がstage済みの差分と一致することを確認してから、計画した順にコミットします。
+コミットを作成できない場合は、完了したと主張せず、未コミットのまま理由を報告します。
 
-After updating all version artifacts, regenerate the SBOM. The pre-commit hook checks the staged artifacts, while the pre-push hook verifies the subject, type, sequential version, and synchronized artifacts of every outgoing commit.
+すべてのversion成果物を更新した後、SBOMを再生成します。
+pre-commit hookはstage済み成果物を確認し、pre-push hookは送信対象の各コミットについて件名、type、連続したversion、同期済み成果物を検証します。
 
-Repository checks also include:
+リポジトリ検査には次も含まれます。
 
 ```sh
 git diff --check
 .githooks/secret-guard.sh --self-test
 ```
 
-The secret-guard self-test exercises staged content and both existing-branch
-and new-branch push ranges. It must cover additions, modifications, renames or
-copies as destination additions, file-type changes, and merge resolutions.
-Deletions are intentionally excluded from blob reads because the deleted path
-does not exist in the resulting tree; the commit that originally introduced
-the content remains part of the outgoing range and is checked separately.
+secret-guardのself-testは、stage済み内容と既存ブランチおよび新規ブランチのpush範囲を検査します。
+追加、変更、renameまたはcopy、ファイル種別の変更、merge解決を対象にし、安全な削除の範囲も確認しなければなりません。
+削除は結果ツリーにblobがないため読み取りから除外しますが、内容を最初に導入したコミットは送信範囲の検査対象に残ります。
 
-Enable the repository hooks once per clone:
+cloneごとに一度、リポジトリhookを有効にします。
 
 ```sh
 git config core.hooksPath .githooks
 ```
 
-## Write and review rules
+## 書き込みとレビューの規則
 
-- Preserve concurrent and unrelated changes.
-- Update the source-of-truth document when changing `.realmmap`, feature or cell semantics, command permissions, or release behavior.
-- Use placeholders such as `example.invalid` and `REDACTED`; never record real tokens, private map data, or private locations.
-- Tests create synthetic temporary `.realmmap` files. The secret guard blocks map and database files even when force-added.
+- 並行している変更と無関係な変更を保持する
+- `.realmmap`、機能またはセルの意味、コマンド権限、リリース挙動を変更した場合は、正本文書も更新する
+- `example.invalid`や`REDACTED`のようなplaceholderを使い、実際のtoken、非公開の地図データ、非公開の場所を記録しない
+- テストは合成した一時`.realmmap`を作成する。secret guardは、強制追加した場合でも地図ファイルとデータベースファイルを拒否する
 
-## Explicit operation gates
+## 明示的な操作ゲート
 
-The pre-commit hook checks staged secrets, staged whitespace, and staged version agreement. The pre-push hook scans outgoing commits and runs `verify:local:push` for branch pushes or `verify:local:release` for tag pushes. The release gate additionally builds, inspects, and stages the unsigned arm64 package; it never launches the packaged app.
+pre-commit hookはstage済みの秘密情報、空白、versionの一致を検査します。
+pre-push hookは送信対象のcommit範囲を検査し、branch pushでは`verify:local:push`、tag pushでは`verify:local:release`を実行します。
+リリースゲートはさらに、署名していないarm64パッケージをbuild、検査、stageします。
+パッケージ済みアプリを起動することはありません。
 
-Branch push, tag creation, tag push, Draft Release creation, and public publication remain distinct owner operations. No GitHub Action performs them. Signing and notarization are also separate operations. Follow [release operations](operations/release.md).
+branch push、tag作成、tag push、Draft Release作成、公開は、それぞれ別のオーナー操作です。
+GitHub Actionがこれらを実行することはありません。
+署名とnotarizationも別の操作です。
+[リリース運用](operations/release.md)に従ってください。

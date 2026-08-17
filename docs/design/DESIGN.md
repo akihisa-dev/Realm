@@ -1,55 +1,86 @@
-# Realm design source
+# Realmデザイン正本
 
-## Purpose
+## 目的
 
-Realm's editing surface stays quiet so the map remains the dominant object. The initial interface is a macOS utility, not a dashboard or a fantasy-themed presentation. Viewing styles are derived renderers over the same three-layer project data.
+Realmの編集画面は静かに保ち、地図を画面の主役にします。
+初期画面はmacOSのユーティリティであり、ダッシュボードやファンタジー風の演出画面ではありません。
+表示のスタイルは、同じ3層のプロジェクトデータから導出するrendererです。
 
-## Initial states
+## 初期状態
 
-- Realm enters the editor directly with the fixed 128 by 73 hexagonal editing grid filling a centered 4:3 canvas frame at relative zoom 1. It restores the open world when one exists, otherwise opens the first library world, or creates `無題の世界` when the library is empty.
-- The right panel is the layer manager. Its `地形`, `領域`, and `オブジェクト` tabs select the active editing layer. The selected layer alone receives primary-pointer edits; all three layers remain visible.
-- The left sidebar is generated from the active layer. Terrain shows terrain draw, terrain eraser, grab, and shaping. Region shows region draw, region eraser, grab, and shaping. Object shows object placement, object kind selection, object selection/movement, and object eraser.
-- “Draw” and “eraser” are shared interaction patterns, not shared semantics. Terrain uses hex-cell painting, region uses freehand enclosure selection, and objects use kind-specific point or polygon placement. Their handlers, previews, and storage results are separate.
-- Preview is renderer-only and read-only. It disables layer changes and editing controls while retaining map pan and zoom. Escape, pointercancel, blur, lost capture, and layer switching cancel incomplete gestures.
+- Realmはエディタを直接開き、固定128×73の六角形編集グリッドを、相対ズーム1の中央寄せ4:3キャンバスフレームへ表示する。開いていた世界があれば復元し、なければライブラリの最初の世界を開き、ライブラリが空なら`無題の世界`を作成する
+- 右パネルはレイヤー管理である。`地形`、`領域`、`オブジェクト`のタブがactive editing layerを選ぶ。選択したレイヤーだけが主ポインターによる編集を受け付け、3つのレイヤーはすべて表示する
+- 左サイドバーはactive layerから生成する。地形には地形描画、つかみ操作、形状編集を表示する。領域には領域描画、つかみ操作、形状編集を表示する。オブジェクトにはオブジェクト配置、種類選択、オブジェクト選択と移動を表示する。消しゴムは3つのレイヤーで共通の削除操作として表示する
+- 「描く」と「消しゴム」は共通の操作パターンであり、active layerが対象と保存結果を決める。地形は六角形セルへのペイント、領域は自由な囲い込み選択、オブジェクトは種類ごとの点またはポリゴン配置を使う。ハンドラー、プレビュー、保存結果は別々である
+- プレビューはrendererだけで完結する読み取り専用状態である。レイヤーの切り替えと編集操作を無効にし、地図のパンとズームは残す。Escape、pointercancel、blur、キャプチャ喪失、レイヤー切り替えでは未完了のジェスチャーをキャンセルする
 
-## Visual system
+## ビジュアルシステム
 
-- Interface chrome uses true white and cool neutral gray. The default map canvas is true white; persistent terrain is shown by an unfilled outline rather than a decorative terrain fill.
-- Text is charcoal with a restrained deep blue-green selection accent. Use the macOS system font stack and compact explicit control typography.
-- Prefer rails, separators, tabs, lists, and the full map canvas over nested cards or floating panels.
-- Borders are thin and low contrast. Shadows are limited to controls that must sit over the canvas. Keyboard focus remains visible.
-- Terrain and region transitions, object placement feedback, and preview smoothing are renderer-only effects. They never change saved data or undo history, and reduced motion resolves them immediately.
+- 画面の枠には、純白と冷たいニュートラルグレーを使う。既定の地図キャンバスも純白とし、保存済みの地形は装飾的な塗りつぶしではなく、塗りなしの輪郭で表示する
+- 文字はチャコールにし、選択色には抑制した濃い青緑を使う。macOSのシステムフォントスタックと、明示的でコンパクトな操作用文字サイズを使う
+- 入れ子のカードや浮遊パネルより、レール、区切り、タブ、一覧、画面いっぱいの地図キャンバスを優先する
+- 境界線は細く低コントラストにする。影はキャンバス上に置く必要がある操作部品に限る。キーボードフォーカスは見える状態を保つ
+- 地形と領域の遷移、オブジェクト配置のフィードバック、プレビューの平滑化はrendererだけの効果である。保存データやundo履歴を変更せず、reduce motionでは直ちに解決する
 
-## Layout contract
+## レイアウト契約
 
-The editor uses one native overlay title bar with the shared `太さ` range on the left and icon-only preview, history, and layer-panel controls on the right. The dominant OpenLayers canvas sits between the collapsible left tool sidebar and the right layer manager. No separate primary rail, bottom zoom bar, or second set of macOS traffic lights is shown.
+エディタは、左に共通の`太さ`範囲、右にアイコンだけのプレビュー、履歴、レイヤーパネル操作を置く、1つのnative overlay title barを使います。
+主役のOpenLayersキャンバスは、折りたためる左ツールサイドバーと右レイヤー管理の間に置きます。
+独立した主レール、下部のズームバー、macOSのtraffic lightの2組目は表示しません。
 
-The selected layer is visible in both the right tab and the left tool labels. The right panel may close, but closing it does not change `activeLayer`; reopening shows the same layer. The tab panel is disabled during preview and while a mutation is being committed.
+選択したレイヤーは、右のタブと左のツールラベルの両方に表示します。
+右パネルは閉じられますが、閉じても`activeLayer`は変わりません。
+再び開くと同じレイヤーを表示します。
+タブパネルはプレビュー中と変更のコミット中に無効にします。
 
-The map moves with a primary-button drag in pan/selection mode. A middle- or right-button drag pans in every tool without changing the active layer, and Space plus a primary-button drag provides the same temporary navigation path. The right-button context menu is suppressed on the map. Wheel rotation zooms the canvas. Viewpoint movement remains constrained to the fixed editing world.
+地図は、パンまたは選択モードで主ボタンをドラッグすると移動します。
+中ボタンまたは右ボタンのドラッグは、どのツールでもactive layerを変えずにパンします。
+Spaceを押しながら主ボタンをドラッグしても同じ一時的なナビゲーションになります。
+地図上の右クリックメニューは抑止します。
+ホイール回転でキャンバスをズームします。
+視点の移動は固定された編集範囲内に制限します。
 
-The cursor reflects the active operation: crosshair for terrain or region drawing, object placement cursor for object kinds, grab for navigation and shape movement, and a layer-specific eraser cursor for deletion. OpenLayers' `grab`/`grabbing` feedback remains the highest-priority state while a pan drag is active.
+カーソルはactive operationを表します。
+地形または領域の描画ではcrosshair、オブジェクト種類ではオブジェクト配置用カーソル、ナビゲーションと形状移動ではgrab、削除では消しゴム用カーソルを使います。
+パンのドラッグ中は、OpenLayersの`grab`と`grabbing`の表示を最優先します。
 
-## Allowed editor copy
+## 許可する画面文言
 
-The left sidebar uses layer-specific names: `地形を描く`, `領域を描く`, `オブジェクトを配置`, `地形消しゴム`, `領域消しゴム`, and `オブジェクト消しゴム`. The region color choices, object kind choices, and eraser status remain accessible when the rail is collapsed through flyouts. The header range is shared by terrain and region cell painting/erasing; object placement does not use it.
+左サイドバーでは、`地形を描く`、`領域を描く`、`オブジェクトを配置`、`消しゴム`を使います。消しゴムの対象はactive layerに応じて変わります。
+レールを折りたたんだときも、領域の色、オブジェクトの種類、消しゴムの状態をflyoutで確認できるようにします。
+ヘッダーの範囲操作は地形と領域のセルペイントおよび消去で共有し、オブジェクト配置では使いません。
 
-The right panel uses `レイヤー管理` as its accessible name. Its terrain tab reports current terrain shapes, its region tab lists logical regions and disconnected parts, and its object tab provides kind selection, label input, placement, selection, movement, and deletion. A region is always described as a region, never as an object.
+右パネルのアクセシブル名は`レイヤー管理`とします。
+地形タブは現在の地形形状を表示し、領域タブは論理的な領域と分離した部分を一覧し、オブジェクトタブは種類選択、ラベル入力、配置、選択、移動、削除を提供します。
+領域は常に領域と呼び、オブジェクトとは呼びません。
 
-## Renderer boundary
+## rendererの境界
 
-React owns transient interface state: active layer, active operation, object draft, region color, viewport, shared drawing range, cell selection, selected objects/regions, layer-panel state, and preview state. OpenLayers objects, derived hex polygons, and theme definitions live behind the map adapter and never become storage.
+Reactは一時的な画面状態を所有します。
+対象はactive layer、active operation、オブジェクトの下書き、領域の色、viewport、共有描画範囲、セル選択、選択中のオブジェクトと領域、レイヤーパネル状態、プレビュー状態です。
+OpenLayersのオブジェクト、導出した六角形ポリゴン、テーマ定義はmap adapterの背後に置き、保存処理にはしません。
 
-The renderer registry keeps separate sources and layers for terrain, region, and object. Their draw order is:
+renderer registryは、地形、領域、オブジェクトに別々のsourceとlayerを保持します。
+描画順は次のとおりです。
 
 ```text
 terrain → region → object
 ```
 
-Terrain and region editing uses exact saved grid-snapped Polygon geometry. The preview may derive smoothed outlines, but it never replaces the canonical geometry. Object styles are chosen by kind and read `label`, `properties`, `locked`, `asset_id`, and `z_index`. Object overlap is intentional. Cell polygons and cell IDs support transient paint, erase, and hit testing only.
+地形と領域の編集には、保存済みの正確なグリッド吸着Polygonジオメトリを使います。
+プレビューでは輪郭を滑らかにした形状を導出できますが、正規ジオメトリを置き換えません。
+オブジェクトのstyleは種類で決まり、`label`、`properties`、`locked`、`asset_id`、`z_index`を読み取ります。
+オブジェクトの重なりは意図的に許可します。
+セルポリゴンとセルIDは一時的なペイント、消去、ヒットテストだけを支えます。
 
-The active-layer gate is enforced in the adapter as well as in React. Selection, primary-pointer drawing, movement, and erasing are filtered to the active layer. A layer switch clears the adapter's pointer interactions and controlled selection before installing the next layer's mode. Pan and zoom remain shared across the gate.
+active-layer gateはReactだけでなくadapterでも強制します。
+選択、主ポインターによる描画、移動、消去はactive layerだけに絞ります。
+レイヤーを切り替えるとadapterのポインター操作と制御された選択を消去してから、次のレイヤーのモードを設定します。
+パンとズームはこのゲートの対象外で共通です。
 
-## App icon assets
+## アプリケーションアイコンの素材
 
-The transparent PNG master is the source for the bundled app icon used by Electron Forge. The white rounded tile and contour mark remain opaque, while every outer corner must be transparent. Other PNG sizes and `icon.icns` are generated from that master; package inspection verifies the bundled icon and metadata without launching the app.
+透明PNGのmasterを、Electron Forgeが使う同梱アプリアイコンの正本にします。
+白い角丸タイルと輪郭マークは不透明のままにし、外側の四隅はすべて透明にします。
+その他のPNGサイズと`icon.icns`はmasterから生成します。
+パッケージ検査では、アプリを起動せずに同梱アイコンとmetadataを確認します。

@@ -1,20 +1,23 @@
-# Technical stack
+# 技術構成
 
-The 0.1 series stack is intentionally narrow and local:
+0.1系の技術構成は、意図的に狭く、ローカルに限定します。
 
-| Layer | Choice | Constraint |
+| 層 | 採用 | 制約 |
 | --- | --- | --- |
-| Desktop shell | Electron 43 + Electron Forge | Main/preload IPC boundary; no hosted service. |
-| Native code | Node.js 24 main process | Owns filesystem, Node `node:sqlite` connections, migrations, and commands. |
-| UI | React + strict TypeScript | No `any` escape in new code without a documented boundary. |
-| Map | OpenLayers | Rendering and interaction use local feature data only. |
-| Storage | SQLite via Node `node:sqlite` | One `.realmmap` database per map project. |
-| Platform | macOS arm64 | Intel and other operating systems are out of the 0.1 series scope. |
+| デスクトップシェル | Electron 43 + Electron Forge | main/preloadのIPC境界を使い、ホスト型サービスは使わない |
+| ネイティブコード | Node.js 24のmain process | ファイルシステム、Nodeの`node:sqlite`接続、migration、コマンドを所有する |
+| UI | React + strict TypeScript | 文書化した境界なしに、新しいコードで`any`へ逃げない |
+| 地図 | OpenLayers | 描画と操作はローカルのfeatureデータだけを使う |
+| 保存 | Nodeの`node:sqlite`を通じたSQLite | 地図プロジェクトごとに`.realmmap`データベースを1つ持つ |
+| プラットフォーム | macOS arm64 | Intelとその他のOSは0.1系の対象外 |
 
-Dependency versions are defined by `app/package.json` and `app/pnpm-lock.yaml`. This document does not invent versions. Release notices and the CycloneDX SBOM must be regenerated from the actual lockfile; see [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md).
+依存関係のversionは`app/package.json`と`app/pnpm-lock.yaml`で定義します。
+この文書でversionを推測しません。
+リリース通知とCycloneDX SBOMは実際のロックファイルから再生成します。
+[THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)を参照してください。
 
-## Selection constraints
+## 選定時の制約
 
-- UI-to-native commands accept typed, validated data and return typed errors.
-- SQLite migrations are forward-only and tested against a temporary database.
-- No dependency may introduce telemetry, cloud sync, or a network requirement without an explicit architecture decision.
+- UIからnativeへのコマンドは、型付きで検証済みのデータを受け取り、型付きエラーを返す
+- SQLite migrationは前方にだけ進み、一時データベースに対してテストする
+- 明示的なアーキテクチャ判断なしに、テレメトリ、クラウド同期、ネットワーク依存を持ち込む依存関係を追加しない

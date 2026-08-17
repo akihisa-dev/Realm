@@ -1,20 +1,20 @@
-## Summary
+## 概要
 
 -
 
-## Scope and data impact
+## 範囲とデータへの影響
 
-- [ ] No `.realmmap` user data, secrets, credentials, or personal data is included.
-- [ ] If storage, map features, or cell attributes changed, the engineering source of truth is updated.
-- [ ] Network, cloud, generation, and image-to-map behavior remain outside the 0.1 series unless explicitly approved.
+- [ ] `.realmmap`のユーザーデータ、秘密情報、認証情報、個人情報を含めていない
+- [ ] 保存、地物、セル属性を変更した場合、技術の正本文書を更新している
+- [ ] 明示的に承認されていない限り、ネットワーク、クラウド、生成、画像から地図への変換を0.1系の外に保っている
 
-## Verification
+## 検証
 
-- [ ] Strict TypeScript checks and tests declared by the current app package.
+- [ ] 現在のapp packageに定義されたstrict TypeScript検査とテスト
 - [ ] `git diff --check`
 - [ ] `.githooks/secret-guard.sh --self-test`
-- [ ] The required local verification commands passed.
+- [ ] 必要なローカル検証コマンドが成功している
 
-## Publication
+## 公開
 
-- [ ] This PR does not imply permission to push, tag, or publish a Release.
+- [ ] このPRは、Releaseのpush、tag、公開を許可するものではない

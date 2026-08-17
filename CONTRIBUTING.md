@@ -1,35 +1,55 @@
-# Contributing to Realm
+# Realmへの貢献
 
-Realm is owner-led. The owner sets product direction, architecture, release timing, and maintenance capacity. Public issues and pull requests are not actively solicited; a submission does not guarantee a response, review, acceptance, merge, or implementation.
+Realmはオーナー主導で運営しています。
+製品の方向性、アーキテクチャ、リリース時期、保守に割ける範囲はオーナーが決めます。
+公開Issueとプルリクエストを積極的に募集しているわけではありません。
+投稿しても、返答、レビュー、受理、マージ、実装を保証するものではありません。
 
-The project is AGPL-3.0-or-later. This governance policy does not limit the license rights to use, modify, and redistribute the code.
+プロジェクトはAGPL-3.0-or-laterです。
+このガバナンス方針は、コードの利用、変更、再配布に関するライセンス上の権利を制限しません。
 
-## Before proposing a change
+## 変更を提案する前に
 
-Read [docs/INDEX.md](docs/INDEX.md), [AGENTS.md](AGENTS.md), the relevant document under `docs/`, and the repository-owned Realm Skill under `.agents/skills/` when one matches the task. Keep a proposal local and reproducible. Do not attach a `.realmmap` containing private places, personal data, or credentials.
+[docs/INDEX.md](docs/INDEX.md)、[AGENTS.md](AGENTS.md)、`docs/`内の関係する文書を読み、作業に対応するRealm Skillが`.agents/skills/`にある場合はそれも確認してください。
+提案はローカルで再現できる範囲に保ってください。
+非公開の場所、個人情報、認証情報を含む`.realmmap`を添付してはいけません。
 
-## Local change rules
+## ローカル変更の規則
 
-- Keep the change small and preserve unrelated work already present in the checkout.
-- Do not change the `.realmmap` storage contract, feature semantics, or cell-attribute behavior without updating the corresponding architecture and data-model documents.
-- Do not add network, cloud, generation, or image-to-map behavior to the 0.1 series scope without an explicit product decision.
-- Add or update tests for behavior and failure paths. Never use a real user's map file in tests; use a temporary fixture created by the test.
-- Keep secrets out of source, fixtures, logs, screenshots, and commit messages. Run `.githooks/secret-guard.sh --self-test` when changing the guard.
+- 変更は小さく保ち、チェックアウトに既にある無関係な作業を維持する
+- `.realmmap`の保存契約、機能の意味、セル属性の挙動を変えるときは、対応するアーキテクチャ文書とデータモデル文書も更新する
+- 明示的な製品判断なしに、ネットワーク、クラウド、生成、画像から地図への変換を0.1系の範囲へ追加しない
+- 挙動と失敗経路のテストを追加または更新する。テストでは実ユーザーの地図ファイルを使わず、テストが作成した一時fixtureを使う
+- ソース、fixture、ログ、スクリーンショット、コミットメッセージから秘密情報を除く。検査処理を変更した場合は`.githooks/secret-guard.sh --self-test`を実行する
 
-## Verification
+## 検証
 
-Run the strict TypeScript checks and tests declared by the current `app/package.json`. Then run the repository checks described in [docs/development.md](docs/development.md). Before a push, the local publication gate must pass on the Apple Silicon development machine. The exact app script names are defined by the application package, not duplicated here.
+現在の`app/package.json`に定義されたstrict TypeScript検査とテストを実行してください。
+その後、[docs/development.md](docs/development.md)に記載されたリポジトリ検査を実行します。
+pushの前には、Apple Siliconの開発環境でローカル公開ゲートを通過させてください。
+アプリの正確なスクリプト名はアプリケーションパッケージで定義し、ここでは重複して記載しません。
 
-## Commits and publication
+## コミットと公開
 
-Use Conventional Commits with one of the repository-approved lowercase types and a Japanese subject:
+リポジトリで承認された英小文字のtypeと日本語の件名を使ってConventional Commitsを作成します。
 
 ```text
 <type>[!]: <version> <description>
 ```
 
-The version is the exact `app/package.json` version. Every commit advances it: `feat` increments MINOR, every other approved type increments PATCH, and MAJOR requires an explicit owner direction plus `Version-Impact: major`. Independent objectives belong in separate commits, with the version advanced for each commit. A breaking marker without that explicit MAJOR direction must not be committed.
+versionには`app/package.json`の正確な値を使います。
+すべてのコミットでversionを進めます。
+`feat`はMINORを、それ以外の承認済みtypeはPATCHを増やします。
+MAJORにはオーナーの明示的な指示と`Version-Impact: major`が必要です。
+独立した目的は別々のコミットに分け、各コミットでversionを進めます。
+明示的なMAJOR指示のないbreaking markerをコミットしてはいけません。
 
-Create the planned commit or commits only after the complete task and its required verification are finished, immediately before reporting the final result to the owner. Do not commit during investigation, implementation, verification, or an intermediate status update. Before that final commit batch, re-read the latest working tree and stage only the files belonging to each independent objective.
+計画したコミットは、作業全体と必要な検証を終えた後、オーナーへ最終結果を報告する直前にだけ作成します。
+調査、実装、検証、途中の進捗報告中にコミットしてはいけません。
+最終コミットの作成前には最新の作業ツリーを読み直し、独立した目的に属するファイルだけをstageします。
 
-Put the affected English noun under `scope:` in the body and record the purpose, changes, verification, and impact. Explain data or migration impact explicitly and omit secrets, private paths, and raw sensitive errors. A commit request is not a push request. Tags, pushes, Draft Release creation, and Release publication are separate manual owner operations governed by [.github/RELEASE_CHECKLIST.md](.github/RELEASE_CHECKLIST.md). GitHub Actions are not used.
+本文の`scope:`には影響対象を表す英語の名詞を置き、目的、内容、確認、影響を記録します。
+データや移行への影響は明示し、秘密情報、非公開パス、生の機微なエラーは記載しません。
+コミットの依頼はpushの依頼を含みません。
+タグ、push、Draft Releaseの作成、Releaseの公開は、[.github/RELEASE_CHECKLIST.md](.github/RELEASE_CHECKLIST.md)に従うオーナーの手動操作です。
+GitHub Actionsは使いません。

@@ -1,32 +1,34 @@
-# Realm documentation index
+# Realm文書索引
 
-This index routes work to the source-of-truth document. A document may summarize another one, but implementation decisions must be checked against the most specific source.
+この索引は、作業内容に対応する正本文書へ案内します。
+ある文書が別の文書を要約することはありますが、実装上の判断は最も具体的な正本で確認してください。
 
-## Product
+## 製品
 
-- [Project overview](project/overview.md): purpose, scope, users, non-goals, and terminology.
+- [プロジェクト概要](project/overview.md)：目的、範囲、利用者、対象外、用語
 
-## Engineering
+## 技術
 
-- [Architecture](engineering/architecture.md): Electron main/preload boundaries, state ownership, and offline guarantees.
-- [Data model](engineering/data-model.md): schema 12 `.realmmap` SQLite contract, three persistent layers, and transient grid selections.
-- [Stack](engineering/stack.md): selected technologies and platform constraints.
-- [Test strategy](engineering/test-strategy.md): test layers and evidence expected before publication.
+- [アーキテクチャ](engineering/architecture.md)：Electron main/preloadの境界、状態の所有者、オフライン保証
+- [データモデル](engineering/data-model.md)：schema 12の`.realmmap` SQLite契約、3つの永続レイヤー、一時的なグリッド選択
+- [技術構成](engineering/stack.md)：採用する技術とプラットフォームの制約
+- [テスト戦略](engineering/test-strategy.md)：テスト層と公開前に必要な証拠
 
-## Design
+## デザイン
 
-- [Design source](design/DESIGN.md): initial visual system, application states, layout, and renderer presentation rules.
+- [デザイン正本](design/DESIGN.md)：初期のビジュアルシステム、アプリケーション状態、レイアウト、rendererの表示規則
 
-## Development and operations
+## 開発と運用
 
-- [Development](development.md): local setup, safe commands, document rules, and verification.
-- [Release operations](operations/release.md): explicit approval, local publication gates, tags, and draft artifacts.
+- [開発](development.md)：ローカル環境、安全なコマンド、文書規則、検証
+- [リリース運用](operations/release.md)：明示的な承認、ローカル公開ゲート、タグ、下書き成果物
 
-## Repository policy
+## リポジトリ規約
 
-- [AGENTS.md](../AGENTS.md): automated-contributor rules.
-- [CONTRIBUTING.md](../CONTRIBUTING.md): owner-led contribution policy.
-- [SECURITY.md](../SECURITY.md): secret defense and vulnerability reporting.
-- [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md): dependency notice starting point.
+- [AGENTS.md](../AGENTS.md)：自動化された作業者の規則
+- [CONTRIBUTING.md](../CONTRIBUTING.md)：オーナー主導の貢献方針
+- [SECURITY.md](../SECURITY.md)：秘密情報の防御と脆弱性の報告
+- [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)：依存関係に関する通知の入口
 
-When a code change makes one of these statements inaccurate, update the document in the same change. Do not create a second competing source of truth.
+コード変更によってこれらの記述が不正確になった場合は、同じ変更で文書も更新してください。
+競合する第2の正本を作ってはいけません。

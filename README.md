@@ -1,59 +1,75 @@
 # Realm
 
-Realm is a local three-layer map editor for macOS on Apple Silicon. It keeps each world's current terrain, regions, and objects in an app-managed library rather than a cloud account or a generated dataset.
+Realmは、Apple Silicon搭載macOS向けのローカル3層地図エディタです。
+各世界の現在の地形、領域、オブジェクトを、クラウドアカウントや生成データセットではなく、アプリが管理するライブラリに保存します。
 
-> Status: initial 0.1 series development
+> 状態：0.1系の初期開発
 
-## What Realm stores
+## Realmが保存するもの
 
-Realm uses one SQLite database per world inside its app-managed library. Each database contains the map's editable source data, including:
+Realmは、アプリが管理するライブラリ内の各世界を1つのSQLiteデータベースで管理します。
+各データベースには、地図の編集可能な正本データとして次のものを保存します。
 
-- manually painted terrain polygons on a fixed hexagonal grid;
-- independent region polygons and their colors;
-- objects such as cities, text, forests, and mountains placed above the terrain and regions;
-- project-local canvas, palette, grid, and export settings;
+- 固定六角形グリッド上に手動で描いた地形ポリゴン
+- 独立した領域ポリゴンとその色
+- 地形と領域の上に配置した都市、テキスト、森、山などのオブジェクト
+- プロジェクト固有のキャンバス、パレット、グリッド、出力設定
 
-The database remains local. Layer edits are automatically saved without asking the user to manage a project file. The current interface has no startup or transfer-import screen. Realm does not generate geography, synchronize to a cloud service, or require a hosted account. Older `.realmmap` formats are rejected without automatic migration.
+データベースはローカルに留まります。
+レイヤーの編集結果は、ユーザーがプロジェクトファイルを管理しなくても自動保存されます。
+現在の画面には開始画面も転送データのインポート画面もありません。
+Realmは地理を生成せず、クラウドサービスへ同期せず、ホストされたアカウントも要求しません。
+古い`.realmmap`形式は自動移行せずに拒否します。
 
-## Platform and stack
+## プラットフォームと技術構成
 
-- macOS on Apple Silicon (arm64) only;
-- Electron with a typed main/preload IPC boundary;
-- React with strict TypeScript for the interface;
-- OpenLayers for map rendering;
-- SQLite through Node's built-in `node:sqlite` API, with one app-managed database per world.
+- Apple Silicon（arm64）搭載macOSのみ
+- 型付きのmain/preload IPC境界を持つElectron
+- 画面にstrict TypeScriptを使うReact
+- 地図の描画に使うOpenLayers
+- Node組み込みの`node:sqlite` APIを通じたSQLite。世界ごとにアプリ管理のデータベースを1つ持つ
 
-The 0.1 series scope is intentionally local-first. Network access, cloud storage, generated content, and multi-platform packaging are out of scope until a separate decision is recorded in the engineering documents.
+0.1系の範囲は意図的にローカル中心です。
+ネットワークアクセス、クラウド保存、生成コンテンツ、マルチプラットフォーム向けパッケージは、技術文書に別の判断を記録するまで対象外です。
 
-## Repository map
+## リポジトリ構成
 
-- `app/`: Electron main/preload/React application code, Node SQLite storage, and reproducible verification scripts.
-- `docs/`: product, architecture, data, testing, and release source of truth. Start at [docs/INDEX.md](docs/INDEX.md).
-- `.githooks/`: local secret and publication guards.
-- `.agents/skills/`: repository-owned Codex workflows localized for Realm.
-- `.github/`: issue templates, ownership rules, pull-request guidance, and the manual Release checklist. Realm does not use GitHub Actions.
-- `sbom/`: deterministic CycloneDX inventory generated from the pnpm lockfile and bundled native storage helpers.
-- `AGENTS.md`: rules for AI agents and other automated contributors.
+- `app/`：Electron main/preload/Reactのアプリケーションコード、Node SQLiteによる保存処理、再現可能な検証スクリプト
+- `docs/`：製品、アーキテクチャ、データ、テスト、リリースの正本文書。まず[docs/INDEX.md](docs/INDEX.md)を参照する
+- `.githooks/`：ローカルの秘密情報検査と公開前検査
+- `.agents/skills/`：Realm向けにローカライズしたリポジトリ所有のCodexワークフロー
+- `.github/`：Issueテンプレート、所有者規則、プルリクエスト案内、手動リリースチェックリスト。RealmではGitHub Actionsを使わない
+- `sbom/`：pnpmロックファイルと同梱ネイティブ保存ヘルパーから生成する決定的なCycloneDX一覧
+- `AGENTS.md`：AIエージェントなど自動化された作業者の規則
 
-## Development
+## 開発
 
-Development is performed on an Apple Silicon Mac. Before choosing a command, read [docs/development.md](docs/development.md) and the scripts declared by `app/package.json`.
+開発はApple Silicon搭載Macで行います。
+コマンドを選ぶ前に、[docs/development.md](docs/development.md)と`app/package.json`に定義されたスクリプトを確認してください。
 
-The normal loop is:
+通常の流れは次のとおりです。
 
-1. make a small local change;
-2. run the documented TypeScript, Node, renderer, storage, and test checks;
-3. run the local publication gate before any push;
-4. inspect the diff and keep user data, secrets, and unrelated work out of the commit.
+1. 小さなローカル変更を行う
+2. 文書化されたTypeScript、Node、renderer、保存処理、テストの検査を実行する
+3. pushの前にローカル公開ゲートを実行する
+4. 差分を確認し、ユーザーデータ、秘密情報、無関係な変更をコミットへ混入させない
 
-## Governance and licensing
+## ガバナンスとライセンス
 
-Realm is an owner-led open source project. Issues and pull requests may be read but are not a promise of response, review, acceptance, or merge; see [CONTRIBUTING.md](CONTRIBUTING.md). Realm is licensed under [AGPL-3.0-or-later](LICENSE).
+Realmはオーナー主導のオープンソースプロジェクトです。
+Issueとプルリクエストは確認されることがありますが、返答、レビュー、受理、マージを約束するものではありません。
+詳細は[CONTRIBUTING.md](CONTRIBUTING.md)を参照してください。
+Realmは[AGPL-3.0-or-later](LICENSE)で公開しています。
 
-Security reports must not contain secrets or exploit details in a public issue. Follow [SECURITY.md](SECURITY.md). Community participation follows [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+セキュリティ報告に秘密情報や悪用可能な詳細を含めて公開Issueへ投稿してはいけません。
+[SECURITY.md](SECURITY.md)の手順に従ってください。
+コミュニティへの参加には[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)を適用します。
 
-## Japanese
+## 概要
 
-Realmは、Apple Silicon搭載macOS向けのローカル3層地図エディタです。地形、領域、地形や領域の上に置く都市・テキスト・森・山を別々に編集し、アプリ内ライブラリへ自動保存します。地理の自動生成、クラウド同期、旧形式からの自動移行は行いません。
+Realmは、Apple Silicon搭載macOS向けのローカル3層地図エディタです。
+地形、領域、地形や領域の上に置く都市、テキスト、森、山を別々に編集し、アプリ内ライブラリへ自動保存します。
+地理の自動生成、クラウド同期、旧形式からの自動移行は行いません。
 
-詳細な正本は[文書索引](docs/INDEX.md)から参照してください。Realmはowner-ledで運用し、AGPL-3.0-or-laterで公開します。
+詳細な正本は[文書索引](docs/INDEX.md)から参照してください。
+Realmはオーナー主導で運用し、AGPL-3.0-or-laterで公開します。

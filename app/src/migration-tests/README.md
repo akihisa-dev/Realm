@@ -1,15 +1,13 @@
-# Electron storage characterization
+# Electron保存処理の特性確認
 
-This directory freezes the observable contract that the Electron storage and
-renderer must match. `migrationInventory.ts` retains historical test references
-as evidence while the current implementation is characterized by the schema 12
-SQLite and renderer suites. `migrationSnapshot.ts` provides a deterministic
-comparison for synthetic schema-12 golden snapshots; SQLite row order and JSON
-object key order do not affect the result. Source hash and sidecar identity are
-compared separately so a successful layer comparison cannot hide source mutation.
+このディレクトリでは、Electronの保存処理とrendererが満たすべき観測可能な契約を固定します。
+`migrationInventory.ts`は過去のテスト参照を証拠として保持し、現在の実装はschema 12のSQLiteテストとrendererテストで特性を確認します。
+`migrationSnapshot.ts`は、合成したschema 12のgolden snapshotを決定的に比較します。
+SQLiteの行順とJSONオブジェクトのキー順は結果に影響しません。
+レイヤー比較が成功してもソースの変更を見落とさないよう、ソースハッシュとsidecarの同一性は別に比較します。
 
-The baseline is intentionally synthetic and contains no user `.realmmap` data.
-Run it without starting Realm or any GUI:
+基準データは意図的に合成したもので、ユーザーの`.realmmap`データを含みません。
+RealmやGUIを起動せずに次を実行します。
 
 ```sh
 cd app
@@ -17,17 +15,14 @@ pnpm test -- migration-tests
 pnpm test
 ```
 
-Storage tests under this directory create their own temporary database, compare
-the current `terrain`/`regions`/`objects` snapshot to the synthetic golden, and assert
-`compareSourceIdentity` after import/rejection. GUI startup is not part of this
-gate; renderer behavior remains covered by the existing jsdom/OpenLayers unit
-tests listed in the inventory.
+このディレクトリの保存テストは独自の一時データベースを作成し、現在の`terrain`、`regions`、`objects`のsnapshotを合成goldenと比較します。
+インポートまたは拒否の後には`compareSourceIdentity`も検証します。
+GUIの起動はこのゲートに含めません。
+rendererの挙動は、inventoryに記載された既存のjsdom/OpenLayers単体テストで確認します。
 
-## Vitest project split
+## Vitestのプロジェクト分割
 
-The Electron main process runs in a Node environment while React/OpenLayers tests
-remain in jsdom. Vitest projects keep `src/main/**/*.test.ts` and this
-directory's filesystem/SQLite characterization tests in the `node` project, and
-`src/**/*.test.{ts,tsx}` excluding `src/main/**` in the `renderer` project. This
-prevents a renderer test from accidentally opening a native path and prevents a
-main-process test from receiving a fake DOM.
+Electronのmain processはNode環境で動作し、React/OpenLayersのテストはjsdomに残します。
+Vitestのプロジェクト分割により、`src/main/**/*.test.ts`とこのディレクトリのファイルシステムおよびSQLiteの特性確認テストは`node`プロジェクトに置きます。
+`src/main/**`を除く`src/**/*.test.{ts,tsx}`は`renderer`プロジェクトに置きます。
+これにより、rendererテストが誤ってネイティブパスを開くことや、main processテストが偽のDOMを受け取ることを防ぎます。

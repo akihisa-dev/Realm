@@ -1,27 +1,32 @@
-# Security Policy
+# セキュリティ方針
 
-Realm is a local-first application and a public repository. Do not put secrets, credentials, private map data, or personal information into Git, issues, pull requests, logs, fixtures, or screenshots.
+Realmはローカル中心のアプリケーションであり、公開リポジトリです。
+Git、Issue、プルリクエスト、ログ、fixture、スクリーンショットに、秘密情報、認証情報、非公開の地図データ、個人情報を含めてはいけません。
 
-## Do not disclose publicly
+## 公開してはいけないもの
 
-- `.env` files, authenticated `.npmrc` files, cloud credentials, signing keys, or certificates;
-- API tokens, HTTP authorization headers, database URLs with passwords, or private keys;
-- private locations, personal data, or a user's `.realmmap` database;
-- an exploitable vulnerability with enough detail to enable immediate abuse.
+- `.env`ファイル、認証済みの`.npmrc`ファイル、クラウド認証情報、署名鍵、証明書
+- APIトークン、HTTP認証ヘッダー、パスワードを含むデータベースURL、秘密鍵
+- 非公開の場所、個人情報、ユーザーの`.realmmap`データベース
+- 直ちに悪用できるだけの詳細を含む、悪用可能な脆弱性情報
 
-If a secret was committed, revoke or rotate it first and contact the owner through a private GitHub Security Advisory or another private maintainer-provided channel. Removing a file from a later commit does not make the old secret safe.
+秘密情報をコミットした場合は、まず失効またはローテーションし、その後に非公開のGitHub Security Advisoryまたは保守担当者が指定する別の非公開経路でオーナーへ連絡してください。
+後続のコミットでファイルを削除しても、過去の秘密情報が安全になるわけではありません。
 
-## Reporting
+## 報告
 
-For vulnerabilities or leaked secrets, use GitHub Security Advisories where available. Do not open a public issue with the details. Include affected commit or version, impact, reproduction at a safe level, and a suggested mitigation; omit real credentials and private map data.
+脆弱性や秘密情報の漏えいは、利用できる場合はGitHub Security Advisoryで報告してください。
+詳細を公開Issueへ投稿してはいけません。
+影響を受けるコミットまたはversion、影響、安全な範囲の再現手順、緩和策の案を含め、実際の認証情報と非公開の地図データは省いてください。
 
-For ordinary defects without sensitive details, use a public issue only when you accept the owner-led response policy in [CONTRIBUTING.md](CONTRIBUTING.md).
+機微な情報を含まない通常の不具合は、[CONTRIBUTING.md](CONTRIBUTING.md)のオーナー主導の対応方針を受け入れられる場合に限り、公開Issueで報告してください。
 
-## Repository defense
+## リポジトリの防御
 
-- `.githooks/secret-guard.sh` checks staged files and outgoing commit ranges for credential-like names and high-confidence token patterns, including file-type changes and merge resolutions. Deleted blobs are not read from the resulting tree; their introducing commits remain subject to range inspection.
-- The pre-commit and pre-push hooks are advisory safeguards; run the guard explicitly when hooks are disabled or when reviewing an outgoing range.
-- CI uses least-privilege read permissions and disables checkout credential persistence.
-- A push or release is never authorized merely because CI is green. Run the local publication gate on Apple Silicon, inspect the diff, and obtain explicit owner approval.
+- `.githooks/secret-guard.sh`は、stage済みファイルと送信対象のコミット範囲について、認証情報らしい名前と確度の高いトークンパターンを検査します。ファイル種別の変更やマージ解決も対象です。削除されたblobは結果ツリーから読みませんが、内容を導入したコミットは範囲検査の対象に残ります
+- pre-commitとpre-pushのhookは補助的な防御です。hookを無効にした場合や送信対象の範囲を確認する場合は、guardを明示的に実行してください
+- CIは最小権限の読み取り権限を使い、checkout時の認証情報の永続化を無効にします
+- CIが成功しても、pushやreleaseが許可されたことにはなりません。Apple Silicon上でローカル公開ゲートを実行し、差分を確認して、オーナーの明示的な承認を得てください
 
-The guard intentionally favors high-confidence patterns to avoid hiding secrets in an allowlist. If it reports a false positive, rewrite the fixture or documentation to a safe placeholder rather than weakening the rule without a documented security review.
+guardはallowlistによって秘密情報を見落とさないよう、確度の高いパターンを優先します。
+誤検知が出た場合は、文書化されたセキュリティレビューなしに検査を弱めるのではなく、fixtureまたは文書を安全なプレースホルダーへ書き換えてください。

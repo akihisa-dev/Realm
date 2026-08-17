@@ -1,77 +1,106 @@
-# Architecture
+# アーキテクチャ
 
-## Boundary
+## 境界
 
-The Electron renderer is the presentation and interaction layer. The Electron main process is the only authority for filesystem paths, SQLite connections, schema validation, and writes. React does not open a database or reach arbitrary paths directly.
+Electronのrendererは表示と操作を担当します。
+Electronのmain processは、ファイルシステムのパス、SQLite接続、schema検証、書き込みを一元的に管理します。
+Reactがデータベースを開いたり、任意のパスへ直接アクセスしたりすることはありません。
 
 ```text
 React / OpenLayers
-        │ typed preload IPC
+        │ 型付きpreload IPC
         ▼
-Electron main boundary ── validation ── current-state service
+Electron main境界 ── 検証 ── 現在状態サービス
         │                         │
         ▼                         ▼
- app library / export       node:sqlite connection
+ アプリライブラリ / 出力      node:sqlite接続
                                     │
                                     ▼
-                      one internal SQLite file per world
+                      世界ごとに1つの内部SQLiteファイル
 ```
 
-## State ownership
+## 状態の所有者
 
-- The Electron main process owns the app-data library path, opened `node:sqlite` database, SQLite transactions, schema state, stable terrain, region, object, asset, and world identifiers, current persisted layer contents, bounded project settings, and session undo/redo stacks.
-- React owns the active layer, active operation, transient hex-cell selection, object draft label/kind, viewport, preview state, shared drawing range, right-panel tab state, selected objects/regions, expanded region rows, and serialized mutation state. It keeps an optimistic layer draft until the main-process replacement completes.
-- OpenLayers owns only rendering and interaction objects derived from the three canonical layers and transient grid selections. It is never the storage source of truth.
+- Electronのmain processは、アプリデータのライブラリパス、開いた`node:sqlite`データベース、SQLiteトランザクション、schema状態、地形、領域、オブジェクト、アセット、世界の安定した識別子、保存済みレイヤーの現在内容、範囲を限定したプロジェクト設定、セッション中のundo/redoスタックを所有します。
+- Reactは、active layer、active operation、一時的な六角形セル選択、オブジェクトの下書きラベルと種類、viewport、プレビュー状態、共有描画範囲、右パネルのタブ状態、選択中のオブジェクトと領域、展開した領域行、直列化した変更状態を所有します。main processによる置き換えが完了するまで、楽観的なレイヤー下書きを保持します。
+- OpenLayersが持つのは、3つの正規レイヤーと一時的なグリッド選択から導出した描画および操作用オブジェクトだけです。保存データの正本にはなりません。
 
-## Three-layer editor
+## 3層エディタ
 
-The right-side `LayerManager` contains three tabs: `terrain`, `region`, and `object`. Selecting a tab sets `activeLayer`. The selected layer is the only layer that accepts primary-pointer creation, selection, movement, deletion, and shape editing. The other two layers remain visible but their rendered geometry is not selectable or editable. Switching tabs cancels any active pointer sequence, selection, and preview before activating the new layer.
+右側の`LayerManager`には、`terrain`、`region`、`object`の3つのタブがあります。
+タブを選択すると`activeLayer`を設定します。
+選択したレイヤーだけが、主ポインターによる作成、選択、移動、削除、形状編集を受け付けます。
+他の2つのレイヤーは表示しますが、描画されたジオメトリを選択したり編集したりできません。
+タブを切り替えると、次のレイヤーを有効にする前に、進行中のポインター操作、選択、プレビューをキャンセルします。
 
-The left sidebar is generated from the active layer. Shared entrances may use the same visual pattern, but their handlers remain layer-specific:
+左サイドバーはactive layerから生成します。
+共通の入口に同じ見た目を使うことはありますが、ハンドラーはレイヤーごとに分かれたままです。
 
-- Terrain exposes terrain drawing, terrain erasing, grid grab, and terrain shaping.
-- Region exposes region enclosure drawing, region erasing, grid grab, and region shaping.
-- Object exposes object placement, kind selection (`city`, `text`, `mountain`, `forest`), object selection/movement, and object erasing.
+- 地形には、地形描画、地形消去、グリッドのつかみ操作、地形形状の編集を表示します。
+- 領域には、領域の囲い込み描画、領域消去、グリッドのつかみ操作、領域形状の編集を表示します。
+- オブジェクトには、オブジェクト配置、種類選択（`city`、`text`、`mountain`、`forest`）、オブジェクトの選択と移動、オブジェクト消去を表示します。
 
-The eraser never chooses a cross-layer target: its label and handler are derived from `activeLayer`. Middle-button, right-button, Space, and wheel navigation remain available in every layer. Presentation preview changes the adapter to read-only navigation and disables all layer mutation controls.
+消しゴムが別のレイヤーの対象を選ぶことはありません。
+ラベルとハンドラーは`activeLayer`から決まります。
+中ボタン、右ボタン、Space、ホイールによるナビゲーションは、すべてのレイヤーで使えます。
+表示プレビュー中はadapterを読み取り専用のナビゲーションへ切り替え、すべてのレイヤー変更操作を無効にします。
 
-## Renderer boundary
+## rendererの境界
 
-OpenLayers imports are isolated below `app/src/map/`. `contracts.ts` is the UI-facing renderer contract. `MapAdapter.ts` owns the map, interaction state, active-layer gate, primary-pointer lifecycle, pan/zoom, and cancellation. `mapLayerRegistry.ts` owns separate terrain, region, and object sources/layers, styles, grid replacement, preview visibility, and visual-resource cleanup.
+OpenLayersのimportは`app/src/map/`以下に隔離します。
+`contracts.ts`はUI向けrenderer契約です。
+`MapAdapter.ts`は、地図、操作状態、active layerのゲート、主ポインターのライフサイクル、パンとズーム、キャンセルを所有します。
+`mapLayerRegistry.ts`は、地形、領域、オブジェクトに分けたsourceとlayer、スタイル、グリッドの置き換え、プレビュー表示、描画リソースの後片付けを所有します。
 
-Canonical rendering uses three persistent-layer projections in this order:
+正規描画では、永続化した3つのレイヤーを次の順に投影します。
 
 ```text
 terrain  →  region  →  object
 ```
 
-Terrain and region use the exact grid-snapped Polygon geometry for editing and renderer-only smoothed geometry for presentation preview. Objects use their geometry, kind, label, properties, lock state, and `z_index`; object overlap is allowed. Transient cell polygons and cell IDs support paint, erase, hit testing, and previews only. They are discarded and never enter SQLite or undo history.
+地形と領域の編集には、グリッドに吸着した正確なPolygonジオメトリを使います。
+表示プレビューだけでは、renderer内で輪郭を滑らかにしたジオメトリを使います。
+オブジェクトはジオメトリ、種類、ラベル、プロパティ、ロック状態、`z_index`を使って描画し、オブジェクト同士の重なりを許可します。
+一時的なセルポリゴンとセルIDは、ペイント、消去、ヒットテスト、プレビューだけに使います。
+これらは破棄し、SQLiteにもundo履歴にも入りません。
 
-Completed terrain and region gestures cross the renderer boundary as bounded cell selections or normalized polygon edits. The renderer does not write to SQLite. Main-process commands validate the complete target layer, reject same-layer polygon overlaps, perform one transactional replacement, and create one history checkpoint. Object placement, movement, deletion, and lock changes use a complete object-layer replacement with the same transaction boundary.
+完了した地形と領域のジェスチャーは、範囲を限定したセル選択または正規化済みポリゴン変更としてrendererの境界を越えます。
+rendererがSQLiteへ書き込むことはありません。
+main processのコマンドは対象レイヤー全体を検証し、同じレイヤー内のポリゴン重複を拒否し、1つのトランザクションで置き換え、1つの履歴チェックポイントを作成します。
+オブジェクトの配置、移動、削除、ロック変更も、同じトランザクション境界でオブジェクトレイヤー全体を置き換えます。
 
-Pointercancel, Escape, blur, lost pointer capture, and layer switching are cancellation boundaries. A layer switch also clears controlled selection and returns the adapter to pan before the new operation is installed. Middle/right-button pan and Space temporarily suspend the current primary-pointer operation without changing the active layer.
+pointercancel、Escape、blur、ポインターキャプチャ喪失、レイヤー切り替えはキャンセル境界です。
+レイヤーを切り替えると、制御中の選択も消去し、新しい操作を設定する前にadapterをパンへ戻します。
+中ボタンまたは右ボタンのパンとSpaceによるパンは、active layerを変えずに現在の主ポインター操作を一時停止します。
 
-## Main, preload, and memory backend
+## main、preload、メモリbackend
 
-Electron keeps `app/src/main/main.ts` as the process composition root and `app/src/main/ipc/registerIpcHandlers.ts` as the IPC registry. The typed preload exposes layer-native commands:
+Electronでは、`app/src/main/main.ts`をプロセスの構成ルート、`app/src/main/ipc/registerIpcHandlers.ts`をIPCレジストリとして維持します。
+型付きpreloadは、レイヤー固有の次のコマンドを公開します。
 
 - `realm:replaceTerrainLayer`
 - `realm:replaceRegionLayer`
 - `realm:replaceObjectLayer`
 
-The renderer uses these commands through `RealmBackend`; only the three layer-replacement commands cross the persistence boundary for map editing. The browser-only memory backend implements the same layer contract for deterministic UI tests without becoming a second persistence format. `MapShape[]` remains an in-memory editor projection and is not an IPC or storage API.
+rendererはこれらのコマンドを`RealmBackend`経由で使います。
+地図編集で保存境界を越えるのは、3つのレイヤー置き換えコマンドだけです。
+ブラウザー専用のメモリbackendは、2つ目の保存形式にはならず、決定的なUIテストのために同じレイヤー契約を実装します。
+`MapShape[]`はメモリ上のエディタ投影であり、IPC APIでも保存APIでもありません。
 
-Within main, `layerCommands.ts` validates terrain and region replacement, `objectCommands.ts` validates object kinds, geometry, properties, locks, order, and assets, `snapshot.ts` reads the split model, and `operations.ts` captures/restores all persistent tables for undo/redo. Storage schema verification and path/atomic-publication code remain below the command boundary.
+main process内では、`layerCommands.ts`が地形と領域の置き換えを検証し、`objectCommands.ts`がオブジェクトの種類、ジオメトリ、プロパティ、ロック、順序、アセットを検証します。
+`snapshot.ts`は分割されたモデルを読み取り、`operations.ts`はundo/redoのためにすべての永続テーブルを取得または復元します。
+保存schemaの検証とパスおよびアトミック公開のコードは、コマンド境界より下に残します。
 
-## Safety invariants
+## 安全な不変条件
 
-- Resolve the app-data directory in the Electron main process, address library entries by validated UUID, and validate user-selected import/export paths; never concatenate user input into SQL or filesystem paths.
-- Use parameterized queries and transactions for current-state writes. A failed validation or storage trigger leaves every layer unchanged.
-- Create the schema and initial world data in one SQLite transaction. The schema is version 12 and contains separate terrain, region, object, and asset tables.
-- Inspect existing files through a read-only connection before any writable connection is opened. Versions before 12, future versions, retired tables, malformed geometry, mismatched schema metadata, incomplete files, and failed integrity checks leave the source bytes and journal mode untouched.
-- Never send database contents or telemetry over the network. Assets and project data remain local.
-- PNG/JPEG/PDF output is derived from the current renderer and is bounded at the main-process write boundary; it is not editable project storage.
+- アプリデータのディレクトリはElectronのmain processで解決し、ライブラリの項目は検証済みUUIDで指定し、ユーザーが選んだインポートと出力のパスを検証します。ユーザー入力をSQLやファイルシステムのパスへ連結してはいけません
+- 現在状態の書き込みにはパラメーター化クエリとトランザクションを使います。検証または保存トリガーに失敗した場合、すべてのレイヤーを変更前のままにします
+- schemaと初期世界データは1つのSQLiteトランザクションで作成します。schemaはversion 12で、地形、領域、オブジェクト、アセットを別のテーブルに持ちます
+- 既存ファイルは、書き込み可能な接続を開く前に読み取り専用接続で検査します。version 12未満、将来のversion、廃止済みテーブル、不正なジオメトリ、不一致のschemaメタデータ、不完全なファイル、整合性検査の失敗では、ソースバイトとjournal modeを変更しません
+- データベースの内容やテレメトリをネットワークへ送信してはいけません。アセットとプロジェクトデータはローカルに留めます
+- PNG、JPEG、PDFの出力は現在のrendererから導出し、main processの書き込み境界で範囲を限定します。編集可能なプロジェクト保存データにはしません
 
-## Decision records
+## 判断記録
 
-Changes to layer identity, object kinds, terrain semantics, storage shape, or IPC permissions require updates to [data-model.md](data-model.md) and this document, plus regression tests. UI-only changes may remain in code and tests when these invariants are unchanged.
+レイヤーの識別、オブジェクト種類、地形の意味、保存構造、IPC権限を変更する場合は、[data-model.md](data-model.md)とこの文書を更新し、回帰テストも追加します。
+これらの不変条件が変わらないUIだけの変更は、コードとテストの更新だけで完結できます。

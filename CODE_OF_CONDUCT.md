@@ -1,21 +1,24 @@
-# Code of Conduct
+# 行動規範
 
-Realm aims to be a respectful, practical, and safety-conscious open source project.
+Realmは、相互に敬意を払い、実務的で、安全に配慮したオープンソースプロジェクトを目指します。
 
-## Expected behavior
+## 望ましい行動
 
-- Be respectful and specific when discussing technical disagreements.
-- Keep public discussion focused on reproducible behavior and evidence.
-- Protect private files, locations, credentials, and personal data.
-- Assume project spaces may be read by people outside the immediate discussion.
+- 技術的な意見の相違を議論するときは、相手を尊重し、具体的に説明する
+- 公開の議論は、再現できる挙動と証拠に集中させる
+- 非公開のファイル、場所、認証情報、個人情報を保護する
+- プロジェクトの場は、目の前の議論に参加していない人にも読まれる可能性があると考える
 
-## Unacceptable behavior
+## 許容されない行動
 
-- Harassment, threats, discrimination, personal attacks, or doxxing;
-- publishing another person's private information or map data;
-- posting secrets, credentials, or actionable exploit details publicly;
-- repeated disruptive, fraudulent, or deliberately off-topic activity.
+- 嫌がらせ、脅迫、差別、個人攻撃、晒し行為
+- 他人の非公開情報や地図データの公開
+- 秘密情報、認証情報、実行可能な悪用手順の公開
+- 破壊的、詐欺的、または意図的に話題から外れた行為の反復
 
-## Reporting and enforcement
+## 報告と対応
 
-Do not report security-sensitive details publicly; use [SECURITY.md](SECURITY.md). Other conduct concerns may be sent privately to the project owner through the repository's maintainer contact. The owner may edit, hide, lock, close, or remove content and restrict participation when necessary to keep people and project data safe.
+セキュリティに関わる詳細を公開報告してはいけません。
+[SECURITY.md](SECURITY.md)を使ってください。
+それ以外の行動上の懸念は、リポジトリの保守担当者連絡先を通じて、プロジェクトのオーナーへ非公開で伝えてください。
+オーナーは、人とプロジェクトのデータを安全に保つために必要な場合、投稿の編集、非表示、ロック、クローズ、削除、参加制限を行うことがあります。
