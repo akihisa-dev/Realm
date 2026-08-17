@@ -7,7 +7,7 @@ import { RealmMapAdapter } from "./MapAdapter";
 import type { RealmMapMode } from "./contracts";
 
 const panButtonModes: RealmMapMode[] = [
-  "pan", "cell-select", "grab", "shape", "cell-erase",
+  "pan", "cell-select", "cell-region", "grab", "shape", "cell-erase",
 ];
 
 describe("secondary-button map pan", () => {

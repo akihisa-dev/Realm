@@ -14,7 +14,7 @@ vi.mock("./MapCanvas", () => ({
     strokeRange?: number;
     onCellSelect?: (ids: readonly string[]) => void;
     onMapShapeEdit?: (edit: { shapes: MapShape[] }) => void;
-    onToolChange?: (tool: "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void;
+    onToolChange?: (tool: "grid" | "area" | "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void;
     onRegionColorChange?: (color: string) => void;
     onCreateProject?: () => void;
     createProjectDisabled?: boolean;
@@ -31,7 +31,12 @@ vi.mock("./MapCanvas", () => ({
       <output aria-label="表示中の地形セル">{props.mapShapes?.flatMap((shape) => [...mapShapeCellIds(shape)]).sort().join(",")}</output>
       <output aria-label="選択中の地形セル">{props.selectedCellIds?.join(",")}</output>
       <output aria-label="共有太さ">{props.strokeRange ?? 0}</output>
-      <button type="button" onClick={() => props.onToolChange?.(props.activeLayer === "terrain" ? "terrain" : props.activeLayer === "region" ? "region" : "object")}>描く</button>
+      {props.activeLayer === "object" ? <button type="button" onClick={() => props.onToolChange?.("object")}>描く</button> : <>
+        <button type="button" onClick={() => props.onToolChange?.("grid")}>グリッド描画</button>
+        <button type="button" onClick={() => props.onToolChange?.("area")}>範囲描画</button>
+      </>}
+      <button type="button" onClick={() => props.onToolChange?.("grid")}>テストグリッド描画</button>
+      <button type="button" onClick={() => props.onToolChange?.("area")}>テスト範囲描画</button>
       <button type="button" onClick={() => props.onToolChange?.("erase")}>消す</button>
       <button type="button" onClick={() => props.onToolChange?.(props.activeLayer === "object" ? "select" : "grab")}>掴む</button>
       <button type="button" onClick={() => props.onCellSelect?.(["1:1", "1:2"])}>テストセル描画</button>
@@ -75,6 +80,20 @@ it("keeps the editor shell and layer manager while rendering the three layers", 
   expect(screen.getByRole("region", { name: "世界地図" })).toBeInTheDocument();
 });
 
+it("maps the shared grid and area rail tools to both cell modes", async () => {
+  const backend = new MemoryRealmBackend();
+  await backend.createProject({ path: "browser://shared-cell-tools.realmmap", name: "Shared cell tools" });
+  const snapshot = await backend.getOpenProject();
+  if (!snapshot) throw new Error("snapshot missing");
+  renderEditor(backend, snapshot);
+
+  fireEvent.click(screen.getByRole("button", { name: "テスト範囲描画" }));
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-region");
+  fireEvent.click(screen.getByRole("tab", { name: "領域" }));
+  fireEvent.click(screen.getByRole("button", { name: "テストグリッド描画" }));
+  expect(screen.getByRole("region", { name: "世界地図" })).toHaveAttribute("data-mode", "cell-select");
+});
+
 it("creates a new empty world from the rail and keeps the previous world", async () => {
   const backend = new MemoryRealmBackend();
   const initial = await backend.createProject({ path: "browser://existing.realmmap", name: "Existing" });
@@ -113,14 +132,17 @@ it("switches the active layer and keeps object operations on the object layer", 
   const snapshot = await backend.createProject({ path: "browser://layer-operations.realmmap", name: "Layer operations" });
   renderEditor(backend, snapshot);
 
-  expect(screen.getByRole("button", { name: "描く" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "グリッド描画" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "範囲描画" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "消す" })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("tab", { name: "領域" }));
-  expect(screen.getByRole("button", { name: "描く" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "グリッド描画" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "範囲描画" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "消す" })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("tab", { name: "オブジェクト" }));
+  expect(screen.getByRole("button", { name: "描く" })).toBeInTheDocument();
   expect(screen.getByLabelText("ラベル")).toHaveValue("");
   expect(screen.getByRole("radio", { name: "都市" })).toBeChecked();
   fireEvent.change(screen.getByLabelText("ラベル"), { target: { value: "" } });
@@ -262,12 +284,11 @@ it("keeps logical regions separate and selects them from the panel", async () =>
   ] });
   renderEditor(backend, snapshot);
   fireEvent.click(screen.getByRole("tab", { name: "領域" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: /領域 1 1個の塊・1セル/ })).toBeInTheDocument());
-  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "選択した領域を統合" })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: /領域 1 1個の塊・1セル/ }));
-  expect(screen.getByRole("status", { name: "選択中の地形セル" })).toHaveTextContent("1:1");
-  expect((await backend.getOpenProject())?.layers.regions.map((region) => region.id)).toEqual([firstId, secondId]);
+  await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(2));
+  fireEvent.click(screen.getByRole("checkbox", { name: "領域 1を統合対象にする" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "領域 2を統合対象にする" }));
+  fireEvent.click(screen.getByRole("button", { name: "選択した領域を統合" }));
+  await waitFor(async () => expect((await backend.getOpenProject())?.layers.regions.every((region) => region.id === firstId)).toBe(true));
 });
 
 it("shows optimistic Polygon state while an update is pending and restores it on failure", async () => {

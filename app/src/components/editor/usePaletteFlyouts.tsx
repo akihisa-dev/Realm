@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject, type ReactNode } from "react";
 import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
+import { GridFour } from "@phosphor-icons/react/dist/csr/GridFour";
 import { HandGrabbing } from "@phosphor-icons/react/dist/csr/HandGrabbing";
 import { Magnet } from "@phosphor-icons/react/dist/csr/Magnet";
 import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { PlusCircle } from "@phosphor-icons/react/dist/csr/PlusCircle";
+import { Selection } from "@phosphor-icons/react/dist/csr/Selection";
 import { CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
 import type { LayerId, ObjectKind } from "../../backend";
 
 const REGION_FLYOUT_ID = "map-region-flyout";
 const ERASE_FLYOUT_ID = "map-eraser-flyout";
 const OBJECT_KINDS = ["city", "text", "mountain", "forest"] as const;
+type CellPaintTool = "grid" | "area";
 
 export const REGION_COLORS = [
   "#E45756",
@@ -30,7 +33,7 @@ export type PaletteFlyoutOptions = {
   activeLayer: LayerId;
   strokeRange?: number | undefined;
   regionColor?: string | undefined;
-  onToolChange: ((tool: "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void) | undefined;
+  onToolChange: ((tool: "grid" | "area" | "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void) | undefined;
   onRegionColorChange: ((color: string) => void) | undefined;
   onCreateProject?: (() => void) | undefined;
   createProjectDisabled?: boolean | undefined;
@@ -47,13 +50,13 @@ export type PaletteFlyoutState = {
 export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CELL_PAINT_RANGE_MIN, regionColor, onToolChange, onRegionColorChange, onCreateProject, createProjectDisabled = false }: PaletteFlyoutOptions): PaletteFlyoutState {
   const paletteRef = useRef<HTMLElement>(null);
   const [eraseFlyoutOpen, setEraseFlyoutOpen] = useState(false);
-  const [regionFlyoutOpen, setRegionFlyoutOpen] = useState(false);
+  const [regionFlyoutTool, setRegionFlyoutTool] = useState<CellPaintTool | null>(null);
   const [localRegionColor, setLocalRegionColor] = useState("#7A6FA8");
   const effectiveRegionColor = regionColor ?? localRegionColor;
 
   const closeFlyouts = (): void => {
     setEraseFlyoutOpen(false);
-    setRegionFlyoutOpen(false);
+    setRegionFlyoutTool(null);
   };
 
   useEffect(() => {
@@ -63,7 +66,7 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
     const handlePointerDown = (event: PointerEvent): void => {
       if (!(event.target instanceof window.Node)) return;
       if (paletteRef.current?.contains(event.target)) return;
-      if (!eraseFlyoutOpen && !regionFlyoutOpen) return;
+      if (!eraseFlyoutOpen && regionFlyoutTool === null) return;
       closeFlyouts();
       if (hostRef.current?.contains(event.target)) {
         event.preventDefault();
@@ -76,26 +79,28 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("pointerdown", handlePointerDown, true);
     };
-  }, [eraseFlyoutOpen, hostRef, regionFlyoutOpen]);
+  }, [eraseFlyoutOpen, hostRef, regionFlyoutTool]);
 
   const layerLabel = activeLayer === "terrain" ? "地形" : activeLayer === "region" ? "領域" : "オブジェクト";
-  const selectPaintTool = (event: ReactMouseEvent<HTMLButtonElement>): void => {
-    onToolChange?.(activeLayer === "terrain" ? "terrain" : activeLayer === "region" ? "region" : "object");
-    closeFlyouts();
+  const toggleCellPaintTool = (tool: CellPaintTool, event: ReactMouseEvent<HTMLButtonElement>): void => {
+    onToolChange?.(tool);
+    if (activeLayer === "region") {
+      setRegionFlyoutTool((current) => current === tool ? null : tool);
+      setEraseFlyoutOpen(false);
+    } else closeFlyouts();
     event.stopPropagation();
   };
 
-  const openRegionFlyout = (event: ReactMouseEvent<HTMLButtonElement>): void => {
-    onToolChange?.("region");
-    setRegionFlyoutOpen((current) => !current);
-    setEraseFlyoutOpen(false);
+  const selectObjectDrawTool = (event: ReactMouseEvent<HTMLButtonElement>): void => {
+    onToolChange?.("object");
+    closeFlyouts();
     event.stopPropagation();
   };
 
   const openEraseFlyout = (event: ReactMouseEvent<HTMLButtonElement>): void => {
     onToolChange?.("erase");
     setEraseFlyoutOpen((current) => !current);
-    setRegionFlyoutOpen(false);
+    setRegionFlyoutTool(null);
     event.stopPropagation();
   };
 
@@ -109,53 +114,58 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
     closeFlyouts();
   };
 
-  const drawIsActive = activeLayer === "terrain"
-    ? mode === "cell-select"
-    : activeLayer === "region"
-      ? mode === "cell-region"
-      : OBJECT_KINDS.includes(mode as ObjectKind);
+  const gridIsActive = activeLayer === "object" ? OBJECT_KINDS.includes(mode as ObjectKind) : mode === "cell-select";
+  const areaIsActive = activeLayer !== "object" && mode === "cell-region";
   const eraseIsActive = mode === "cell-erase" || (activeLayer === "object" && mode === "erase");
   const grabIsActive = activeLayer === "object" ? mode === "pan" : mode === "grab";
   const shapeIsActive = activeLayer === "region" && mode === "shape";
+  const regionColorFlyout = (tool: CellPaintTool): ReactNode => activeLayer === "region" && regionFlyoutTool === tool ? (
+    <div id={REGION_FLYOUT_ID} className="tool-flyout tool-flyout-region" role="group" aria-label="領域の色">
+      <span className="tool-flyout-label">領域の色</span>
+      <div className="region-color-options" role="radiogroup" aria-label="領域色の候補">
+        {REGION_COLORS.map((color, index) => (
+          <label className="region-color-option" key={color} title={`領域色 ${index + 1} ${color}`}>
+            <input
+              type="radio"
+              name="map-region-color"
+              value={color}
+              checked={effectiveRegionColor === color}
+              aria-label={`領域色 ${index + 1} ${color}`}
+              onChange={() => { setLocalRegionColor(color); onRegionColorChange?.(color); }}
+            />
+            <span className="region-color-swatch" aria-hidden="true" style={{ backgroundColor: color }} />
+          </label>
+        ))}
+      </div>
+    </div>
+  ) : null;
 
   const toolPalette: ReactNode = (
     <aside ref={paletteRef} className="tool-rail" aria-label="地図ツールレール">
       <div className="tool-rail-tools" role="toolbar" aria-label="地図ツール">
-        <div className="tool-rail-item">
-          <button
-            className={`tool-rail-button${drawIsActive ? " is-active" : ""}`}
-            type="button"
-            aria-label="描く"
-            aria-pressed={drawIsActive}
-            aria-haspopup={activeLayer === "region" ? "true" : undefined}
-            aria-expanded={activeLayer === "region" ? regionFlyoutOpen : undefined}
-            aria-controls={activeLayer === "region" ? REGION_FLYOUT_ID : undefined}
-            title="描く"
-            onClick={activeLayer === "region" ? openRegionFlyout : selectPaintTool}
-          >
-            <PencilSimple aria-hidden="true" size={20} weight="bold" />
-          </button>
-          {activeLayer === "region" && regionFlyoutOpen ? (
-            <div id={REGION_FLYOUT_ID} className="tool-flyout tool-flyout-region" role="group" aria-label="領域の色">
-              <span className="tool-flyout-label">領域の色</span>
-              <div className="region-color-options" role="radiogroup" aria-label="領域色の候補">
-                {REGION_COLORS.map((color, index) => (
-                  <label className="region-color-option" key={color} title={`領域色 ${index + 1} ${color}`}>
-                    <input
-                      type="radio"
-                      name="map-region-color"
-                      value={color}
-                      checked={effectiveRegionColor === color}
-                      aria-label={`領域色 ${index + 1} ${color}`}
-                      onChange={() => { setLocalRegionColor(color); onRegionColorChange?.(color); }}
-                    />
-                    <span className="region-color-swatch" aria-hidden="true" style={{ backgroundColor: color }} />
-                  </label>
-                ))}
-              </div>
+        {activeLayer === "object" ? (
+          <div className="tool-rail-item">
+            <button className={`tool-rail-button${gridIsActive ? " is-active" : ""}`} type="button" aria-label="描く" aria-pressed={gridIsActive} title="描く" onClick={selectObjectDrawTool}>
+              <PencilSimple aria-hidden="true" size={20} weight="bold" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="tool-rail-item">
+              <button className={`tool-rail-button${gridIsActive ? " is-active" : ""}`} type="button" aria-label="グリッド描画" aria-pressed={gridIsActive} aria-haspopup={activeLayer === "region" ? "true" : undefined} aria-expanded={activeLayer === "region" ? regionFlyoutTool === "grid" : undefined} aria-controls={activeLayer === "region" ? REGION_FLYOUT_ID : undefined} title="グリッド描画" onClick={(event) => toggleCellPaintTool("grid", event)}>
+                <GridFour aria-hidden="true" size={20} weight="bold" />
+              </button>
+              {regionColorFlyout("grid")}
             </div>
-          ) : null}
-        </div>
+
+            <div className="tool-rail-item">
+              <button className={`tool-rail-button${areaIsActive ? " is-active" : ""}`} type="button" aria-label="範囲描画" aria-pressed={areaIsActive} aria-haspopup={activeLayer === "region" ? "true" : undefined} aria-expanded={activeLayer === "region" ? regionFlyoutTool === "area" : undefined} aria-controls={activeLayer === "region" ? REGION_FLYOUT_ID : undefined} title="範囲描画" onClick={(event) => toggleCellPaintTool("area", event)}>
+                <Selection aria-hidden="true" size={20} weight="bold" />
+              </button>
+              {regionColorFlyout("area")}
+            </div>
+          </>
+        )}
 
         <div className="tool-rail-item">
           <button

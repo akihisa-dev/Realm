@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ArrowsMerge } from "@phosphor-icons/react/dist/csr/ArrowsMerge";
 import { CaretDown } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CaretRight } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
@@ -14,9 +15,11 @@ export type RegionPanelProps = {
   regionPaintTargetId: string | null;
   disabled?: boolean;
   onSelectRegion: (region: RegionEntry) => void;
+  onSelectionChange: (regionIds: readonly string[]) => void;
   onSelectComponent: (region: RegionEntry, component: RegionComponent) => void;
   onStartNewRegion: () => void;
   onAddToRegion: (region: RegionEntry) => void;
+  onMergeRegions: () => void;
   onSplitComponent: (region: RegionEntry, component: RegionComponent) => void;
   onClose: () => void;
   embedded?: boolean;
@@ -29,15 +32,23 @@ export function RegionPanel({
   regionPaintTargetId,
   disabled = false,
   onSelectRegion,
+  onSelectionChange,
   onSelectComponent,
   onStartNewRegion,
   onAddToRegion,
+  onMergeRegions,
   onSplitComponent,
   onClose,
   embedded = false,
 }: RegionPanelProps) {
   const [expandedRegionIds, setExpandedRegionIds] = useState<Set<string>>(() => new Set());
   const selected = new Set(selectedRegionIds);
+  const toggleSelection = (regionId: string) => {
+    const next = new Set(selected);
+    if (next.has(regionId)) next.delete(regionId);
+    else next.add(regionId);
+    onSelectionChange([...next]);
+  };
   const toggleExpanded = (regionId: string) => {
     setExpandedRegionIds((current) => {
       const next = new Set(current);
@@ -67,6 +78,7 @@ export function RegionPanel({
 
       <div className="object-manager-actions">
         <button type="button" aria-label="新しい領域" title="新しい領域" onClick={onStartNewRegion} disabled={disabled}><PlusCircle aria-hidden="true" size={18} weight="bold" /></button>
+        <button type="button" aria-label="選択した領域を統合" title="選択した領域を統合" onClick={onMergeRegions} disabled={disabled || selectedRegionIds.length < 2}><ArrowsMerge aria-hidden="true" size={18} weight="bold" /></button>
       </div>
 
       <section className="object-manager-section" aria-labelledby="region-panel-heading">
@@ -85,6 +97,7 @@ export function RegionPanel({
               return (
                 <li className={`object-manager-item${isSelected ? " is-selected" : ""}${regionPaintTargetId === region.id ? " is-target" : ""}`} key={region.id}>
                   <div className="object-manager-row">
+                    <input type="checkbox" checked={isSelected} aria-label={`${region.label}を統合対象にする`} onChange={() => toggleSelection(region.id)} disabled={disabled} />
                     <button className="object-manager-object" type="button" aria-pressed={isSelected} onClick={() => onSelectRegion(region)} disabled={disabled}>
                       <span className="object-manager-color" aria-hidden="true" style={{ backgroundColor: region.color }} />
                       <span className="object-manager-object-copy"><strong>{region.label}</strong><small>{region.components.length}個の塊・{region.cellIds.length}セル</small></span>
@@ -109,6 +122,7 @@ export function RegionPanel({
         )}
       </section>
 
+      <p className="object-manager-help">同じ領域に複数の離れた塊をまとめられます。2つ以上を選ぶと、1つの領域として統合できます。</p>
     </section>
   );
 }

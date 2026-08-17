@@ -116,6 +116,32 @@ describe("RealmMapAdapter interactions", () => {
     host.remove();
   });
 
+  it("supports area painting on terrain and grid painting on region", () => {
+    const host = hostFor();
+    const adapter = new RealmMapAdapter({ target: host });
+    const selected = vi.fn();
+    adapter.onCellSelect(selected);
+
+    adapter.setActiveLayer("terrain");
+    adapter.setMode("cell-region");
+    const areaDraw = adapter.getMap().getInteractions().getArray().find((item) => item instanceof Draw) as Draw;
+    const center = cellCenter(10, 10);
+    areaDraw.dispatchEvent({ type: "drawend", feature: new Feature({ geometry: new Polygon([[[center[0] - 4, center[1] - 4], [center[0] + 4, center[1] - 4], [center[0] + 4, center[1] + 4], [center[0] - 4, center[1] + 4], [center[0] - 4, center[1] - 4]]]) }) } as never);
+    expect(selected).toHaveBeenLastCalledWith(expect.arrayContaining(["10:10"]));
+
+    selected.mockClear();
+    adapter.setActiveLayer("region");
+    adapter.setCellPaintRadius(0);
+    adapter.setMode("cell-select");
+    const paint = adapter.getMap().getInteractions().getArray().at(-1) as PointerInteraction;
+    paint.handleEvent({ type: "pointerdown", originalEvent: pointerEvent(), coordinate: center, activePointers: [] } as never);
+    window.dispatchEvent(new MouseEvent("pointerup", { button: 0 }));
+    expect(selected).toHaveBeenLastCalledWith(expect.arrayContaining(["10:10"]));
+
+    adapter.dispose();
+    host.remove();
+  });
+
   it("filters locked and hidden objects, then modifies and erases only editable objects", () => {
     const host = hostFor();
     const adapter = new RealmMapAdapter({ target: host });

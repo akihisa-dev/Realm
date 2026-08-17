@@ -45,7 +45,7 @@ type MapCanvasProps = {
   onSelectObjects?: (objectIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
   onMapShapeEdit?: (edit: MapShapeEdit) => void;
-  onToolChange?: (tool: "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void;
+  onToolChange?: (tool: "grid" | "area" | "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void;
   onObjectKindChange?: (kind: "city" | "text" | "mountain" | "forest") => void;
   onRegionColorChange?: (color: string) => void;
   onCreateProject?: () => void;
@@ -121,7 +121,9 @@ export function MapCanvas({
       : mode === "cell-erase"
       ? `${activeLayer === "terrain" ? "地形" : "領域"}だけを六角セル単位で消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。`
       : mode === "cell-region"
-        ? "自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときは掴むに切り替えます。"
+        ? activeLayer === "region"
+          ? "自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときは掴むに切り替えます。"
+          : "自由線で囲んだ内側の六角セルを地形として塗ります。Escapeで取り消せます。端の大きさを変えるときは掴むに切り替えます。"
       : mode === "shape"
         ? "領域をクリックすると、地形の外にはみ出した部分だけを削り、地形の形に合わせます。ホイールを押したままドラッグすると地図を移動できます。"
       : mode === "grab"

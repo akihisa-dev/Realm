@@ -8,10 +8,12 @@ import type { MapErrorCode } from "./errors";
 import { cellAttributeLayer } from "../shared/realmContract";
 
 type CellAttributesById = ReadonlyMap<string, readonly CellAttributeSnapshot[]>;
+type CellPaintLayer = "terrain" | "region";
 
 export class CellRegionController {
   private readonly animator: CellRegionAnimator;
   private color = "#7A6FA8";
+  private layer: CellPaintLayer = "region";
 
   constructor(
     view: Window | null,
@@ -20,7 +22,8 @@ export class CellRegionController {
     this.animator = new CellRegionAnimator(view);
   }
 
-  createDraw(onSelect: (cellIds: readonly string[]) => void, onError: (code: MapErrorCode) => void): Draw {
+  createDraw(onSelect: (cellIds: readonly string[]) => void, onError: (code: MapErrorCode) => void, layer: CellPaintLayer = "region"): Draw {
+    this.layer = layer;
     return createCellRegionDraw({ style: this.style(this.previewFeature()), onSelect, onError });
   }
 
@@ -47,10 +50,13 @@ export class CellRegionController {
   }
 
   private previewFeature(): Feature {
+    const properties = this.layer === "region"
+      ? { fillColor: this.color, strokeColor: this.color, fillOpacity: 0.18 }
+      : {};
     return new Feature({
-      kind: "region",
+      kind: this.layer,
       label: "",
-      properties: { fillColor: this.color, strokeColor: this.color, fillOpacity: 0.18 },
+      properties,
     });
   }
 }

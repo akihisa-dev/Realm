@@ -515,6 +515,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.draw = this.cellRegion.createDraw(
         (cellIds) => { for (const listener of this.cellSelectListeners) listener(cellIds); },
         (code) => { for (const listener of this.errorListeners) listener(code); },
+        this.activeLayer === "terrain" ? "terrain" : "region",
       );
       this.map.addInteraction(this.draw);
       return;

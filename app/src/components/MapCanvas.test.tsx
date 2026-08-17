@@ -62,10 +62,10 @@ describe("MapCanvas", () => {
     expect(map).toHaveClass("map-canvas-mode-cell-region", "map-canvas-draw");
     expect(map.parentElement).toHaveClass("map-canvas-frame");
     expect(screen.getByText("自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときは掴むに切り替えます。")).toBeInTheDocument();
-    const regionButton = screen.getByRole("button", { name: "描く" });
+    const regionButton = screen.getByRole("button", { name: "範囲描画" });
     expect(regionButton).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(regionButton);
-    expect(onToolChange).toHaveBeenCalledWith("region");
+    expect(onToolChange).toHaveBeenCalledWith("area");
     expect(screen.getByRole("group", { name: "領域の色" })).toBeInTheDocument();
     const colors = screen.getAllByRole("radio");
     expect(colors).toHaveLength(10);
@@ -92,15 +92,16 @@ describe("MapCanvas", () => {
     expect(onMapPointerDown).toHaveBeenCalledOnce();
   });
 
-  it("renders a fixed icon-only rail with draw, erase, and grab", () => {
+  it("renders a fixed icon-only rail with grid, area, erase, and grab", () => {
     const renderer = createPaletteRenderer();
     render(<MapCanvas onZoomChange={vi.fn()} createRenderer={() => renderer} />);
 
     const palette = screen.getByRole("complementary", { name: "地図ツールレール" });
     expect(palette).toHaveClass("tool-rail");
-    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-rail-button"))).toHaveLength(4);
-    expect(palette.querySelectorAll(".tool-rail-tools .tool-rail-button > svg")).toHaveLength(3);
-    expect(screen.getByRole("button", { name: "描く" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-rail-button"))).toHaveLength(5);
+    expect(palette.querySelectorAll(".tool-rail-tools .tool-rail-button > svg")).toHaveLength(4);
+    expect(screen.getByRole("button", { name: "グリッド描画" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "範囲描画" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "消す" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "掴む" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "新規作成" })).toBeDisabled();
@@ -116,7 +117,7 @@ describe("MapCanvas", () => {
     const renderer = createPaletteRenderer();
     render(<MapCanvas activeLayer="region" mode="cell-region" onZoomChange={vi.fn()} createRenderer={() => renderer} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "描く" }));
+    fireEvent.click(screen.getByRole("button", { name: "グリッド描画" }));
     expect(screen.getAllByRole("radio")).toHaveLength(10);
 
     fireEvent.click(screen.getByRole("button", { name: "消す" }));
@@ -156,6 +157,7 @@ describe("MapCanvas", () => {
     expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-rail-button"))).toHaveLength(4);
     fireEvent.click(screen.getByRole("button", { name: "掴む" }));
     expect(onToolChange).toHaveBeenCalledWith("select");
+    expect(screen.getByRole("button", { name: "描く" })).toBeInTheDocument();
   });
 
   it("renders the controlled renderer preview without map-frame controls", () => {
@@ -327,15 +329,15 @@ describe("MapCanvas", () => {
     expect(map).not.toHaveClass("map-canvas-disabled");
     const palette = screen.getByRole("complementary", { name: "地図ツールレール" });
     expect(palette).toHaveClass("tool-rail");
-    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-rail-button"))).toHaveLength(4);
+    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-rail-button"))).toHaveLength(5);
     fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
     expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "消す" }).querySelector("svg")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "描く" }).querySelector("svg")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "グリッド描画" }).querySelector("svg")).toBeInTheDocument();
     expect(screen.getByRole("toolbar", { name: "地図ツール" })).toBeInTheDocument();
     const onMapPointerDown = vi.fn();
     map.addEventListener("pointerdown", onMapPointerDown);
-    const terrainButton = screen.getByRole("button", { name: "描く" });
+    const terrainButton = screen.getByRole("button", { name: "グリッド描画" });
     fireEvent.pointerEnter(terrainButton);
     expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
     fireEvent.click(terrainButton);
@@ -433,7 +435,7 @@ describe("MapCanvas", () => {
     const eraseFlyout = screen.getByRole("group", { name: "消す対象" });
     expect(eraseFlyout).toHaveClass("tool-flyout-erase");
     expect(screen.getByRole("status", { name: "削除対象" })).toHaveTextContent("領域だけ");
-    expect(screen.getByRole("button", { name: "描く" })).toHaveAttribute("aria-label", "描く");
+    expect(screen.getByRole("button", { name: "グリッド描画" })).toHaveAttribute("aria-label", "グリッド描画");
     expect(screen.queryAllByRole("radio")).toHaveLength(0);
   });
 });

@@ -12,9 +12,11 @@ const regions = deriveRegionEntries([
 const renderManager = () => {
   const callbacks = {
     onSelectRegion: vi.fn(),
+    onSelectionChange: vi.fn(),
     onSelectComponent: vi.fn(),
     onStartNewRegion: vi.fn(),
     onAddToRegion: vi.fn(),
+    onMergeRegions: vi.fn(),
     onSplitComponent: vi.fn(),
     onClose: vi.fn(),
   };
@@ -32,19 +34,17 @@ describe("RegionPanel", () => {
     expect(screen.getByRole("button", { name: "領域 1の塊1を分離" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "領域 1の塊2を分離" })).toBeInTheDocument();
 
-    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "選択した領域を統合" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /領域 1 2個の塊・3セル/ }));
-    expect(callbacks.onSelectRegion).toHaveBeenCalledWith(regions[0]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "領域 1を統合対象にする" }));
+    expect(callbacks.onSelectionChange).toHaveBeenCalledWith([regionId]);
     fireEvent.click(screen.getByRole("button", { name: "領域 1に領域を追加" }));
     expect(callbacks.onAddToRegion).toHaveBeenCalledWith(regions[0]);
   });
 
   it("disables every region selection control while editing is locked", () => {
-    render(<RegionPanel regions={regions} selectedRegionIds={[]} selectedComponentId={null} regionPaintTargetId={null} disabled onSelectRegion={vi.fn()} onSelectComponent={vi.fn()} onStartNewRegion={vi.fn()} onAddToRegion={vi.fn()} onSplitComponent={vi.fn()} onClose={vi.fn()} />);
+    render(<RegionPanel regions={regions} selectedRegionIds={[]} selectedComponentId={null} regionPaintTargetId={null} disabled onSelectRegion={vi.fn()} onSelectionChange={vi.fn()} onSelectComponent={vi.fn()} onStartNewRegion={vi.fn()} onAddToRegion={vi.fn()} onMergeRegions={vi.fn()} onSplitComponent={vi.fn()} onClose={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: /領域 1 2個の塊・3セル/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "領域 1の塊を表示する" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "新しい領域" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "領域 1を統合対象にする" })).toBeDisabled();
   });
 });
