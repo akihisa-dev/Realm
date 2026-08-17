@@ -5,6 +5,7 @@ import { CaretRight } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { Plus } from "@phosphor-icons/react/dist/csr/Plus";
 import { PlusCircle } from "@phosphor-icons/react/dist/csr/PlusCircle";
 import { Scissors } from "@phosphor-icons/react/dist/csr/Scissors";
+import { Magnet } from "@phosphor-icons/react/dist/csr/Magnet";
 import { X } from "@phosphor-icons/react/dist/csr/X";
 import type { RegionComponent, RegionEntry } from "./regionObjects";
 
@@ -21,6 +22,7 @@ export type RegionPanelProps = {
   onAddToRegion: (region: RegionEntry) => void;
   onMergeRegions: () => void;
   onSplitComponent: (region: RegionEntry, component: RegionComponent) => void;
+  onShapeSelectedRegion?: () => void;
   onClose: () => void;
   embedded?: boolean;
 };
@@ -38,6 +40,7 @@ export function RegionPanel({
   onAddToRegion,
   onMergeRegions,
   onSplitComponent,
+  onShapeSelectedRegion,
   onClose,
   embedded = false,
 }: RegionPanelProps) {
@@ -79,6 +82,7 @@ export function RegionPanel({
       <div className="object-manager-actions">
         <button type="button" aria-label="新しい領域" title="新しい領域" onClick={onStartNewRegion} disabled={disabled}><PlusCircle aria-hidden="true" size={18} weight="bold" /></button>
         <button type="button" aria-label="選択した領域を統合" title="選択した領域を統合" onClick={onMergeRegions} disabled={disabled || selectedRegionIds.length < 2}><ArrowsMerge aria-hidden="true" size={18} weight="bold" /></button>
+        <button type="button" aria-label="選択した領域を地形に合わせる" title="選択した領域を地形に合わせる" onClick={onShapeSelectedRegion} disabled={disabled || selectedRegionIds.length === 0}><Magnet aria-hidden="true" size={18} weight="bold" /></button>
       </div>
 
       <section className="object-manager-section" aria-labelledby="region-panel-heading">

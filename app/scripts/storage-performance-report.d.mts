@@ -1,6 +1,6 @@
 export type StorageBaseline = {
   reportVersion: 1;
-  schemaVersion: 12;
+  schemaVersion: 13;
   fixture: { objects: number; shapes: number };
   samples: { warmup: number; repetitions: number };
   limitsMs: Record<string, number>;

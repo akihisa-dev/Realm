@@ -1,8 +1,8 @@
 # Electron保存処理の特性確認
 
 このディレクトリでは、Electronの保存処理とrendererが満たすべき観測可能な契約を固定します。
-`migrationInventory.ts`は過去のテスト参照を証拠として保持し、現在の実装はschema 12のSQLiteテストとrendererテストで特性を確認します。
-`migrationSnapshot.ts`は、合成したschema 12のgolden snapshotを決定的に比較します。
+`migrationInventory.ts`は過去のテスト参照を証拠として保持し、現在の実装はschema 13のSQLiteテストとrendererテストで特性を確認します。
+`migrationSnapshot.ts`は、合成したschema 13のgolden snapshotを決定的に比較します。
 SQLiteの行順とJSONオブジェクトのキー順は結果に影響しません。
 レイヤー比較が成功してもソースの変更を見落とさないよう、ソースハッシュとsidecarの同一性は別に比較します。
 

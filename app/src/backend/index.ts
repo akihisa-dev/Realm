@@ -14,7 +14,12 @@ export type {
   Region,
   MapObject,
   ObjectKind,
+  ContentKind,
+  ActiveKind,
   LayerId,
+  LayerNode,
+  LayerNodeKind,
+  LayerTree,
   RealmLayers,
   DeleteAssetsBatchInput,
   AssetManifest,
@@ -32,9 +37,12 @@ export type {
   ReplaceTerrainLayerInput,
   ReplaceRegionLayerInput,
   ReplaceObjectLayerInput,
+  ReplaceLayerTreeInput,
+  ReplaceMapContentInput,
   SaveProjectInput,
   World,
 } from "./types";
+export { contentKindOf } from "./types";
 export { MemoryRealmBackend } from "./memoryRealmBackend";
 
 type RealmWindow = Window & { realmApi?: ElectronRealmApi };

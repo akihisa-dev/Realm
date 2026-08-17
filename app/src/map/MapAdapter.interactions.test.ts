@@ -14,6 +14,7 @@ import { unionMapShapeGeometries } from "../shared/mapShapeGeometry";
 
 const object = (id: string, coordinates: [number, number], locked = false): MapObject => ({
   id,
+  layerId: OBJECT_LAYER,
   kind: "city",
   label: id,
   geometry: { type: "Point", coordinates },
@@ -29,6 +30,15 @@ const hostFor = (): HTMLDivElement => {
   document.body.append(host);
   return host;
 };
+const TERRAIN_LAYER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const REGION_LAYER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const OBJECT_LAYER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const layerTree = { nodes: [
+  { id: TERRAIN_LAYER, parentId: null, kind: "leaf" as const, name: "Terrain", order: 0, visible: true, locked: false },
+  { id: REGION_LAYER, parentId: null, kind: "leaf" as const, name: "Region", order: 1, visible: true, locked: false },
+  { id: OBJECT_LAYER, parentId: null, kind: "leaf" as const, name: "Object", order: 2, visible: true, locked: false },
+] };
+const createAdapter = (host: HTMLDivElement): RealmMapAdapter => { const adapter = new RealmMapAdapter({ target: host }); adapter.setLayerTree(layerTree); return adapter; };
 
 const pointerEvent = (button = 0): MouseEvent => {
   const event = new MouseEvent("pointerdown", { button, bubbles: true });
@@ -39,6 +49,7 @@ const pointerEvent = (button = 0): MouseEvent => {
 const shape = (id: string, layer: "terrain" | "region", coordinates: [number, number][], regionId?: string): MapShape => ({
   id,
   layer,
+  layerId: layer === "terrain" ? TERRAIN_LAYER : REGION_LAYER,
   ...(regionId ? { regionId } : {}),
   value: layer === "terrain" ? "terrain" : "#2468AC",
   geometryVersion: 1,
@@ -53,7 +64,7 @@ describe("RealmMapAdapter interactions", () => {
     const cellLayer = adapter.getMap().getLayers().item(2) as VectorLayer;
     const center = cellCenter(10, 10);
 
-    adapter.setActiveLayer("terrain");
+    adapter.setActiveLayer(TERRAIN_LAYER); adapter.setActiveKind("terrain");
     adapter.setMode("cell-select");
     adapter.getMap().dispatchEvent({ type: "pointermove", coordinate: center } as never);
     const painted = cellLayer.getSource()?.getFeatureById("10:10");
@@ -74,9 +85,10 @@ describe("RealmMapAdapter interactions", () => {
   it("commits a cell stroke when the pointer leaves the canvas", () => {
     const host = hostFor();
     const adapter = new RealmMapAdapter({ target: host });
+    adapter.setLayerTree(layerTree);
     const selected = vi.fn();
     adapter.onCellSelect(selected);
-    adapter.setActiveLayer("terrain");
+    adapter.setActiveLayer(TERRAIN_LAYER); adapter.setActiveKind("terrain");
     adapter.setMode("cell-select");
     const paint = adapter.getMap().getInteractions().getArray().at(-1) as PointerInteraction;
     const center = cellCenter(10, 10);
@@ -89,10 +101,10 @@ describe("RealmMapAdapter interactions", () => {
 
   it("fills cells skipped by sparse pointer events during a fast stroke", () => {
     const host = hostFor();
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const selected = vi.fn();
     adapter.onCellSelect(selected);
-    adapter.setActiveLayer("terrain");
+    adapter.setActiveLayer(TERRAIN_LAYER); adapter.setActiveKind("terrain");
     adapter.setCellPaintRadius(0);
     adapter.setMode("cell-select");
     const paint = adapter.getMap().getInteractions().getArray().at(-1) as PointerInteraction;
@@ -118,11 +130,11 @@ describe("RealmMapAdapter interactions", () => {
 
   it("supports area painting on terrain and grid painting on region", () => {
     const host = hostFor();
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const selected = vi.fn();
     adapter.onCellSelect(selected);
 
-    adapter.setActiveLayer("terrain");
+    adapter.setActiveLayer(TERRAIN_LAYER); adapter.setActiveKind("terrain");
     adapter.setMode("cell-region");
     const areaDraw = adapter.getMap().getInteractions().getArray().find((item) => item instanceof Draw) as Draw;
     const center = cellCenter(10, 10);
@@ -130,7 +142,7 @@ describe("RealmMapAdapter interactions", () => {
     expect(selected).toHaveBeenLastCalledWith(expect.arrayContaining(["10:10"]));
 
     selected.mockClear();
-    adapter.setActiveLayer("region");
+    adapter.setActiveLayer(REGION_LAYER); adapter.setActiveKind("region");
     adapter.setCellPaintRadius(0);
     adapter.setMode("cell-select");
     const paint = adapter.getMap().getInteractions().getArray().at(-1) as PointerInteraction;
@@ -144,11 +156,11 @@ describe("RealmMapAdapter interactions", () => {
 
   it("filters locked and hidden objects, then modifies and erases only editable objects", () => {
     const host = hostFor();
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const selected = vi.fn();
     const modified = vi.fn();
     const erased = vi.fn();
-    adapter.setActiveLayer("object");
+    adapter.setActiveLayer(OBJECT_LAYER); adapter.setActiveKind("city");
     adapter.setObjects([object("open", [0, 0]), object("locked", [1, 1], true), object("hidden", [2, 2])]);
     adapter.onSelectObjects(selected);
     adapter.onModifyObjects(modified);
@@ -176,10 +188,10 @@ describe("RealmMapAdapter interactions", () => {
 
   it("nudges selected objects and reports a bounded-world error", () => {
     const host = hostFor();
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const modified = vi.fn();
     const errors = vi.fn();
-    adapter.setActiveLayer("object");
+    adapter.setActiveLayer(OBJECT_LAYER); adapter.setActiveKind("city");
     adapter.setObjects([object("open", [0, 0]), object("locked", [1, 1], true)]);
     adapter.setSelectedObjects(["open", "locked"]);
     adapter.onModifyObjects(modified);
@@ -199,10 +211,10 @@ describe("RealmMapAdapter interactions", () => {
 
   it("draws object geometry with the selected layer and applies drawing options", () => {
     const host = hostFor();
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const drawn = vi.fn();
     const errors = vi.fn();
-    adapter.setActiveLayer("object");
+    adapter.setActiveLayer(OBJECT_LAYER); adapter.setActiveKind("city");
     adapter.onDraw(drawn);
     adapter.onError(errors);
     adapter.setDrawingOptions({ gesture: "vertices", smoothingPasses: 0, snapAngleDegrees: 45 });
@@ -219,10 +231,10 @@ describe("RealmMapAdapter interactions", () => {
 
   it("uses the region-only enclosure tool and never creates an object", () => {
     const host = hostFor();
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const selected = vi.fn();
     const drawn = vi.fn();
-    adapter.setActiveLayer("region");
+    adapter.setActiveLayer(REGION_LAYER); adapter.setActiveKind("region");
     adapter.onCellSelect(selected);
     adapter.onDraw(drawn);
     adapter.setMode("cell-region");
@@ -237,9 +249,9 @@ describe("RealmMapAdapter interactions", () => {
 
   it("selects objects with a modifier lasso and supports additive selection", () => {
     const host = hostFor();
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const selected = vi.fn();
-    adapter.setActiveLayer("object");
+    adapter.setActiveLayer(OBJECT_LAYER); adapter.setActiveKind("city");
     adapter.setObjects([object("inside", [0, 0]), object("outside", [4, 4])]);
     adapter.onSelectObjects(selected);
     const lasso = adapter.getMap().getInteractions().getArray().at(-1) as PointerInteraction;
@@ -265,7 +277,7 @@ describe("RealmMapAdapter interactions", () => {
 
   it("moves canonical shapes with grab and clips regions with shaping", () => {
     const host = hostFor();
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const edited = vi.fn();
     adapter.onMapShapeEdit(edited);
     const terrainPolygon = cellPolygon(10, 10)!;
@@ -274,7 +286,7 @@ describe("RealmMapAdapter interactions", () => {
     const regionPolygon = unionMapShapeGeometries([{ type: "Polygon", coordinates: [terrainPolygon] }, { type: "Polygon", coordinates: [adjacentPolygon] }])[0]!;
     const region = { ...shape("region-shape", "region", regionPolygon.coordinates[0]!, "region-a"), geometry: regionPolygon };
     adapter.setMapShapes([terrain]);
-    adapter.setActiveLayer("terrain");
+    adapter.setActiveLayer(TERRAIN_LAYER); adapter.setActiveKind("terrain");
     adapter.setMode("grab");
     const grab = adapter.getMap().getInteractions().getArray().at(-1) as PointerInteraction;
     const grabMethods = grab as unknown as { handleDownEvent: (event: unknown) => boolean; handleDragEvent: (event: unknown) => void; handleUpEvent: (event: unknown) => boolean };
@@ -284,7 +296,7 @@ describe("RealmMapAdapter interactions", () => {
 
     edited.mockClear();
     adapter.setMapShapes([terrain, region]);
-    adapter.setActiveLayer("region");
+    adapter.setActiveLayer(REGION_LAYER); adapter.setActiveKind("region");
     adapter.setMode("shape");
     const regionShape = adapter.getMap().getInteractions().getArray().at(-1) as PointerInteraction;
     const shapeMethods = regionShape as unknown as { handleDownEvent: (event: unknown) => boolean; handleUpEvent: (event: unknown) => boolean };
@@ -297,8 +309,8 @@ describe("RealmMapAdapter interactions", () => {
 
   it("validates drawing options and handles temporary navigation shortcuts", () => {
     const host = hostFor();
-    const adapter = new RealmMapAdapter({ target: host });
-    adapter.setActiveLayer("object");
+    const adapter = createAdapter(host);
+    adapter.setActiveLayer(OBJECT_LAYER); adapter.setActiveKind("city");
     expect(() => adapter.setDrawingOptions({ gesture: "invalid" as never, smoothingPasses: 0, snapAngleDegrees: null })).toThrow("drawing_gesture");
     expect(() => adapter.setDrawingOptions({ gesture: "freehand", smoothingPasses: -1, snapAngleDegrees: null })).toThrow("drawing_smoothing");
     expect(() => adapter.setDrawingOptions({ gesture: "freehand", smoothingPasses: 0, snapAngleDegrees: 0 })).toThrow("drawing_angle");

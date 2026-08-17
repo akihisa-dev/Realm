@@ -262,6 +262,7 @@ export const createObjectStyle = (
   return (feature: FeatureLike): Style | Style[] | undefined => {
     const type = feature.get("kind") as StyleKind | undefined;
     if (!isVisible(type)) return undefined;
+    if (feature.get("layerVisible") === false) return undefined;
     if ((feature.get("properties") as Record<string, unknown> | undefined)?.visible === false) return undefined;
     const rawName = feature.get("label");
     const name = typeof rawName === "string" ? rawName : "";

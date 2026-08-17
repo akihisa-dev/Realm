@@ -7,7 +7,7 @@ import {
   type RealmMapRenderer,
   type RealmMapRendererFactory,
 } from "../map/MapAdapter";
-import type { CellAttributeSnapshot, GeoJsonGeometry, LayerId, MapObject, MapShape, MapShapeEdit } from "../backend";
+import type { ActiveKind, CellAttributeSnapshot, GeoJsonGeometry, LayerId, LayerTree, MapObject, MapShape, MapShapeEdit } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { ExportCanvasSize } from "../map/contracts";
 import type { MapErrorCode } from "../map/errors";
@@ -23,6 +23,8 @@ type MapCanvasProps = {
   zoom?: number;
   objects?: MapObject[];
   activeLayer?: LayerId;
+  activeKind?: ActiveKind;
+  layerTree?: LayerTree;
   mode?: TerrainMapMode;
   strokeRange?: number;
   /** Prevents the mode cursor from suggesting an available editing action. */
@@ -66,6 +68,8 @@ export function MapCanvas({
   zoom,
   objects = [],
   activeLayer = "terrain",
+  activeKind = activeLayer === "terrain" || activeLayer === "region" ? activeLayer : "terrain",
+  layerTree,
   mode = "pan",
   strokeRange,
   disabled = false,
@@ -111,7 +115,7 @@ export function MapCanvas({
     eraseRadius,
     toolPalette,
     regionColor: paletteRegionColor,
-  } = usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange, regionColor, onToolChange, onRegionColorChange, onCreateProject, createProjectDisabled });
+  } = usePaletteFlyouts({ hostRef, mode, activeLayer, activeKind, strokeRange, regionColor, onToolChange, onRegionColorChange, onCreateProject, createProjectDisabled });
   const effectivePaintRadius = mode === "cell-select" ? strokeRadius : 0;
   const effectiveRegionColor = regionColor ?? paletteRegionColor;
   const mapHelp = isPreview
@@ -119,9 +123,9 @@ export function MapCanvas({
     : mode === "pan"
     ? "ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
       : mode === "cell-erase"
-      ? `${activeLayer === "terrain" ? "地形" : "領域"}だけを六角セル単位で消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。`
+      ? `${activeKind === "terrain" ? "地形" : "領域"}だけを六角セル単位で消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。`
       : mode === "cell-region"
-        ? activeLayer === "region"
+        ? activeKind === "region"
           ? "自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときは掴むに切り替えます。"
           : "自由線で囲んだ内側の六角セルを地形として塗ります。Escapeで取り消せます。端の大きさを変えるときは掴むに切り替えます。"
       : mode === "shape"
@@ -139,6 +143,8 @@ export function MapCanvas({
     adapterRef,
     objects,
     activeLayer,
+    activeKind,
+    ...(layerTree ? { layerTree } : {}),
     themeId,
     themeOverrides,
     showGrid,
@@ -164,6 +170,8 @@ export function MapCanvas({
     zoom,
     objects,
     activeLayer,
+    activeKind,
+    ...(layerTree ? { layerTree } : {}),
     themeId,
     themeOverrides,
     showGrid,

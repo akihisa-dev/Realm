@@ -19,7 +19,7 @@ export const migrationInventory = [
   {
     id: "schema12-layer-storage",
     area: "storage",
-    observable: "Schema versions before 12 are rejected without mutation; schema 12 stores terrain, region, and object layers in separate tables.",
+    observable: "Schema versions before 13 are rejected without mutation; schema 13 stores a user-facing layer tree and keeps terrain, region, and object content in separate typed tables.",
     baselineEvidence: [
       "schema_11_creates_map_shapes_without_cell_attributes",
       "schema_11_round_trips_polygon_geometry_and_shape_ids",

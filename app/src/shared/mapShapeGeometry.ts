@@ -9,7 +9,7 @@ const EPSILON = 1e-8;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
 type Cell = { row: number; column: number };
-type CellGroup = { layer: MapShapeLayer; value: string; regionId?: string; cells: Set<string> };
+type CellGroup = { layer: MapShapeLayer; layerId?: string; value: string; regionId?: string; cells: Set<string> };
 
 const cellId = ({ row, column }: Cell): string => `${column}:${row}`;
 const parseCellId = (value: string): Cell | null => {
@@ -398,8 +398,8 @@ export const normalizeMapShapes = (shapes: readonly MapShape[]): MapShape[] => {
     if (!geometryIsWithinWorld(shape.geometry)) throw new Error("形状を地図の範囲外へ移動できません。");
     const cells = geometryCellIds(shape.geometry);
     if (cells.size === 0) throw new Error("形状にグリッドセルがありません。");
-    const key = `${shape.layer}:${shape.regionId ?? ""}:${shape.value}`;
-    const group = groups.get(key) ?? { layer: shape.layer, value: shape.value, ...(shape.regionId ? { regionId: shape.regionId } : {}), cells: new Set<string>() };
+    const key = `${shape.layer}:${shape.layerId ?? ""}:${shape.regionId ?? ""}:${shape.value}`;
+    const group = groups.get(key) ?? { layer: shape.layer, ...(shape.layerId ? { layerId: shape.layerId } : {}), value: shape.value, ...(shape.regionId ? { regionId: shape.regionId } : {}), cells: new Set<string>() };
     for (const cell of cells) group.cells.add(cell);
     groups.set(key, group);
   }
@@ -494,6 +494,7 @@ const validateGeometry = (geometry: MapShapeGeometry): Set<string> => {
 export const validateMapShape = (shape: MapShape): Set<string> => {
   if (!shape || typeof shape !== "object" || !UUID_PATTERN.test(shape.id)) throw new Error("形状IDが不正です。");
   if (shape.layer !== "terrain" && shape.layer !== "region") throw new Error("形状レイヤーが不正です。");
+  if (shape.layerId !== undefined && !UUID_PATTERN.test(shape.layerId)) throw new Error("所属layerが不正です。");
   if (!Number.isInteger(shape.geometryVersion) || shape.geometryVersion !== MAP_SHAPE_GEOMETRY_VERSION || !Number.isInteger(shape.snapGridVersion) || shape.snapGridVersion !== MAP_SHAPE_GRID_VERSION) throw new Error("形状バージョンが不正です。");
   if (shape.layer === "terrain" && (shape.regionId !== undefined || shape.value !== "terrain")) throw new Error("地形形状の属性が不正です。");
   if (shape.layer === "region" && (!shape.regionId || !UUID_PATTERN.test(shape.regionId) || !/^#[\da-f]{6}$/iu.test(shape.value))) throw new Error("領域形状の属性が不正です。");
@@ -503,7 +504,7 @@ export const validateMapShape = (shape: MapShape): Set<string> => {
 export const validateMapShapes = (shapes: readonly MapShape[]): void => {
   if (!Array.isArray(shapes) || shapes.length > 4096) throw new Error("形状の件数が不正です。");
   const ids = new Set<string>();
-  const occupied = new Map<MapShapeLayer, Set<string>>([['terrain', new Set()], ['region', new Set()]]);
+  const occupied = new Map<string, Set<string>>();
   const regionValues = new Map<string, string>();
   const validatedShapes: { shape: MapShape; cells: Set<string> }[] = [];
   for (const shape of shapes) {
@@ -511,18 +512,21 @@ export const validateMapShapes = (shapes: readonly MapShape[]): void => {
     ids.add(shape.id);
     const cells = validateMapShape(shape);
     if (shape.layer === "region") {
-      const previous = regionValues.get(shape.regionId!);
+      const regionKey = `${shape.layerId ?? ""}:${shape.regionId!}`;
+      const previous = regionValues.get(regionKey);
       if (previous !== undefined && previous !== shape.value) throw new Error("同じ領域IDに複数の色を設定できません。");
-      regionValues.set(shape.regionId!, shape.value);
+      regionValues.set(regionKey, shape.value);
     }
-    const layerCells = occupied.get(shape.layer)!;
+    const layerKey = `${shape.layer}:${shape.layerId ?? ""}`;
+    const layerCells = occupied.get(layerKey) ?? new Set<string>();
+    occupied.set(layerKey, layerCells);
     for (const cell of cells) if (layerCells.has(cell)) throw new Error("同じレイヤーの形状を重ねることはできません。");
     for (const cell of cells) layerCells.add(cell);
     validatedShapes.push({ shape, cells });
   }
   const identityGroups = new Map<string, { shapeCount: number; cells: Set<string> }>();
   for (const { shape, cells } of validatedShapes) {
-    const key = `${shape.layer}:${shape.regionId ?? ""}:${shape.value}`;
+    const key = `${shape.layer}:${shape.layerId ?? ""}:${shape.regionId ?? ""}:${shape.value}`;
     const group = identityGroups.get(key) ?? { shapeCount: 0, cells: new Set<string>() };
     group.shapeCount += 1;
     for (const cell of cells) group.cells.add(cell);
@@ -623,7 +627,7 @@ const shapesFromGroups = (groups: readonly CellGroup[], existing: readonly MapSh
   const result: MapShape[] = [];
   for (const group of groups) {
     for (const component of connectedComponents(group.cells)) {
-      const candidates = parts.filter(({ shape }) => !usedIds.has(shape.id) && shape.layer === group.layer && shape.value === group.value && shape.regionId === group.regionId)
+      const candidates = parts.filter(({ shape }) => !usedIds.has(shape.id) && shape.layer === group.layer && shape.layerId === group.layerId && shape.value === group.value && shape.regionId === group.regionId)
         .map((part) => ({ ...part, overlap: [...component].filter((cell) => part.cells.has(cell)).length }))
         .filter((candidate) => candidate.overlap > 0)
         .sort((a, b) => b.overlap - a.overlap || a.shape.id.localeCompare(b.shape.id));
@@ -632,7 +636,7 @@ const shapesFromGroups = (groups: readonly CellGroup[], existing: readonly MapSh
         : undefined;
       const id = candidates[0]?.shape.id ?? newId();
       usedIds.add(id);
-      result.push({ id, layer: group.layer, ...(group.regionId ? { regionId: group.regionId } : {}), value: group.value, geometryVersion: MAP_SHAPE_GEOMETRY_VERSION, snapGridVersion: MAP_SHAPE_GRID_VERSION, geometry: unchanged?.shape.geometry ?? geometryForCells(component) });
+      result.push({ id, layer: group.layer, ...(group.layerId ? { layerId: group.layerId } : {}), ...(group.regionId ? { regionId: group.regionId } : {}), value: group.value, geometryVersion: MAP_SHAPE_GEOMETRY_VERSION, snapGridVersion: MAP_SHAPE_GRID_VERSION, geometry: unchanged?.shape.geometry ?? geometryForCells(component) });
     }
   }
   return result.sort((a, b) => a.layer.localeCompare(b.layer) || (a.regionId ?? "").localeCompare(b.regionId ?? "") || a.id.localeCompare(b.id));
@@ -641,8 +645,8 @@ const shapesFromGroups = (groups: readonly CellGroup[], existing: readonly MapSh
 const groupsFromShapes = (shapes: readonly MapShape[]): CellGroup[] => {
   const groups = new Map<string, CellGroup>();
   for (const shape of shapes) {
-    const key = `${shape.layer}:${shape.regionId ?? ""}:${shape.value}`;
-    const group = groups.get(key) ?? { layer: shape.layer, value: shape.value, ...(shape.regionId ? { regionId: shape.regionId } : {}), cells: new Set<string>() };
+    const key = `${shape.layer}:${shape.layerId ?? ""}:${shape.regionId ?? ""}:${shape.value}`;
+    const group = groups.get(key) ?? { layer: shape.layer, ...(shape.layerId ? { layerId: shape.layerId } : {}), value: shape.value, ...(shape.regionId ? { regionId: shape.regionId } : {}), cells: new Set<string>() };
     for (const cell of mapShapeCellIds(shape)) group.cells.add(cell);
     groups.set(key, group);
   }
@@ -653,6 +657,7 @@ export const deriveMapGridCells = (shapes: readonly MapShape[]) => groupsFromSha
   .sort((first, second) => (first.layer === second.layer ? (first.regionId ?? "").localeCompare(second.regionId ?? "") || first.value.localeCompare(second.value) : first.layer === "terrain" ? -1 : 1))
   .flatMap((group) => [...group.cells].sort().map((cellIdValue) => ({
     cellId: cellIdValue,
+    ...(group.layerId ? { layerId: group.layerId } : {}),
     layer: group.layer,
     /** @deprecated Keep the renderer projection available to old adapters. */
     attribute: group.layer,
@@ -660,7 +665,7 @@ export const deriveMapGridCells = (shapes: readonly MapShape[]) => groupsFromSha
     ...(group.regionId ? { regionId: group.regionId } : {}),
   })));
 
-export type MapGridSelectionInput = { cellIds: readonly string[]; layer: "terrain" | "region"; value: string | null; regionId?: string; clearRegion?: boolean };
+export type MapGridSelectionInput = { cellIds: readonly string[]; layer: "terrain" | "region"; layerId?: string; value: string | null; regionId?: string; clearRegion?: boolean };
 export const applyGridSelectionToMapShapes = (shapes: readonly MapShape[], input: MapGridSelectionInput): MapShape[] => {
   const selected = new Set(input.cellIds.flatMap((id) => {
     const cell = parseCellId(id);
@@ -669,19 +674,19 @@ export const applyGridSelectionToMapShapes = (shapes: readonly MapShape[], input
   if (selected.size === 0) throw new Error("セルを選択してください。");
   const groups = groupsFromShapes(shapes);
   if (input.layer === "terrain") {
-    const terrain = groups.find((group) => group.layer === "terrain");
+    const terrain = groups.find((group) => group.layer === "terrain" && group.layerId === input.layerId);
     if (input.value === null) terrain?.cells.forEach((cell) => { if (selected.has(cell)) terrain.cells.delete(cell); });
     else {
-      const target = terrain ?? (() => { const created: CellGroup = { layer: "terrain", value: "terrain", cells: new Set() }; groups.push(created); return created; })();
+      const target = terrain ?? (() => { const created: CellGroup = { layer: "terrain", ...(input.layerId ? { layerId: input.layerId } : {}), value: "terrain", cells: new Set() }; groups.push(created); return created; })();
       for (const cell of selected) target.cells.add(cell);
     }
-    if (input.clearRegion) for (const group of groups.filter((candidate) => candidate.layer === "region")) for (const cell of selected) group.cells.delete(cell);
+    if (input.clearRegion) for (const group of groups.filter((candidate) => candidate.layer === "region" && candidate.layerId === input.layerId)) for (const cell of selected) group.cells.delete(cell);
   } else {
-    for (const group of groups.filter((candidate) => candidate.layer === "region")) for (const cell of selected) group.cells.delete(cell);
+    for (const group of groups.filter((candidate) => candidate.layer === "region" && candidate.layerId === input.layerId)) for (const cell of selected) group.cells.delete(cell);
     if (input.value !== null) {
       if (!input.regionId || !UUID_PATTERN.test(input.regionId)) throw new Error("領域IDが不正です。");
-      const region = groups.find((group) => group.layer === "region" && group.regionId === input.regionId && group.value === input.value)
-        ?? (() => { const created: CellGroup = { layer: "region", regionId: input.regionId, value: input.value!, cells: new Set() }; groups.push(created); return created; })();
+      const region = groups.find((group) => group.layer === "region" && group.layerId === input.layerId && group.regionId === input.regionId && group.value === input.value)
+        ?? (() => { const created: CellGroup = { layer: "region", ...(input.layerId ? { layerId: input.layerId } : {}), regionId: input.regionId, value: input.value!, cells: new Set() }; groups.push(created); return created; })();
       for (const cell of selected) region.cells.add(cell);
     }
   }

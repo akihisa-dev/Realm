@@ -1,8 +1,23 @@
-/** Renderer/native contract. The persisted model is deliberately split into
- * terrain, regions, and objects. Cell IDs and GridShape are renderer/editor
- * projections only and never cross the storage boundary. */
+/** Renderer/native contract. The persisted model keeps typed content tables
+ * separate from the user-facing layer tree. Cell IDs and GridShape are
+ * renderer/editor projections only and never cross the storage boundary. */
 
-export type LayerId = "terrain" | "region" | "object";
+/** Stable identity of a user-facing layer node. */
+export type LayerId = string;
+export type ContentKind = "terrain" | "region" | "object";
+export type ActiveKind = "terrain" | "region" | ObjectKind;
+export const contentKindOf = (kind: ActiveKind): ContentKind => kind === "terrain" || kind === "region" ? kind : "object";
+export type LayerNodeKind = "group" | "leaf";
+export type LayerNode = {
+  id: LayerId;
+  parentId: LayerId | null;
+  kind: LayerNodeKind;
+  name: string;
+  order: number;
+  visible: boolean;
+  locked: boolean;
+};
+export type LayerTree = { nodes: LayerNode[] };
 export type Properties = Record<string, unknown>;
 export type Position = [number, number];
 export type GeoJsonGeometry =
@@ -15,6 +30,7 @@ export type MapShapeGeometry = Extract<GeoJsonGeometry, { type: "Polygon" }>;
 export type GridShape = {
   id: string;
   layer: "terrain" | "region";
+  layerId?: LayerId;
   regionId?: string;
   value: string;
   geometry: MapShapeGeometry;
@@ -27,14 +43,19 @@ export type MapShapeEdit = { shapes: MapShape[] };
 
 export type TerrainShape = {
   id: string;
+  /** The leaf layer that owns this typed terrain record. */
+  layerId?: LayerId;
   geometry: MapShapeGeometry;
 };
 export type RegionShape = {
   id: string;
+  /** Must equal the owning logical region's layerId. */
+  layerId?: LayerId;
   geometry: MapShapeGeometry;
 };
 export type Region = {
   id: string;
+  layerId?: LayerId;
   name: string;
   color: string;
   shapes: RegionShape[];
@@ -44,6 +65,7 @@ export const OBJECT_KINDS = ["city", "text", "mountain", "forest"] as const;
 export type ObjectKind = (typeof OBJECT_KINDS)[number];
 export type MapObject = {
   id: string;
+  layerId?: LayerId;
   kind: ObjectKind;
   label: string;
   geometry: GeoJsonGeometry;
@@ -58,10 +80,13 @@ export type RealmLayers = {
   regions: Region[];
   objects: MapObject[];
 };
+/** Alias used by new code to make clear these are typed map contents, not UI layers. */
+export type MapContent = RealmLayers;
 
 /** Renderer-only cell projection. These values are never persisted. */
 export type CellAttributeSnapshot = {
   cellId: string;
+  layerId?: LayerId;
   layer?: "terrain" | "region";
   /** @deprecated Accepted only for renderer fixture compatibility; new state uses layer. */
   attribute?: "terrain" | "region";
@@ -97,6 +122,8 @@ export type RealmSnapshot = {
   path: string;
   world: World;
   layers: RealmLayers;
+  /** User-facing hierarchy; `layers` remains the typed content compatibility name. */
+  layerTree?: LayerTree;
   assets: AssetManifest[];
   settings: ProjectSettings;
   canUndo: boolean;
@@ -107,6 +134,8 @@ export type SaveProjectInput = { name: string };
 export type ReplaceTerrainLayerInput = { shapes: TerrainShape[] };
 export type ReplaceRegionLayerInput = { regions: Region[] };
 export type ReplaceObjectLayerInput = { objects: MapObject[] };
+export type ReplaceMapContentInput = { layers: RealmLayers };
+export type ReplaceLayerTreeInput = { tree: LayerTree };
 
 export interface RealmBackend {
   listProjects(): Promise<ProjectSummary[]>;
@@ -125,6 +154,8 @@ export interface RealmBackend {
   replaceTerrainLayer(input: ReplaceTerrainLayerInput): Promise<RealmSnapshot>;
   replaceRegionLayer(input: ReplaceRegionLayerInput): Promise<RealmSnapshot>;
   replaceObjectLayer(input: ReplaceObjectLayerInput): Promise<RealmSnapshot>;
+  replaceMapContent(input: ReplaceMapContentInput): Promise<RealmSnapshot>;
+  replaceLayerTree(input: ReplaceLayerTreeInput): Promise<RealmSnapshot>;
   undoProject(): Promise<RealmSnapshot>;
   redoProject(): Promise<RealmSnapshot>;
   closeProject(): Promise<void>;

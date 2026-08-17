@@ -10,7 +10,7 @@ export const REQUIRED_OPERATIONS = ["create", "open", "read", "terrainBatch", "s
 
 export function readBaseline(path = BASELINE_PATH) {
   const baseline = JSON.parse(readFileSync(path, "utf8"));
-  if (!baseline || baseline.reportVersion !== 1 || baseline.schemaVersion !== 12 || !baseline.fixture || !baseline.limitsMs || !baseline.rowOperations) {
+  if (!baseline || baseline.reportVersion !== 1 || baseline.schemaVersion !== 13 || !baseline.fixture || !baseline.limitsMs || !baseline.rowOperations) {
     throw new Error("Storage performance baseline is invalid.");
   }
   for (const name of REQUIRED_OPERATIONS) {

@@ -28,11 +28,15 @@ function regionLayerFromShapes(shapes: readonly MapShape[], existing: readonly R
   for (const shape of shapes) {
     if (shape.layer !== "region" || !shape.regionId) continue;
     const current = result.get(shape.regionId) ?? byId.get(shape.regionId);
-    const region = current ? { id: current.id, name: current.name, color: shape.value || current.color, shapes: [...current.shapes] } : { id: shape.regionId, name: "領域", color: shape.value, shapes: [] };
-    region.shapes = [...region.shapes.filter((candidate) => candidate.id !== shape.id), { id: shape.id, geometry: shape.geometry }];
+    const layerId = shape.layerId ?? current?.layerId;
+    const layerFields = layerId === undefined ? {} : { layerId };
+    const region: Region = current
+      ? { id: current.id, ...layerFields, name: current.name, color: shape.value || current.color, shapes: [...current.shapes] }
+      : { id: shape.regionId, ...layerFields, name: "領域", color: shape.value, shapes: [] };
+    region.shapes = [...region.shapes.filter((candidate) => candidate.id !== shape.id), { id: shape.id, ...layerFields, geometry: shape.geometry }];
     result.set(region.id, region);
   }
-  return [...result.values()].map((region) => ({ ...region, shapes: region.shapes.map((shape) => ({ id: shape.id, geometry: shape.geometry })) }));
+  return [...result.values()].map((region) => ({ ...region, shapes: region.shapes.map((shape) => ({ id: shape.id, ...(shape.layerId === undefined ? {} : { layerId: shape.layerId }), geometry: shape.geometry })) }));
 }
 
 export type EditorPersistenceOptions = {
@@ -65,7 +69,7 @@ export function useEditorPersistence({
 }: EditorPersistenceOptions) {
   const projectIdentity = `${snapshot.path}:${snapshot.world.id}`;
   const [viewedSnapshot, setViewedSnapshot] = useState(snapshot);
-  const [mapShapes, setMapShapes] = useState<MapShape[]>(() => mapShapesFromLayers(snapshot.layers));
+  const [mapShapes, setMapShapes] = useState<MapShape[]>(() => mapShapesFromLayers(snapshot.layers, snapshot.layerTree));
   const [operating, setOperating] = useState(false);
   const [savingMapShapes, setSavingMapShapes] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +96,7 @@ export function useEditorPersistence({
     if (identityChanged) {
       mapShapeSaveGeneration.current += 1;
       mapShapeSavePending.current = null;
-      setMapShapes(mapShapesFromLayers(snapshot.layers));
+      setMapShapes(mapShapesFromLayers(snapshot.layers, snapshot.layerTree));
       setError(null);
       onProjectChangedRef.current?.();
     }
@@ -100,7 +104,7 @@ export function useEditorPersistence({
 
   const recoverMapShapes = useCallback(async (identity: string): Promise<void> => {
     const openSnapshot = await backend.getOpenProject();
-    if (mounted.current && viewedIdentity.current === identity && openSnapshot) setMapShapes(mapShapesFromLayers(openSnapshot.layers));
+    if (mounted.current && viewedIdentity.current === identity && openSnapshot) setMapShapes(mapShapesFromLayers(openSnapshot.layers, openSnapshot.layerTree));
   }, [backend]);
 
   /**
@@ -124,7 +128,7 @@ export function useEditorPersistence({
           && mapShapeSaveGeneration.current === pending.generation;
         try {
           const next = await enqueueSerial(commandTail, () => pending.layer === "terrain"
-            ? backend.replaceTerrainLayer({ shapes: pending.shapes.filter((shape) => shape.layer === "terrain").map(({ id, geometry }) => ({ id, geometry })) })
+            ? backend.replaceTerrainLayer({ shapes: pending.shapes.filter((shape) => shape.layer === "terrain").map(({ id, layerId, geometry }) => ({ id, ...(layerId ? { layerId } : {}), geometry })) })
             : backend.replaceRegionLayer({ regions: pending.regions }));
           if (!isLatest()) continue;
           setViewedSnapshot(next);
@@ -159,7 +163,7 @@ export function useEditorPersistence({
         const next = await action();
         if (!mounted.current || viewedIdentity.current !== identity) return;
         setViewedSnapshot(next);
-        setMapShapes(mapShapesFromLayers(next.layers));
+        setMapShapes(mapShapesFromLayers(next.layers, next.layerTree));
         onSaved(next);
         if (!options.isCurrent || options.isCurrent()) onOperationSettledRef.current?.();
       } catch (cause) {

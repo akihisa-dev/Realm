@@ -8,6 +8,7 @@ import { useEditorPersistence, type EditorPersistenceOptions } from "./useEditor
 const terrain = (cells: string[], id = "11111111-1111-4111-8111-111111111111"): MapShape => ({
   id,
   layer: "terrain",
+  layerId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   value: "terrain",
   geometryVersion: 1,
   snapGridVersion: 2,
@@ -88,8 +89,9 @@ describe("useEditorPersistence", () => {
   it("accepts the next map edit while saving and persists only the latest queued state", async () => {
     const backend = new MemoryRealmBackend();
     const snapshot = await backend.createProject({ path: "browser://queued.realmmap", name: "Queued" });
-    const firstShape = terrain(["1:1"]);
-    const secondShape = terrain(["2:2"]);
+    const layerId = snapshot.layerTree!.nodes.find((node) => node.kind === "leaf")!.id;
+    const firstShape = { ...terrain(["1:1"]), layerId };
+    const secondShape = { ...terrain(["2:2"]), layerId };
     let releaseFirst: (() => void) | undefined;
     const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
     const onSaved = vi.fn();
@@ -112,7 +114,7 @@ describe("useEditorPersistence", () => {
     releaseFirst?.();
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.saving).toBe(false));
-    expect(update.mock.calls[1]?.[0].shapes).toEqual([{ id: secondShape.id, geometry: secondShape.geometry }]);
+    expect(update.mock.calls[1]?.[0].shapes).toEqual([{ id: secondShape.id, layerId: secondShape.layerId, geometry: secondShape.geometry }]);
     expect(mapShapesFromLayers(result.current.viewedSnapshot.layers)).toEqual([secondShape]);
     expect(onSaved).toHaveBeenCalledTimes(1);
   });
@@ -120,8 +122,9 @@ describe("useEditorPersistence", () => {
   it("serializes object writes behind an in-flight terrain save", async () => {
     const backend = new MemoryRealmBackend();
     const snapshot = await backend.createProject({ path: "browser://layer-order.realmmap", name: "Layer order" });
-    const shape = terrain(["1:1"]);
-    const object = { id: "22222222-2222-4222-8222-222222222222", kind: "city" as const, label: "都市", geometry: { type: "Point" as const, coordinates: [1, 1] as [number, number] }, properties: {}, zIndex: 0, locked: false };
+    const layerId = snapshot.layerTree!.nodes.find((node) => node.kind === "leaf")!.id;
+    const shape = { ...terrain(["1:1"]), layerId };
+    const object = { id: "22222222-2222-4222-8222-222222222222", layerId, kind: "city" as const, label: "都市", geometry: { type: "Point" as const, coordinates: [1, 1] as [number, number] }, properties: {}, zIndex: 0, locked: false };
     let releaseTerrain: (() => void) | undefined;
     const terrainGate = new Promise<void>((resolve) => { releaseTerrain = resolve; });
     const order: string[] = [];
@@ -149,6 +152,7 @@ describe("useEditorPersistence", () => {
 
     releaseTerrain?.();
     await act(async () => { await objectRun; });
+    await waitFor(() => expect(result.current.saving).toBe(false));
     expect(order).toEqual(["terrain:start", "terrain:end", "object"]);
   });
 

@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject, type ReactNode } from "react";
 import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
-import { GridFour } from "@phosphor-icons/react/dist/csr/GridFour";
 import { HandGrabbing } from "@phosphor-icons/react/dist/csr/HandGrabbing";
-import { Magnet } from "@phosphor-icons/react/dist/csr/Magnet";
 import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { PlusCircle } from "@phosphor-icons/react/dist/csr/PlusCircle";
-import { Selection } from "@phosphor-icons/react/dist/csr/Selection";
 import { CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
-import type { LayerId, ObjectKind } from "../../backend";
+import { contentKindOf, type ActiveKind, type LayerId, type ObjectKind } from "../../backend";
 
 const REGION_FLYOUT_ID = "map-region-flyout";
 const ERASE_FLYOUT_ID = "map-eraser-flyout";
@@ -31,6 +28,7 @@ export type PaletteFlyoutOptions = {
   hostRef: RefObject<HTMLDivElement | null>;
   mode: "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "erase" | ObjectKind;
   activeLayer: LayerId;
+  activeKind?: ActiveKind;
   strokeRange?: number | undefined;
   regionColor?: string | undefined;
   onToolChange: ((tool: "grid" | "area" | "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void) | undefined;
@@ -47,7 +45,7 @@ export type PaletteFlyoutState = {
 };
 
 /** Owns the fixed left tool rail and its contextual flyouts. */
-export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CELL_PAINT_RANGE_MIN, regionColor, onToolChange, onRegionColorChange, onCreateProject, createProjectDisabled = false }: PaletteFlyoutOptions): PaletteFlyoutState {
+export function usePaletteFlyouts({ hostRef, mode, activeLayer, activeKind, strokeRange = CELL_PAINT_RANGE_MIN, regionColor, onToolChange, onRegionColorChange, onCreateProject, createProjectDisabled = false }: PaletteFlyoutOptions): PaletteFlyoutState {
   const paletteRef = useRef<HTMLElement>(null);
   const [eraseFlyoutOpen, setEraseFlyoutOpen] = useState(false);
   const [regionFlyoutTool, setRegionFlyoutTool] = useState<CellPaintTool | null>(null);
@@ -81,10 +79,13 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
     };
   }, [eraseFlyoutOpen, hostRef, regionFlyoutTool]);
 
-  const layerLabel = activeLayer === "terrain" ? "地形" : activeLayer === "region" ? "領域" : "オブジェクト";
+  const kind: ActiveKind = activeKind ?? (activeLayer === "terrain" || activeLayer === "region" ? activeLayer : "terrain");
+  const contentKind = contentKindOf(kind);
+  const isObjectKind = contentKind === "object";
+  const layerLabel = kind === "terrain" ? "地形" : kind === "region" ? "領域" : "オブジェクト";
   const toggleCellPaintTool = (tool: CellPaintTool, event: ReactMouseEvent<HTMLButtonElement>): void => {
     onToolChange?.(tool);
-    if (activeLayer === "region") {
+    if (!isObjectKind) {
       setRegionFlyoutTool((current) => current === tool ? null : tool);
       setEraseFlyoutOpen(false);
     } else closeFlyouts();
@@ -105,67 +106,33 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
   };
 
   const selectGrabTool = (): void => {
-    onToolChange?.(activeLayer === "object" ? "select" : "grab");
+    onToolChange?.("grab");
     closeFlyouts();
   };
 
-  const selectShapeTool = (): void => {
-    onToolChange?.("shape");
-    closeFlyouts();
-  };
-
-  const gridIsActive = activeLayer === "object" ? OBJECT_KINDS.includes(mode as ObjectKind) : mode === "cell-select";
-  const areaIsActive = activeLayer !== "object" && mode === "cell-region";
-  const eraseIsActive = mode === "cell-erase" || (activeLayer === "object" && mode === "erase");
-  const grabIsActive = activeLayer === "object" ? mode === "pan" : mode === "grab";
-  const shapeIsActive = activeLayer === "region" && mode === "shape";
-  const regionColorFlyout = (tool: CellPaintTool): ReactNode => activeLayer === "region" && regionFlyoutTool === tool ? (
-    <div id={REGION_FLYOUT_ID} className="tool-flyout tool-flyout-region" role="group" aria-label="領域の色">
-      <span className="tool-flyout-label">領域の色</span>
-      <div className="region-color-options" role="radiogroup" aria-label="領域色の候補">
-        {REGION_COLORS.map((color, index) => (
-          <label className="region-color-option" key={color} title={`領域色 ${index + 1} ${color}`}>
-            <input
-              type="radio"
-              name="map-region-color"
-              value={color}
-              checked={effectiveRegionColor === color}
-              aria-label={`領域色 ${index + 1} ${color}`}
-              onChange={() => { setLocalRegionColor(color); onRegionColorChange?.(color); }}
-            />
-            <span className="region-color-swatch" aria-hidden="true" style={{ backgroundColor: color }} />
-          </label>
-        ))}
+  const gridIsActive = isObjectKind ? OBJECT_KINDS.includes(mode as ObjectKind) : mode === "cell-select";
+  const areaIsActive = !isObjectKind && mode === "cell-region";
+  const eraseIsActive = mode === "cell-erase" || (isObjectKind && mode === "erase");
+  const grabIsActive = mode === "grab";
+  const drawContextFlyout: ReactNode = regionFlyoutTool !== null && !isObjectKind ? (
+    <div id={REGION_FLYOUT_ID} className="tool-flyout tool-flyout-region" role="group" aria-label="描くの設定">
+      <span className="tool-flyout-label">描く方法</span>
+      <div className="draw-method-options" role="group" aria-label="描く方法">
+        <button type="button" className={regionFlyoutTool === "grid" ? "is-active" : ""} onClick={() => { onToolChange?.("grid"); setRegionFlyoutTool("grid"); }}>グリッド</button>
+        <button type="button" className={regionFlyoutTool === "area" ? "is-active" : ""} onClick={() => { onToolChange?.("area"); setRegionFlyoutTool("area"); }}>範囲</button>
       </div>
+      {kind === "region" ? <div className="region-color-options" role="radiogroup" aria-label="領域色の候補">{REGION_COLORS.map((color, index) => <label className="region-color-option" key={color} title={`領域色 ${index + 1} ${color}`}><input type="radio" name="map-region-color" value={color} checked={effectiveRegionColor === color} aria-label={`領域色 ${index + 1} ${color}`} onChange={() => { setLocalRegionColor(color); onRegionColorChange?.(color); }} /><span className="region-color-swatch" aria-hidden="true" style={{ backgroundColor: color }} /></label>)}</div> : null}
     </div>
   ) : null;
-
   const toolPalette: ReactNode = (
     <aside ref={paletteRef} className="tool-rail" aria-label="地図ツールレール">
       <div className="tool-rail-tools" role="toolbar" aria-label="地図ツール">
-        {activeLayer === "object" ? (
-          <div className="tool-rail-item">
-            <button className={`tool-rail-button${gridIsActive ? " is-active" : ""}`} type="button" aria-label="描く" aria-pressed={gridIsActive} title="描く" onClick={selectObjectDrawTool}>
-              <PencilSimple aria-hidden="true" size={20} weight="bold" />
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="tool-rail-item">
-              <button className={`tool-rail-button${gridIsActive ? " is-active" : ""}`} type="button" aria-label="グリッド描画" aria-pressed={gridIsActive} aria-haspopup={activeLayer === "region" ? "true" : undefined} aria-expanded={activeLayer === "region" ? regionFlyoutTool === "grid" : undefined} aria-controls={activeLayer === "region" ? REGION_FLYOUT_ID : undefined} title="グリッド描画" onClick={(event) => toggleCellPaintTool("grid", event)}>
-                <GridFour aria-hidden="true" size={20} weight="bold" />
-              </button>
-              {regionColorFlyout("grid")}
-            </div>
-
-            <div className="tool-rail-item">
-              <button className={`tool-rail-button${areaIsActive ? " is-active" : ""}`} type="button" aria-label="範囲描画" aria-pressed={areaIsActive} aria-haspopup={activeLayer === "region" ? "true" : undefined} aria-expanded={activeLayer === "region" ? regionFlyoutTool === "area" : undefined} aria-controls={activeLayer === "region" ? REGION_FLYOUT_ID : undefined} title="範囲描画" onClick={(event) => toggleCellPaintTool("area", event)}>
-                <Selection aria-hidden="true" size={20} weight="bold" />
-              </button>
-              {regionColorFlyout("area")}
-            </div>
-          </>
-        )}
+        <div className="tool-rail-item">
+          <button className={`tool-rail-button${gridIsActive || areaIsActive ? " is-active" : ""}`} type="button" aria-label="描く" aria-pressed={gridIsActive || areaIsActive} aria-haspopup={!isObjectKind ? "true" : undefined} aria-expanded={!isObjectKind ? regionFlyoutTool !== null : undefined} aria-controls={!isObjectKind ? REGION_FLYOUT_ID : undefined} title="描く" onClick={(event) => isObjectKind ? selectObjectDrawTool(event) : toggleCellPaintTool(regionFlyoutTool === "area" ? "area" : "grid", event)}>
+            <PencilSimple aria-hidden="true" size={20} weight="bold" />
+          </button>
+          {drawContextFlyout}
+        </div>
 
         <div className="tool-rail-item">
           <button
@@ -194,13 +161,6 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
           </button>
         </div>
 
-        {activeLayer === "region" ? (
-          <div className="tool-rail-item">
-            <button className={`tool-rail-button${shapeIsActive ? " is-active" : ""}`} type="button" aria-label="シェイピング" aria-pressed={shapeIsActive} title="シェイピング" onClick={selectShapeTool}>
-              <Magnet aria-hidden="true" size={20} weight="bold" />
-            </button>
-          </div>
-        ) : null}
       </div>
       <div className="tool-rail-footer">
         <button

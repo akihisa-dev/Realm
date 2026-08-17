@@ -4,17 +4,19 @@ import { ArrowCounterClockwise } from "@phosphor-icons/react/dist/csr/ArrowCount
 import { Eye } from "@phosphor-icons/react/dist/csr/Eye";
 import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { Stack } from "@phosphor-icons/react/dist/csr/Stack";
-import { errorMessage, type CellAttributeSnapshot, type LayerId, type MapObject, type MapShape, type MapShapeEdit, type ObjectKind, type RealmBackend, type RealmSnapshot } from "../backend";
+import { errorMessage, type ActiveKind, type CellAttributeSnapshot, contentKindOf, type LayerId, type LayerNode, type LayerTree, type MapObject, type MapShape, type MapShapeEdit, type ObjectKind, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { LayerManager } from "./editor/LayerManager";
-import { mergeRegionShapes, splitRegionComponentShapes } from "./editor/editorMapOperations";
+import { mergeRegionShapes, shapeRegionsToTerrain, splitRegionComponentShapes } from "./editor/editorMapOperations";
 import { deriveRegionEntries, type RegionComponent, type RegionEntry } from "./editor/regionObjects";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { mapErrorMessage } from "../locales/ja";
 import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN } from "../map/MapAdapter";
 import { applyGridSelectionToMapShapes, deriveMapGridCells } from "../shared/mapShapeGeometry";
 
-type Tool = "grid" | "area" | "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape";
+type Tool = "draw" | "erase" | "grab";
+type LegacyTool = Tool | "grid" | "area" | "terrain" | "region" | "object" | "select" | "shape";
+type DrawMethod = "grid" | "area";
 
 type EditorShellProps = {
   snapshot: RealmSnapshot;
@@ -24,8 +26,12 @@ type EditorShellProps = {
 };
 
 export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellProps) {
-  const [activeTool, setActiveTool] = useState<Tool>("grid");
-  const [activeLayer, setActiveLayer] = useState<LayerId>("terrain");
+  const initialTree = snapshot.layerTree ?? { nodes: [{ id: "00000000-0000-4000-8000-000000000001", parentId: null, kind: "leaf" as const, name: "レイヤー 1", order: 0, visible: true, locked: false }] };
+  const initialLeaf = initialTree.nodes.find((node) => node.kind === "leaf")?.id ?? initialTree.nodes[0]!.id;
+  const [activeTool, setActiveTool] = useState<Tool>("draw");
+  const [drawMethod, setDrawMethod] = useState<DrawMethod>("grid");
+  const [activeLayer, setActiveLayer] = useState<LayerId>(initialLeaf);
+  const [activeKind, setActiveKind] = useState<ActiveKind>("terrain");
   const [objectKind, setObjectKind] = useState<ObjectKind>("city");
   const [objectLabel, setObjectLabel] = useState("");
   const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
@@ -38,7 +44,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [strokeRange, setStrokeRange] = useState(CELL_PAINT_RANGE_MIN);
   const [zoom, setZoom] = useState(1);
   const [previewMode, setPreviewMode] = useState(false);
-  const activeToolRef = useRef<Tool>("grid");
+  const activeToolRef = useRef<Tool>("draw");
   const {
     viewedSnapshot,
     mapShapes,
@@ -54,6 +60,9 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     busy,
     onSaved,
     onProjectChanged: () => {
+      const nextTree = snapshot.layerTree ?? initialTree;
+      const nextLeaf = nextTree.nodes.find((node) => node.kind === "leaf");
+      if (nextLeaf) { setActiveLayer(nextLeaf.id); setActiveKind("terrain"); }
       setPreviewMode(false);
       setSelectedCellIds([]);
       setSelectedRegionIds([]);
@@ -63,14 +72,15 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     },
     onOperationSettled: () => setSelectedCellIds([]),
   });
-  const cellAttributes = useMemo(() => deriveMapGridCells(mapShapes) as CellAttributeSnapshot[], [mapShapes]);
+  const cellAttributes = useMemo(() => (deriveMapGridCells(mapShapes) as CellAttributeSnapshot[]).filter((attribute) => attribute.layerId === undefined || attribute.layerId === activeLayer), [activeLayer, mapShapes]);
   const regionEntries = useMemo(() => {
-    const persisted = new Map(viewedSnapshot.layers.regions.map((region) => [region.id, region]));
-    return deriveRegionEntries(cellAttributes).map((region) => {
+    const persisted = new Map(viewedSnapshot.layers.regions.filter((region) => region.layerId === activeLayer).map((region) => [region.id, region]));
+    const selectedRegionIds = new Set(persisted.keys());
+    return deriveRegionEntries(cellAttributes).filter((region) => region.persistentId === null || selectedRegionIds.has(region.persistentId)).map((region) => {
       const saved = region.persistentId ? persisted.get(region.persistentId) : undefined;
       return saved ? { ...region, label: saved.name === "領域" ? region.label : saved.name, color: saved.color } : region;
     });
-  }, [cellAttributes, viewedSnapshot.layers.regions]);
+  }, [activeLayer, cellAttributes, viewedSnapshot.layers.regions]);
 
   useEffect(() => {
     const knownIds = new Set(regionEntries.map((region) => region.id));
@@ -83,9 +93,15 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const cellGridOptions = useMemo(() => ({ color: settings.gridColor, width: settings.gridWidth }), [settings.gridColor, settings.gridWidth]);
   const gridOptions = useMemo(() => ({ kind: "hex" as const, color: settings.gridColor, width: settings.gridWidth, spacingDegrees: settings.gridSpacing }), [settings.gridColor, settings.gridWidth, settings.gridSpacing]);
 
-  const selectTool = (tool: Tool) => {
-    activeToolRef.current = tool;
-    setActiveTool(tool);
+  const selectTool = (tool: LegacyTool) => {
+    const nextTool: Tool = tool === "erase" ? "erase" : tool === "grab" || tool === "select" ? "grab" : "draw";
+    if (tool === "area") setDrawMethod("area");
+    if (tool === "grid" || tool === "terrain" || tool === "region" || tool === "object") setDrawMethod("grid");
+    if (tool === "object" || tool === "select") setActiveKind(objectKind);
+    if (tool === "terrain") setActiveKind("terrain");
+    if (tool === "region") setActiveKind("region");
+    activeToolRef.current = nextTool;
+    setActiveTool(nextTool);
   };
 
   const selectLayer = (layer: LayerId): void => {
@@ -95,7 +111,17 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     setSelectedComponentId(null);
     setRegionPaintTargetId(null);
     setSelectedObjectIds([]);
-    selectTool(layer === "object" ? "object" : "grid");
+  };
+
+  const changeActiveKind = (kind: ActiveKind): void => {
+    setActiveKind(kind);
+    if (kind !== "terrain" && kind !== "region") setObjectKind(kind);
+    setSelectedCellIds([]);
+    setSelectedRegionIds([]);
+    setSelectedComponentId(null);
+    setRegionPaintTargetId(null);
+    setSelectedObjectIds([]);
+    selectTool("draw");
   };
 
   useEffect(() => {
@@ -123,6 +149,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   };
 
   const startNewRegion = (): void => {
+    setActiveKind("region");
     setRegionPaintTargetId(null);
     setSelectedRegionIds([]);
     setSelectedComponentId(null);
@@ -132,6 +159,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
 
   const addToRegion = (region: RegionEntry): void => {
     if (!region.persistentId) return;
+    setActiveKind("region");
     setRegionPaintTargetId(region.id);
     setRegionColor(region.color);
     setSelectedRegionIds([region.id]);
@@ -159,18 +187,21 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       setSelectedCellIds([]);
       return;
     }
-    if (activeLayer === "object") { setSelectedCellIds([]); return; }
-    const attribute = activeLayer;
-    const value = tool === "erase" ? null : activeLayer === "terrain" ? "terrain" : tool === "grid" || tool === "area" || tool === "region" ? regionColor : null;
-    const targetRegion = activeLayer === "region" && (tool === "grid" || tool === "area" || tool === "region") && regionPaintTargetId
+    const contentKind = contentKindOf(activeKind);
+    if (contentKind === "object") { setSelectedCellIds([]); return; }
+    const attribute = contentKind;
+    const value = tool === "erase" ? null : contentKind === "terrain" ? "terrain" : tool === "draw" ? regionColor : null;
+    const targetRegion = contentKind === "region" && tool === "draw" && regionPaintTargetId
       ? regionEntries.find((region) => region.id === regionPaintTargetId)
       : undefined;
-    const regionId = activeLayer === "region" ? targetRegion?.persistentId ?? crypto.randomUUID() : undefined;
+    const regionId = contentKind === "region" ? targetRegion?.persistentId ?? crypto.randomUUID() : undefined;
     const clearRegion = false;
     const fallback = "変更を保存できませんでした。変更は保存されていません。";
     let next: MapShape[];
     try {
-      next = applyGridSelectionToMapShapes(mapShapes, { cellIds: nextIds, layer: attribute, value, ...(regionId ? { regionId } : {}), ...(clearRegion ? { clearRegion: true } : {}) });
+      const scoped = mapShapes.filter((shape) => shape.layerId === activeLayer && shape.layer === attribute);
+      const changed = applyGridSelectionToMapShapes(scoped, { cellIds: nextIds, layer: attribute, layerId: activeLayer, value, ...(regionId ? { regionId } : {}), ...(clearRegion ? { clearRegion: true } : {}) }).map((shape) => ({ ...shape, layerId: activeLayer }));
+      next = [...mapShapes.filter((shape) => shape.layerId !== activeLayer), ...changed];
     } catch (cause) {
       setSelectedCellIds([]);
       if (cause instanceof Error && cause.message === "セルを選択してください。") return;
@@ -180,11 +211,11 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     setSelectedCellIds([]);
     // Cell selection already rebuilds complete, grid-snapped Polygon rows.
     // Do not reinterpret unrelated existing shapes a second time here.
-    commitMapShapes(next, fallback, { normalize: false, layer: activeLayer === "region" ? "region" : "terrain" });
+    commitMapShapes(next, fallback, { normalize: false, layer: contentKind });
   };
   const commitShapeEdit = (edit: MapShapeEdit): void => {
-    const untouched = mapShapes.filter((shape) => shape.layer !== activeLayer);
-    commitMapShapes([...untouched, ...edit.shapes], activeToolRef.current === "shape" ? "領域を地形に合わせられませんでした。" : "図形を更新できませんでした。", { normalize: false, layer: activeLayer === "region" ? "region" : "terrain" });
+    const untouched = mapShapes.filter((shape) => shape.layerId !== activeLayer);
+    commitMapShapes([...untouched, ...edit.shapes.map((shape) => ({ ...shape, layerId: activeLayer }))], "図形を更新できませんでした。", { normalize: false, layer: contentKindOf(activeKind) });
   };
 
   const mergeRegions = (): void => {
@@ -211,31 +242,66 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     commitMapShapes(next, "領域の塊を分離できませんでした。", { normalize: false, layer: "region" });
   };
 
-  const currentObjects = viewedSnapshot.layers.objects;
-  const startObjectDraw = (): void => { selectLayer("object"); selectTool("object"); };
+  const shapeSelectedRegions = (): void => {
+    const persistentIds = selectedRegionIds.map((id) => regionEntries.find((region) => region.id === id)?.persistentId).filter((id): id is string => Boolean(id));
+    if (persistentIds.length === 0) return;
+    const next = shapeRegionsToTerrain(mapShapes, activeLayer, persistentIds);
+    commitMapShapes(next, "領域を地形に合わせられませんでした。", { normalize: false, layer: "region" });
+  };
+
+  const allObjects = viewedSnapshot.layers.objects;
+  const currentObjects = allObjects.filter((object) => object.layerId === activeLayer);
+  const startObjectDraw = (): void => { setActiveKind(objectKind); selectTool("draw"); };
   const createObject = (geometry: MapObject["geometry"]): void => {
-    if (editingLocked || activeLayer !== "object") return;
+    if (editingLocked || contentKindOf(activeKind) !== "object") return;
     const fallback = "オブジェクトを保存できませんでした。";
-    const object: MapObject = { id: crypto.randomUUID(), kind: objectKind, label: objectLabel.trim() || (objectKind === "city" ? "都市" : objectKind === "text" ? "テキスト" : objectKind === "forest" ? "森" : "山"), geometry, properties: {}, zIndex: currentObjects.length, locked: false };
-    void run(() => backend.replaceObjectLayer({ objects: [...currentObjects, object] }), fallback);
+    const object: MapObject = { id: crypto.randomUUID(), layerId: activeLayer, kind: objectKind, label: objectLabel.trim() || (objectKind === "city" ? "都市" : objectKind === "text" ? "テキスト" : objectKind === "forest" ? "森" : "山"), geometry, properties: {}, zIndex: currentObjects.length, locked: false };
+    void run(() => backend.replaceObjectLayer({ objects: [...allObjects, object] }), fallback);
   };
   const selectObjects = (ids: readonly string[]): void => { setSelectedObjectIds([...new Set(ids)]); };
   const modifyObjects = (changes: readonly { id: string; geometry: MapObject["geometry"] }[]): void => {
-    if (activeLayer !== "object" || editingLocked) return;
+    if (contentKindOf(activeKind) !== "object" || editingLocked) return;
     const byId = new Map(changes.map((change) => [change.id, change.geometry]));
-    const objects = currentObjects.map((object) => byId.has(object.id) ? { ...object, geometry: byId.get(object.id)! } : object);
+    const objects = allObjects.map((object) => byId.has(object.id) ? { ...object, geometry: byId.get(object.id)! } : object);
     void run(() => backend.replaceObjectLayer({ objects }), "オブジェクトを移動できませんでした。");
   };
   const eraseObjects = (ids: readonly string[]): void => {
-    if (activeLayer !== "object" || editingLocked) return;
+    if (contentKindOf(activeKind) !== "object" || editingLocked) return;
     const selected = new Set(ids);
-    void run(() => backend.replaceObjectLayer({ objects: currentObjects.filter((object) => !selected.has(object.id)) }), "オブジェクトを削除できませんでした。");
+    void run(() => backend.replaceObjectLayer({ objects: allObjects.filter((object) => !selected.has(object.id)) }), "オブジェクトを削除できませんでした。");
   };
-  const selectObjectFromPanel = (id: string): void => { selectLayer("object"); setActiveTool("select"); activeToolRef.current = "select"; setSelectedObjectIds([id]); };
+  const selectObjectFromPanel = (id: string): void => { setActiveKind(objectKind); selectTool("grab"); setSelectedObjectIds([id]); };
   const deleteObjectFromPanel = (id: string): void => { eraseObjects([id]); };
   const createNewProject = (): void => {
     if (locked || previewMode) return;
     void run(() => backend.createProject({ name: "無題の世界" }), "新しい世界を作成できませんでした。");
+  };
+  const currentLayerTree: LayerTree = viewedSnapshot.layerTree ?? initialTree;
+  const activeNode = currentLayerTree.nodes.find((node) => node.id === activeLayer);
+  useEffect(() => {
+    if (activeNode?.kind === "leaf") return;
+    const fallback = currentLayerTree.nodes.find((node) => node.kind === "leaf");
+    if (fallback) selectLayer(fallback.id);
+  }, [activeNode, currentLayerTree]);
+  const ancestorState = (() => {
+    let visible = true; let locked = false; let current = activeNode;
+    const byId = new Map(currentLayerTree.nodes.map((node) => [node.id, node]));
+    while (current) { visible &&= current.visible; locked ||= current.locked; current = current.parentId ? byId.get(current.parentId) : undefined; }
+    return { visible, locked };
+  })();
+  const activeLayerEditable = ancestorState.visible && !ancestorState.locked;
+  const updateLayerTree = (tree: LayerTree): void => { void run(() => backend.replaceLayerTree({ tree }), "レイヤー階層を保存できませんでした。"); };
+  const addLayerNode = (kind: "group" | "leaf", requestedParentId: LayerId | null): void => {
+    const parent = currentLayerTree.nodes.find((node) => node.id === requestedParentId);
+    const parentId = parent?.kind === "group" ? parent.id : parent?.parentId ?? null;
+    const siblings = currentLayerTree.nodes.filter((node) => node.parentId === parentId);
+    const node: LayerNode = { id: crypto.randomUUID(), parentId, kind, name: kind === "group" ? "グループ" : "レイヤー", order: Math.max(-1, ...siblings.map((sibling) => sibling.order)) + 1, visible: true, locked: false };
+    void run(() => backend.replaceLayerTree({ tree: { nodes: [...currentLayerTree.nodes, node] } }), "レイヤーを追加できませんでした。");
+  };
+  const deleteLayerNode = (id: LayerId): void => {
+    if (currentLayerTree.nodes.filter((node) => node.parentId === id).length > 0) return;
+    if ([...viewedSnapshot.layers.terrain, ...viewedSnapshot.layers.objects].some((item) => item.layerId === id) || viewedSnapshot.layers.regions.some((item) => item.layerId === id)) return;
+    void run(() => backend.replaceLayerTree({ tree: { nodes: currentLayerTree.nodes.filter((node) => node.id !== id) } }), "空でないレイヤーは削除できません。");
   };
 
   useEffect(() => {
@@ -254,16 +320,13 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       if (editingLocked || previewMode || event.altKey || event.shiftKey) return;
       if (key === "c" || key === "z") {
         event.preventDefault();
-        selectTool(activeLayer === "object" ? "object" : "grid");
+        selectTool("draw");
       } else if (key === "e" || key === "x") {
         event.preventDefault();
         selectTool("erase");
-      } else if (key === "g" && activeLayer !== "object") {
+      } else if (key === "g") {
         event.preventDefault();
         selectTool("grab");
-      } else if (key === "s" && activeLayer === "region") {
-        event.preventDefault();
-        selectTool("shape");
       }
     };
     window.addEventListener("keydown", handleShortcut);
@@ -300,17 +363,19 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
       <div className={`editor-body${layerManagerOpen ? "" : " layer-manager-is-closed"}`}>
         <section className="map-region" aria-label="地形編集領域">
           <MapCanvas
-            objects={viewedSnapshot.layers.objects}
+            objects={allObjects}
             activeLayer={activeLayer}
+            activeKind={activeKind}
+            layerTree={currentLayerTree}
             mapShapes={mapShapes}
-            mode={editingLocked || previewMode ? "pan" : activeLayer === "object" ? activeTool === "erase" ? "erase" : activeTool === "select" ? "pan" : objectKind : activeTool === "erase" ? "cell-erase" : activeTool === "area" || activeTool === "region" ? "cell-region" : activeTool === "grab" ? "grab" : activeTool === "shape" ? "shape" : "cell-select"}
+            mode={editingLocked || previewMode || !activeLayerEditable ? "pan" : contentKindOf(activeKind) === "object" ? activeTool === "erase" ? "erase" : activeTool === "grab" ? "grab" : objectKind : activeTool === "erase" ? "cell-erase" : activeTool === "grab" ? "grab" : drawMethod === "area" ? "cell-region" : "cell-select"}
             disabled={busy}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}
             themeId={settings.themeId}
             themeOverrides={settings.themeOverrides}
             showGrid={false}
-            showCellGrid={activeLayer !== "object"}
+            showCellGrid={contentKindOf(activeKind) !== "object"}
             cellGridOptions={cellGridOptions}
             gridOptions={gridOptions}
             onCellSelect={applyCellSelection}
@@ -322,12 +387,12 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             onEraseObjects={eraseObjects}
             regionColor={regionColor}
             onToolChange={selectTool}
-            onObjectKindChange={(kind) => { setObjectKind(kind); selectLayer("object"); selectTool("object"); }}
+            onObjectKindChange={changeActiveKind}
             onRegionColorChange={changeRegionColor}
             onCreateProject={createNewProject}
             createProjectDisabled={locked || previewMode}
             preview={previewMode}
-            onError={(code) => setError(mapErrorMessage(code, activeLayer === "region" ? "region" : "terrain"))}
+            onError={(code) => setError(mapErrorMessage(code, contentKindOf(activeKind) === "region" ? "region" : "terrain"))}
             onZoomChange={setZoom}
             strokeRange={strokeRange}
             zoom={zoom}
@@ -338,9 +403,18 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
           <LayerManager
             activeLayer={activeLayer}
             onLayerChange={selectLayer}
+            layerTree={currentLayerTree}
+            selectedLeafId={activeLayer}
+            activeKind={activeKind}
+            onActiveKindChange={changeActiveKind}
+            onLayerTreeChange={updateLayerTree}
+            onAddLayerNode={addLayerNode}
+            onDeleteLayerNode={deleteLayerNode}
+            onShapeSelectedRegion={shapeSelectedRegions}
             onClose={() => setLayerManagerOpen(false)}
             disabled={locked || previewMode}
-            terrainCount={viewedSnapshot.layers.terrain.length}
+            contentDisabled={locked || previewMode || !activeLayerEditable}
+            terrainCount={viewedSnapshot.layers.terrain.filter((shape) => shape.layerId === activeLayer).length}
             regions={regionEntries}
             selectedRegionIds={selectedRegionIds}
             selectedComponentId={selectedComponentId}
@@ -356,7 +430,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             selectedObjectIds={selectedObjectIds}
             objectKind={objectKind}
             objectLabel={objectLabel}
-            onObjectKindChange={(kind) => { setObjectKind(kind); selectLayer("object"); selectTool("object"); }}
+            onObjectKindChange={changeActiveKind}
             onObjectLabelChange={setObjectLabel}
             onStartObjectDraw={startObjectDraw}
             onSelectObject={selectObjectFromPanel}

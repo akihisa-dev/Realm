@@ -3,7 +3,7 @@ import type { ArtifactFormat, TransferPathMode } from "../../shared/realmContrac
 import { asRealmError, RealmError } from "../domain/errors";
 
 export const REALM_IPC_CHANNELS = [
-  "realm:listProjects", "realm:createProject", "realm:openProject", "realm:importProject", "realm:exportProject", "realm:writeArtifact", "realm:saveProject", "realm:updateProjectSettings", "realm:replaceTerrainLayer", "realm:replaceRegionLayer", "realm:replaceObjectLayer", "realm:importAsset", "realm:importAssetsBatch", "realm:readAsset", "realm:deleteAsset", "realm:deleteAssetsBatch", "realm:undoProject", "realm:redoProject", "realm:closeProject", "realm:getOpenProject", "realm:chooseTransferPath", "realm:chooseArtifactPath",
+  "realm:listProjects", "realm:createProject", "realm:openProject", "realm:importProject", "realm:exportProject", "realm:writeArtifact", "realm:saveProject", "realm:updateProjectSettings", "realm:replaceTerrainLayer", "realm:replaceRegionLayer", "realm:replaceObjectLayer", "realm:replaceMapContent", "realm:replaceLayerTree", "realm:importAsset", "realm:importAssetsBatch", "realm:readAsset", "realm:deleteAsset", "realm:deleteAssetsBatch", "realm:undoProject", "realm:redoProject", "realm:closeProject", "realm:getOpenProject", "realm:chooseTransferPath", "realm:chooseArtifactPath",
 ] as const;
 export type RealmIpcChannel = typeof REALM_IPC_CHANNELS[number];
 type IpcMainLike = { handle(channel: string, listener: (...args: unknown[]) => unknown): void; removeHandler?(channel: string): void };
@@ -16,7 +16,7 @@ export type RealmIpcDialogs = {
 };
 
 const handlers: Partial<Record<RealmIpcChannel, keyof RealmCommands>> = {
-  "realm:listProjects": "listProjects", "realm:createProject": "createProject", "realm:openProject": "openProject", "realm:importProject": "importProject", "realm:exportProject": "exportProject", "realm:writeArtifact": "writeArtifact", "realm:saveProject": "saveProject", "realm:updateProjectSettings": "updateProjectSettings", "realm:replaceTerrainLayer": "replaceTerrainLayer", "realm:replaceRegionLayer": "replaceRegionLayer", "realm:replaceObjectLayer": "replaceObjectLayer", "realm:importAsset": "importAsset", "realm:importAssetsBatch": "importAssetsBatch", "realm:readAsset": "readAsset", "realm:deleteAsset": "deleteAsset", "realm:deleteAssetsBatch": "deleteAssetsBatch", "realm:undoProject": "undoProject", "realm:redoProject": "redoProject", "realm:closeProject": "closeProject", "realm:getOpenProject": "getOpenProject",
+  "realm:listProjects": "listProjects", "realm:createProject": "createProject", "realm:openProject": "openProject", "realm:importProject": "importProject", "realm:exportProject": "exportProject", "realm:writeArtifact": "writeArtifact", "realm:saveProject": "saveProject", "realm:updateProjectSettings": "updateProjectSettings", "realm:replaceTerrainLayer": "replaceTerrainLayer", "realm:replaceRegionLayer": "replaceRegionLayer", "realm:replaceObjectLayer": "replaceObjectLayer", "realm:replaceMapContent": "replaceMapContent", "realm:replaceLayerTree": "replaceLayerTree", "realm:importAsset": "importAsset", "realm:importAssetsBatch": "importAssetsBatch", "realm:readAsset": "readAsset", "realm:deleteAsset": "deleteAsset", "realm:deleteAssetsBatch": "deleteAssetsBatch", "realm:undoProject": "undoProject", "realm:redoProject": "redoProject", "realm:closeProject": "closeProject", "realm:getOpenProject": "getOpenProject",
 };
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 80 * 1024 * 1024;

@@ -52,3 +52,24 @@ export const splitRegionComponentShapes = (
   }
   return next;
 };
+
+/** Removes selected region cells that do not overlap terrain in the same leaf layer. */
+export const shapeRegionsToTerrain = (
+  mapShapes: readonly MapShape[],
+  layerId: string,
+  regionIds: readonly string[],
+  createShapeId: () => string = () => crypto.randomUUID(),
+): MapShape[] => {
+  const selected = new Set(regionIds);
+  const terrainCells = new Set(mapShapes.filter((shape) => shape.layer === "terrain" && shape.layerId === layerId).flatMap((shape) => [...mapShapeCellIds(shape)]));
+  const next: MapShape[] = [];
+  for (const shape of mapShapes) {
+    if (shape.layer !== "region" || shape.layerId !== layerId || !shape.regionId || !selected.has(shape.regionId)) {
+      next.push(shape);
+      continue;
+    }
+    const geometries = cellIdsToPolygonGeometries([...mapShapeCellIds(shape)].filter((cell) => terrainCells.has(cell)));
+    geometries.forEach((geometry, index) => next.push({ ...shape, id: index === 0 ? shape.id : createShapeId(), geometry }));
+  }
+  return next;
+};

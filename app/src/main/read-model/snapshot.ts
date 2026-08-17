@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { AssetManifest, MapObject, Properties, RealmSnapshot, Region, RegionShape, TerrainShape } from "../../shared/realmContract";
+import type { AssetManifest, LayerNode, LayerTree, MapObject, Properties, RealmSnapshot, Region, RegionShape, TerrainShape } from "../../shared/realmContract";
 import { validateObjectGeometry, validateProperties } from "../domain/geometry";
 import { MAX_ASSET_BYTES, MAX_ASSET_DIMENSION, validateAsset } from "../domain/assets";
 import { parseStoredSettings } from "../domain/settings";
@@ -30,22 +30,27 @@ function assetManifest(row: StoredAssetRow, bytes?: number[]): AssetManifest {
   } catch { throw corrupt("An asset contains invalid contents."); }
 }
 
+function readLayerTree(session: OpenProjectSession): LayerTree {
+  const nodes = session.database.prepare("SELECT id,parent_id AS parentId,kind,name,sort_order AS orderValue,visible,locked FROM layer_nodes ORDER BY parent_id,sort_order,id").all() as Record<string, unknown>[];
+  return { nodes: nodes.map((row): LayerNode => ({ id: String(row.id), parentId: row.parentId === null || row.parentId === undefined ? null : String(row.parentId), kind: String(row.kind) as LayerNode["kind"], name: String(row.name), order: Number(row.orderValue), visible: Number(row.visible) === 1, locked: Number(row.locked) === 1 })) };
+}
+
 function readLayers(session: OpenProjectSession): { terrain: TerrainShape[]; regions: Region[]; objects: MapObject[] } {
-  const terrain = (session.database.prepare("SELECT id,geometry_json AS geometryJson FROM terrain_shapes ORDER BY id").all() as Record<string, unknown>[]).map((row): TerrainShape => ({ id: String(row.id), geometry: json(row.geometryJson, "terrain geometry") as TerrainShape["geometry"] }));
-  const regionRows = session.database.prepare("SELECT id,name,color FROM regions ORDER BY name,id").all() as Record<string, unknown>[];
-  const shapeRows = session.database.prepare("SELECT id,region_id AS regionId,geometry_json AS geometryJson FROM region_shapes ORDER BY region_id,id").all() as Record<string, unknown>[];
+  const terrain = (session.database.prepare("SELECT id,layer_id AS layerId,geometry_json AS geometryJson FROM terrain_shapes ORDER BY layer_id,id").all() as Record<string, unknown>[]).map((row): TerrainShape => ({ id: String(row.id), layerId: String(row.layerId), geometry: json(row.geometryJson, "terrain geometry") as TerrainShape["geometry"] }));
+  const regionRows = session.database.prepare("SELECT id,layer_id AS layerId,name,color FROM regions ORDER BY layer_id,name,id").all() as Record<string, unknown>[];
+  const shapeRows = session.database.prepare("SELECT id,region_id AS regionId,layer_id AS layerId,geometry_json AS geometryJson FROM region_shapes ORDER BY layer_id,region_id,id").all() as Record<string, unknown>[];
   const shapesByRegion = new Map<string, RegionShape[]>();
   for (const row of shapeRows) {
     const regionId = String(row.regionId); const shapes = shapesByRegion.get(regionId) ?? [];
-    shapes.push({ id: String(row.id), geometry: json(row.geometryJson, "region geometry") as RegionShape["geometry"] }); shapesByRegion.set(regionId, shapes);
+    shapes.push({ id: String(row.id), layerId: String(row.layerId), geometry: json(row.geometryJson, "region geometry") as RegionShape["geometry"] }); shapesByRegion.set(regionId, shapes);
   }
-  const regions = regionRows.map((row): Region => ({ id: String(row.id), name: String(row.name), color: String(row.color), shapes: shapesByRegion.get(String(row.id)) ?? [] }));
+  const regions = regionRows.map((row): Region => ({ id: String(row.id), layerId: String(row.layerId), name: String(row.name), color: String(row.color), shapes: shapesByRegion.get(String(row.id)) ?? [] }));
   if ([...shapesByRegion.keys()].some((id) => !regions.some((region) => region.id === id))) throw corrupt("A region shape refers to a missing region.");
-  const objects = (session.database.prepare("SELECT id,kind,label,geometry_json AS geometryJson,properties_json AS propertiesJson,z_index AS zIndex,locked,asset_id AS assetId FROM objects ORDER BY z_index,id").all() as Record<string, unknown>[]).map((row): MapObject => {
+  const objects = (session.database.prepare("SELECT id,layer_id AS layerId,kind,label,geometry_json AS geometryJson,properties_json AS propertiesJson,z_index AS zIndex,locked,asset_id AS assetId FROM objects ORDER BY layer_id,z_index,id").all() as Record<string, unknown>[]).map((row): MapObject => {
     const geometry = json(row.geometryJson, "object geometry"); const properties = json(row.propertiesJson, "object properties");
     const kind = String(row.kind) as MapObject["kind"];
     try { validateObjectGeometry(kind, geometry, true); validateProperties(properties); } catch { throw corrupt("An object contains invalid geometry or properties."); }
-    return { id: String(row.id), kind, label: String(row.label), geometry: geometry as MapObject["geometry"], properties: properties as Properties, zIndex: Number(row.zIndex), locked: Number(row.locked) === 1, ...(row.assetId === null || row.assetId === undefined ? {} : { assetId: String(row.assetId) }) };
+    return { id: String(row.id), layerId: String(row.layerId), kind, label: String(row.label), geometry: geometry as MapObject["geometry"], properties: properties as Properties, zIndex: Number(row.zIndex), locked: Number(row.locked) === 1, ...(row.assetId === null || row.assetId === undefined ? {} : { assetId: String(row.assetId) }) };
   });
   const mapShapes = mapShapesFromLayers({ terrain, regions });
   try { validateMapShapes(mapShapes); } catch { throw corrupt("A terrain or region shape is invalid or overlaps another shape in its layer."); }
@@ -65,7 +70,8 @@ export function projectSnapshot(session: OpenProjectSession): RealmSnapshot {
   const assets = assetRows.map((row): AssetManifest => assetManifest(row, needsAssetIntegrityCheck ? bytesById.get(String(row.id)) ?? [] : undefined));
   if (needsAssetIntegrityCheck) session.markAssetIntegrityVerified();
   return {
-    formatVersion: 12, path: session.path, world: { id: String(world.id), name: String(world.name) },
+    formatVersion: 13, path: session.path, world: { id: String(world.id), name: String(world.name) },
+    layerTree: readLayerTree(session),
     layers: { terrain: layers.terrain, regions: layers.regions, objects: layers.objects }, assets,
     settings: parseStoredSettings(String(world.settingsJson)), canUndo: session.canUndo, canRedo: session.canRedo,
   };

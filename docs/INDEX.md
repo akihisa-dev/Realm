@@ -10,7 +10,7 @@
 ## 技術
 
 - [アーキテクチャ](engineering/architecture.md)：Electron main/preloadの境界、状態の所有者、オフライン保証
-- [データモデル](engineering/data-model.md)：schema 12の`.realmmap` SQLite契約、3つの永続レイヤー、一時的なグリッド選択
+- [データモデル](engineering/data-model.md)：schema 13の`.realmmap` SQLite契約、階層tree、typed content、一時的なグリッド選択
 - [技術構成](engineering/stack.md)：採用する技術とプラットフォームの制約
 - [テスト戦略](engineering/test-strategy.md)：テスト層と公開前に必要な証拠
 

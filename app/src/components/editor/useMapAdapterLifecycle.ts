@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import type { CellAttributeSnapshot, GeoJsonGeometry, LayerId, MapObject, MapShape, MapShapeEdit } from "../../backend";
+import type { ActiveKind, CellAttributeSnapshot, GeoJsonGeometry, LayerId, LayerTree, MapObject, MapShape, MapShapeEdit } from "../../backend";
 import type { MapRaster } from "../../exportArtifacts";
 import type { ExportCanvasSize } from "../../map/contracts";
 import type {
@@ -22,6 +22,8 @@ export type MapAdapterLifecycleOptions = {
   zoom: number | undefined;
   objects: MapObject[];
   activeLayer: LayerId;
+  activeKind: ActiveKind;
+  layerTree?: LayerTree;
   themeId: MapThemeId;
   themeOverrides: ThemeOverrides;
   showGrid: boolean;
@@ -65,6 +67,8 @@ export function useMapAdapterLifecycle({
   zoom,
   objects,
   activeLayer,
+  activeKind,
+  layerTree,
   themeId,
   themeOverrides,
   showGrid,
@@ -151,6 +155,8 @@ export function useMapAdapterLifecycle({
 
     adapter.setObjects(objects);
     adapter.setActiveLayer(activeLayer);
+    adapter.setActiveKind?.(activeKind);
+    if (layerTree) adapter.setLayerTree?.(layerTree);
     adapter.setTheme(themeId);
     adapter.setThemeOverrides(themeOverrides);
     adapter.setGridVisible(showGrid);
@@ -194,6 +200,9 @@ export function useMapAdapterLifecycle({
       onExporterReadyRef.current?.(null);
     };
   }, [createRenderer]);
+
+  useEffect(() => { adapterRef.current?.setActiveKind?.(activeKind); }, [adapterRef, activeKind]);
+  useEffect(() => { if (layerTree) adapterRef.current?.setLayerTree?.(layerTree); }, [adapterRef, layerTree]);
 
   useEffect(() => {
     if (zoom === undefined || !adapterRef.current) return;

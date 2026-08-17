@@ -1,13 +1,17 @@
 import * as SelectModule from "ol/interaction/Select";
 import { RealmMapAdapter } from "./MapAdapter";
 
+const OBJECT_LAYER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const layerTree = { nodes: [{ id: OBJECT_LAYER, parentId: null, kind: "leaf" as const, name: "Object", order: 0, visible: true, locked: false }] };
+const createAdapter = (host: HTMLDivElement): RealmMapAdapter => { const adapter = new RealmMapAdapter({ target: host }); adapter.setLayerTree(layerTree); return adapter; };
+
 describe("RealmMapAdapter raster export", () => {
   it("rejects invalid or unsafe configured export dimensions before rendering", async () => {
     const host = document.createElement("div");
     host.style.width = "640px";
     host.style.height = "480px";
     document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     await expect(adapter.exportRaster("image/png", 1, "world", { width: 511, height: 1024 })).rejects.toThrow("512〜8192px");
     await expect(adapter.exportRaster("image/png", 2, "world", { width: 8192, height: 8192 })).rejects.toThrow("大きすぎます");
     await expect(adapter.exportRaster("image/jpeg", 1, "world", { width: 1024, height: 1024, quality: 0.49 })).rejects.toThrow("50〜100%");
@@ -20,9 +24,9 @@ describe("RealmMapAdapter raster export", () => {
     host.style.width = "640px";
     host.style.height = "480px";
     document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
-    adapter.setObjects([{ id: "selected", kind: "city", label: "Selected", geometry: { type: "Point", coordinates: [0, 0] }, properties: {}, zIndex: 0, locked: false }]);
-    adapter.setActiveLayer("object");
+    const adapter = createAdapter(host);
+    adapter.setObjects([{ id: "selected", layerId: OBJECT_LAYER, kind: "city", label: "Selected", geometry: { type: "Point", coordinates: [0, 0] }, properties: {}, zIndex: 0, locked: false }]);
+    adapter.setActiveLayer(OBJECT_LAYER); adapter.setActiveKind("city");
     adapter.setSelectedObjects(["selected"]);
     const map = adapter.getMap();
     map.setSize([640, 480]);

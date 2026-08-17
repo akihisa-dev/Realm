@@ -1,4 +1,4 @@
-import type { CellAttributeSnapshot, GeoJsonGeometry, LayerId, MapObject, MapShape, MapShapeEdit, ObjectKind } from "../backend";
+import type { ActiveKind, CellAttributeSnapshot, GeoJsonGeometry, LayerId, LayerTree, MapObject, MapShape, MapShapeEdit, ObjectKind } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import type { MapThemeId, ThemeOverrides } from "./themes";
 import type { MapErrorCode } from "./errors";
@@ -35,6 +35,8 @@ export interface RealmMapRenderer {
   setObjects(objects: MapObject[]): void;
   /** The only layer allowed to receive primary-pointer edits and selection. */
   setActiveLayer(layer: LayerId): void;
+  setActiveKind?(kind: ActiveKind): void;
+  setLayerTree?(tree: LayerTree): void;
   setTheme(themeId: MapThemeId): void;
   setThemeOverrides(overrides: ThemeOverrides): void;
   setGridVisible(visible: boolean): void;

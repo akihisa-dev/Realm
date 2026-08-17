@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import type { CellAttributeSnapshot, LayerId, MapObject, MapShape } from "../../backend";
+import type { ActiveKind, CellAttributeSnapshot, LayerId, LayerTree, MapObject, MapShape } from "../../backend";
 import { canonicalValueSignature } from "../../canonicalValue";
 import type {
   CellGridOptions,
@@ -16,6 +16,8 @@ type RendererSyncOptions = {
   adapterRef: RendererRef;
   objects: MapObject[];
   activeLayer: LayerId;
+  activeKind: ActiveKind;
+  layerTree?: LayerTree;
   themeId: MapThemeId;
   themeOverrides: ThemeOverrides;
   showGrid: boolean;
@@ -39,6 +41,8 @@ export function useRendererSync({
   adapterRef,
   objects,
   activeLayer,
+  activeKind,
+  layerTree,
   themeId,
   themeOverrides,
   showGrid,
@@ -65,9 +69,12 @@ export function useRendererSync({
   const cellAttributesSignature = useMemo(() => canonicalValueSignature(cellAttributes), [cellAttributes]);
   const selectedCellIdsSignature = useMemo(() => canonicalValueSignature(selectedCellIds), [selectedCellIds]);
   const selectedObjectIdsSignature = useMemo(() => canonicalValueSignature(selectedObjectIds), [selectedObjectIds]);
+  const layerTreeSignature = useMemo(() => canonicalValueSignature(layerTree ?? null), [layerTree]);
 
   useEffect(() => { adapterRef.current?.setObjects(objects); }, [adapterRef, objectsSignature]);
   useEffect(() => { adapterRef.current?.setActiveLayer?.(activeLayer); }, [adapterRef, activeLayer]);
+  useEffect(() => { adapterRef.current?.setActiveKind?.(activeKind); }, [adapterRef, activeKind]);
+  useEffect(() => { if (layerTree) adapterRef.current?.setLayerTree?.(layerTree); }, [adapterRef, layerTreeSignature]);
   useEffect(() => { adapterRef.current?.setTheme(themeId); }, [adapterRef, themeId]);
   useEffect(() => { adapterRef.current?.setThemeOverrides(themeOverrides); }, [adapterRef, themeOverridesSignature]);
   useEffect(() => { adapterRef.current?.setGridVisible(showGrid); }, [adapterRef, showGrid]);

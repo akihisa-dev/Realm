@@ -1,6 +1,6 @@
 import { readdirSync } from "node:fs";
 import { join, extname } from "node:path";
-import type { RealmBackend, RealmSnapshot, ProjectSummary, ProjectSettings, ImportAssetInput, ImportAssetsBatchInput, AssetRead, DeleteAssetsBatchInput, ReplaceObjectLayerInput, ReplaceRegionLayerInput, ReplaceTerrainLayerInput } from "../../shared/realmContract";
+import type { RealmBackend, RealmSnapshot, ProjectSummary, ProjectSettings, ImportAssetInput, ImportAssetsBatchInput, AssetRead, DeleteAssetsBatchInput, ReplaceObjectLayerInput, ReplaceRegionLayerInput, ReplaceTerrainLayerInput, ReplaceLayerTreeInput, ReplaceMapContentInput } from "../../shared/realmContract";
 import { RealmError, invalid } from "../domain/errors";
 import { validateName } from "../domain/geometry";
 import { validateSettings } from "../domain/settings";
@@ -15,6 +15,8 @@ import type { OpenProjectSession } from "../state/session";
 import { deleteAssetsBatch as deleteAssetsBatchCommand, importAsset as importAssetCommand, importAssetsBatch as importAssetsBatchCommand, readAsset as readAssetCommand } from "./assetCommands";
 import { replaceObjectLayer as replaceObjectLayerCommand } from "./objectCommands";
 import { replaceRegionLayer as replaceRegionLayerCommand, replaceTerrainLayer as replaceTerrainLayerCommand } from "./layerCommands";
+import { replaceLayerTree as replaceLayerTreeCommand } from "./layerTreeCommands";
+import { replaceMapContent as replaceMapContentCommand } from "./mapContentCommands";
 
 const PROJECT_EXTENSION = ".realmmap";
 const fileExtension = (path: string): string => extname(path).toLowerCase();
@@ -85,6 +87,8 @@ export class RealmCommands implements RealmBackend {
   async replaceTerrainLayer(input: ReplaceTerrainLayerInput): Promise<RealmSnapshot> { return replaceTerrainLayerCommand(() => this.current(), input); }
   async replaceRegionLayer(input: ReplaceRegionLayerInput): Promise<RealmSnapshot> { return replaceRegionLayerCommand(() => this.current(), input); }
   async replaceObjectLayer(input: ReplaceObjectLayerInput): Promise<RealmSnapshot> { return replaceObjectLayerCommand(() => this.current(), input); }
+  async replaceLayerTree(input: ReplaceLayerTreeInput): Promise<RealmSnapshot> { return replaceLayerTreeCommand(() => this.current(), input); }
+  async replaceMapContent(input: ReplaceMapContentInput): Promise<RealmSnapshot> { return replaceMapContentCommand(() => this.current(), input); }
   async importAsset(input: ImportAssetInput): Promise<RealmSnapshot> { return importAssetCommand(() => this.current(), input); }
   async importAssetsBatch(input: ImportAssetsBatchInput): Promise<RealmSnapshot> { return importAssetsBatchCommand(() => this.current(), input); }
   async readAsset(input: { id: string }): Promise<AssetRead> { return readAssetCommand(() => this.current(), input); }

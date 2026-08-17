@@ -15,7 +15,7 @@ import MouseWheelZoom from "ol/interaction/MouseWheelZoom";
 import { click, primaryAction } from "ol/events/condition";
 import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
-import type { CellAttributeSnapshot, GeoJsonGeometry, LayerId, MapObject, MapShape, MapShapeEdit, ObjectKind, Position } from "../backend";
+import { contentKindOf, type ActiveKind, type CellAttributeSnapshot, type GeoJsonGeometry, type LayerId, type LayerTree, type MapObject, type MapShape, type MapShapeEdit, type ObjectKind, type Position } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
 import { CELL_PAINT_RADII, WORLD_EXTENT, cellCenter as gridCellCenter, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
@@ -36,7 +36,8 @@ import { nudgeGeometry, resolutionForFillingExtent, snapFinalGeometry, straighte
 import { MiddleButtonDragPan, MiddleButtonSafeDraw } from "./middleButtonPan";
 import type { CellGridOptions, DrawingOptions, ExportCanvasSize, ObjectGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 import { MapLayerRegistry } from "./mapLayerRegistry";
-import { modeAllowedForActiveLayer, objectPanForMode, sameStringSet } from "./mapAdapterPolicy";
+import { modeAllowedForActiveLayer, objectGrabForMode, sameStringSet } from "./mapAdapterPolicy";
+import { applyObjectLayerStates, renderLayerStates, syncObjectFeatures, type RenderLayerState } from "./objectFeatureSync";
 export type { CellGridOptions, DrawingOptions, ExportCanvasSize, ObjectGeometryChange, GridOptions, MapAdapterOptions, RealmMapMode, RealmMapRenderer, RealmMapRendererFactory } from "./contracts";
 export type { CellPaintSize } from "./gridGeometry";
 export { CELL_PAINT_RADII, CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN, CELL_GRID_CELL_COUNT, CELL_GRID_COLUMNS, CELL_GRID_ROWS, WORLD_EXTENT, availableViewportSize, cellCenterWithinWorld, cellPaintRadiusForRange, cellCenter, cellId, cellIdsWithinPaintPath, cellIdsWithinPaintPosition, cellPolygon, parseCellId } from "./gridGeometry";
@@ -80,8 +81,9 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private readonly target: HTMLElement;
   private draw: Draw | null = null;
   private activeMode: RealmMapMode = "pan";
-  // Direct renderer consumers keep object-edit compatibility until lifecycle setup supplies a layer.
-  private activeLayer: LayerId = "terrain";
+  private activeLayer: LayerId = "";
+  private activeKind: ActiveKind = "terrain";
+  private layerState = new globalThis.Map<string, RenderLayerState>();
   private drawingGesture: DrawingOptions["gesture"] = "freehand";
   private drawingSmoothingPasses: number | undefined;
   private drawingSnapAngleDegrees: number | null = null;
@@ -157,7 +159,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     for (const listener of this.selectListeners) listener(ids[0] ?? null);
   }
   private selectableFeature(feature: Feature): boolean {
-    if (this.activeLayer !== "object") return false;
+    if (contentKindOf(this.activeKind) !== "object" || feature.get("layerId") !== this.activeLayer || feature.get("layerVisible") === false || feature.get("layerLocked") === true) return false;
     const kind = feature.get("kind") as ObjectKind | undefined;
     const properties = feature.get("properties") as Record<string, unknown> | undefined;
     return feature.get("locked") !== true && properties?.locked !== true && (kind === undefined || !this.hiddenObjectKinds.has(kind));
@@ -316,43 +318,18 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   setActiveLayer(layer: LayerId): void {
-    if (layer !== "terrain" && layer !== "region" && layer !== "object") return;
+    if (layer === "terrain") this.activeKind = "terrain";
+    if (layer === "region") this.activeKind = "region";
     if (layer === this.activeLayer) return;
     this.handlePointerCancel(); const hadSelection = this.selectedObjectIds().length > 0; this.setSelectedObjects([]);
     this.activeLayer = layer; this.setMode("pan"); if (hadSelection) this.emitSelection();
   }
-  setObjects(objects: MapObject[]): void {
-    const selectedIds = this.selectedObjectIds();
-    const desiredIds = new Set(objects.map((object) => object.id));
-    for (const rendered of this.objectSource.getFeatures()) {
-      const id = rendered.getId();
-      if (typeof id !== "string" || !desiredIds.has(id)) this.objectSource.removeFeature(rendered);
-    }
-    const additions: Feature[] = [];
-    for (const snapshot of objects) {
-      const snapshotKey = JSON.stringify([snapshot.kind, snapshot.label, snapshot.geometry, snapshot.properties, snapshot.locked, snapshot.zIndex, snapshot.assetId ?? null]);
-      const found = this.objectSource.getFeatureById(snapshot.id);
-      const rendered = Array.isArray(found) ? found[0] : found;
-      if (rendered) {
-        if (rendered.get("snapshotKey") === snapshotKey) continue;
-        rendered.setGeometry(guardedGeometryFromGeoJson(snapshot.geometry));
-        rendered.set("kind", snapshot.kind, true);
-        rendered.set("label", snapshot.label, true);
-        rendered.set("properties", snapshot.properties, true);
-        rendered.set("locked", snapshot.locked, true);
-        rendered.set("zIndex", snapshot.zIndex, true);
-        rendered.set("assetId", snapshot.assetId, true);
-        rendered.set("snapshotKey", snapshotKey, true);
-        rendered.changed();
-        continue;
-      }
-      const created = new Feature({ geometry: guardedGeometryFromGeoJson(snapshot.geometry), kind: snapshot.kind, label: snapshot.label, properties: snapshot.properties, locked: snapshot.locked, zIndex: snapshot.zIndex, assetId: snapshot.assetId, snapshotKey });
-      created.setId(snapshot.id);
-      additions.push(created);
-    }
-    if (additions.length > 0) this.objectSource.addFeatures(additions);
-    this.setSelectedObjects(selectedIds);
+  setActiveKind(kind: ActiveKind): void {
+    if (!["terrain", "region", "city", "text", "mountain", "forest"].includes(kind) || kind === this.activeKind) return;
+    this.handlePointerCancel(); this.setSelectedObjects([]); this.activeKind = kind; this.setMode("pan");
   }
+  setLayerTree(tree: LayerTree): void { this.layerState = renderLayerStates(tree); this.setMapShapes(this.mapShapes); applyObjectLayerStates(this.objectSource, this.layerState); this.objectLayer.changed(); }
+  setObjects(objects: MapObject[]): void { const selectedIds = this.selectedObjectIds(); syncObjectFeatures(this.objectSource, objects, this.activeLayer, this.activeKind, this.layerState); this.setSelectedObjects(selectedIds); }
 
   setTheme(themeId: MapThemeId): void {
     this.activeThemeId = themeId;
@@ -417,7 +394,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
   }
 
   setMode(mode: RealmMapMode): void {
-    const effectiveMode = this.presentationPreview || !modeAllowedForActiveLayer(this.activeLayer, mode) ? "pan" : mode;
+    const activeLayerState = this.layerState.get(this.activeLayer);
+    const effectiveMode = this.presentationPreview || activeLayerState?.visible === false || activeLayerState?.locked === true || !modeAllowedForActiveLayer(contentKindOf(this.activeKind), mode) ? "pan" : mode;
     this.temporaryPan = false;
     this.draw = this.disposePointerInteraction(this.draw); this.paint = this.disposePointerInteraction(this.paint);
     this.paintLastPoint = null; this.paintStrokeSelection.clear(); this.paintSelectionBeforeStroke = []; this.eraser = this.disposePointerInteraction(this.eraser);
@@ -434,17 +412,17 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.setHoveredCells([]);
     this.grabHover.clear();
     this.activeMode = effectiveMode;
-    const objectPan = objectPanForMode(this.activeLayer, this.presentationPreview, effectiveMode);
-    this.modify.setActive(objectPan);
-    this.translate.setActive(objectPan);
-    this.selection.setActive(objectPan);
-    this.lasso.setActive(objectPan);
+    const objectGrab = objectGrabForMode(contentKindOf(this.activeKind), this.presentationPreview, effectiveMode);
+    this.modify.setActive(objectGrab);
+    this.translate.setActive(objectGrab);
+    this.selection.setActive(objectGrab);
+    this.lasso.setActive(objectGrab);
     this.cellLayer.setVisible(!this.presentationPreview);
     this.setNavigationActive(effectiveMode === "pan");
     this.refreshHoveredCells();
     this.refreshGrabHover();
-    if (effectiveMode === "grab") this.grab = new MapShapeGrabController({
-      shapes: () => this.mapShapes.filter((shape) => shape.layer === this.activeLayer),
+    if (effectiveMode === "grab" && contentKindOf(this.activeKind) !== "object") this.grab = new MapShapeGrabController({
+      shapes: () => this.mapShapes.filter((shape) => shape.layer === contentKindOf(this.activeKind) && shape.layerId === this.activeLayer && this.layerState.get(shape.layerId ?? "")?.visible !== false),
       hitTolerance: () => Math.max(0.15, (this.map.getView().getResolution() ?? 1) * 8),
       setPreview: (shapes) => this.setMapShapePreview(shapes),
       emit: (shapes) => { for (const listener of this.mapShapeEditListeners) listener({ shapes }); },
@@ -515,7 +493,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.draw = this.cellRegion.createDraw(
         (cellIds) => { for (const listener of this.cellSelectListeners) listener(cellIds); },
         (code) => { for (const listener of this.errorListeners) listener(code); },
-        this.activeLayer === "terrain" ? "terrain" : "region",
+        this.activeKind === "terrain" ? "terrain" : "region",
       );
       this.map.addInteraction(this.draw);
       return;
@@ -528,7 +506,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     if (effectiveMode === "shape") {
       this.setSelected(null);
       this.regionShape = new RegionShapeController({
-        shapes: () => this.mapShapes.filter((shape) => shape.layer === this.activeLayer),
+        shapes: () => this.mapShapes.filter((shape) => shape.layer === "region" && shape.layerId === this.activeLayer && this.layerState.get(shape.layerId ?? "")?.visible !== false),
         hitTolerance: () => Math.max(0.15, (this.map.getView().getResolution() ?? 1) * 8),
         emit: (shapes) => { for (const listener of this.mapShapeEditListeners) listener({ shapes }); },
       });
@@ -953,10 +931,11 @@ export class RealmMapAdapter implements RealmMapRenderer {
       this.lassoPoints = [];
       this.lassoAdditive = false;
     }
-    this.modify.setActive(this.activeMode === "pan" && !preview);
-    this.translate.setActive(this.activeMode === "pan" && !preview);
-    this.selection.setActive(this.activeMode === "pan" && !preview);
-    this.lasso.setActive(this.activeMode === "pan" && !preview);
+    const objectGrab = objectGrabForMode(contentKindOf(this.activeKind), preview, this.activeMode);
+    this.modify.setActive(objectGrab);
+    this.translate.setActive(objectGrab);
+    this.selection.setActive(objectGrab);
+    this.lasso.setActive(objectGrab);
     this.layers.setPresentationMode(preview);
     if (this.mapShapesControlled) this.renderMapShapes(this.mapShapes, preview);
     else this.setCellAttributes([...this.cellAttributesById.values()].flat());
@@ -1009,7 +988,8 @@ export class RealmMapAdapter implements RealmMapRenderer {
 
   private renderMapShapes(shapes: readonly MapShape[], renderSmoothShapes: boolean): void {
     this.mapShapePreviewShapes = null;
-    const { terrainCount, regionCount } = renderCanonicalMapShapes(shapes, this.terrainSmoothSource, this.regionSmoothSource, renderSmoothShapes);
+    const visibleShapes = shapes.filter((shape) => this.layerState.get(shape.layerId ?? "")?.visible !== false);
+    const { terrainCount, regionCount } = renderCanonicalMapShapes(visibleShapes, this.terrainSmoothSource, this.regionSmoothSource, renderSmoothShapes);
     this.terrainOutlineLayer.setVisible(false);
     this.terrainSmoothLayer.setVisible(terrainCount > 0);
     this.regionSmoothLayer.setVisible(regionCount > 0);

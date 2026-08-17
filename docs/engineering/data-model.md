@@ -1,5 +1,13 @@
 # データモデル
 
+## 階層とtyped content
+
+schema 13では、`layer_nodes`が`id`、`parent_id`、`kind(group|leaf)`、`name`、`sort_order`、`visible`、`locked`を持つ階層treeを保存します。rootは暗黙で、leafだけが地物の所属先です。親groupのvisible・lockedは子へ継承されます。cycle、欠落parent、重複order、groupへの地物所属は拒否します。
+
+地物は既存のtyped tableを維持します。`terrain_shapes.layer_id`、`regions.layer_id`、`region_shapes.layer_id`、`objects.layer_id`がleafを参照し、region componentはlogical regionと同じlayerに属します。generic features tableは作りません。1 leaf内ではterrain、region、objectを混在できます。
+
+旧schemaはmigrationせず、read-only preflightで拒否します。undo/redo、snapshot、IPC、preload、memory backendもlayer treeとlayerIdを同じ契約で扱います。
+
 ## ファイル契約
 
 ライブラリ内の各世界は、RealmのmacOSアプリケーションデータディレクトリ以下にUUIDのファイル名で保存する1つのSQLiteデータベースです。
@@ -11,16 +19,16 @@
 ソースの置き換え、digestまたは内容の変更、sidecar集合の変更、通常ファイルでないsidecar、SQLiteの`SQLITE_FCNTL_HAS_MOVED`シグナルは拒否します。
 選択したソースは変更しません。
 
-schema version 12だけが受け入れられる保存形式です。
+schema version 13だけが受け入れられる保存形式です。
 `PRAGMA user_version`と`schema_migrations`に同じversionを記録し、不一致は破損として扱います。
-version 1から11は、書き込み可能な接続を開いたりソースを変更したりせず、読み取り専用の事前検査で拒否します。
-Realmは`features`、`map_shapes`、`cell_grid`など古いテーブルをschema 12へ移行しません。
+version 1から12は、書き込み可能な接続を開いたりソースを変更したりせず、読み取り専用の事前検査で拒否します。
+Realmは`features`、`map_shapes`、`cell_grid`など古いテーブルをschema 13へ移行しません。
 新しいversion、部分的なSQLiteファイル、整合性検査の失敗、廃止済みテーブル、宣言した形式を保たない列、キー、index、外部キー、checkを持つschemaも、書き込み可能な接続を開く前に拒否します。
 
 ## 識別と現在状態
 
 - 世界は、安定した識別子を1つ、現在の名前を1つ、範囲を限定したプロジェクト設定オブジェクトを1つ持つ
-- 編集可能な地図は、`terrain`、`region`、`object`のちょうど3つのレイヤーに分かれる
+- 編集可能な地図は任意の階層レイヤーを持ち、末端レイヤーには`terrain`、`region`、`object`の内容を混在できる
 - `terrain`は現在の地形そのものであり、地表、水系、バイオーム、山の種類、その他の地形分類を表さない
 - `region`は独立した論理レイヤーである。領域はオブジェクトではなく、オブジェクトテーブルへ保存しない
 - `object`は地形と領域の上に置くものを含む。初期種類は`city`、`text`、`mountain`、`forest`である
@@ -33,10 +41,11 @@ Realmは`features`、`map_shapes`、`cell_grid`など古いテーブルをschema
 | テーブル | 永続化する責務 |
 | --- | --- |
 | `world` | 1つの世界の名前と範囲を限定したプロジェクト設定 |
-| `terrain_shapes` | グリッドに吸着した地形`Polygon`行（`id`、`geometry_json`） |
-| `regions` | 領域の識別、名前、`#RRGGBB`色 |
-| `region_shapes` | `region_id`で`regions`に結びつく領域ポリゴン部分 |
-| `objects` | オブジェクトの識別、種類、ラベル、ジオメトリ、検証済みプロパティ、`z_index`、ロック状態、任意のアセット参照 |
+| `layer_nodes` | 親子関係、グループ・末端の別、名前、並び、表示、ロック |
+| `terrain_shapes` | 末端レイヤーに属する、グリッドに吸着した地形`Polygon`行 |
+| `regions` | 末端レイヤーに属する領域の識別、名前、`#RRGGBB`色 |
+| `region_shapes` | `region_id`と同じ末端レイヤーに属する領域ポリゴン部分 |
+| `objects` | 末端レイヤーに属するオブジェクトの識別、種類、ラベル、ジオメトリ、検証済みプロパティ、`z_index`、ロック状態、任意のアセット参照 |
 | `assets` | 検証済みのローカル画像バイト列とmanifest |
 
 汎用の`features`テーブルや、地形、領域、オブジェクトを混在させるテーブルは意図的に持ちません。
@@ -72,8 +81,8 @@ Realmは`features`、`map_shapes`、`cell_grid`など古いテーブルをschema
 永続化せず、undo状態にも含めません。
 
 グリッド描画と範囲描画は、一時的なセル選択を完全な地形ポリゴン行または領域ポリゴン部分へ変換します。
-地形と領域では同じ2つの入力方式を使い、active layerに応じて保存対象と領域の識別情報だけを変えます。
-消しゴムは共通のレイヤー削除操作です。active layerに応じて、地形では`terrain_shapes`、領域では`regions`と`region_shapes`、オブジェクトでは`objects`だけを変更します。オブジェクトは選択または一覧からも削除できます。
+地形と領域では同じ2つの入力方式を使い、選択中の末端レイヤーと描く内容に応じて保存対象と領域の識別情報だけを変えます。
+消しゴムは共通の削除操作です。選択中の末端レイヤーと描く内容に応じて、地形では`terrain_shapes`、領域では`regions`と`region_shapes`、オブジェクトでは`objects`だけを変更します。オブジェクトは選択または一覧からも削除できます。
 
 レイヤー切り替えは強いジェスチャー境界です。
 進行中のポインター操作、選択、プレビューをキャンセルしてから、新しいレイヤーをactiveにします。
@@ -93,6 +102,6 @@ Realmは`features`、`map_shapes`、`cell_grid`など古いテーブルをschema
 ## 内部schemaの進化
 
 アプリが管理する世界のschemaを変更する場合は、宣言したversion、受け入れる形式の完全なfixture、拒否したversionでソースを保持するテスト、ロールバック可能な失敗テストが必要です。
-このリリースはschema 12だけを受け入れ、古い`.realmmap`ファイルからの自動移行経路を持ちません。
+このリリースはschema 13だけを受け入れ、古い`.realmmap`ファイルからの自動移行経路を持ちません。
 転送データに長期的な互換性を別途約束することもありません。
 古い転送データを受け入れる場合は、通常のオープン処理ではなく、明示して別にテストする機能として扱います。

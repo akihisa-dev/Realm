@@ -12,6 +12,7 @@ import type { MapObject, MapShape } from "../backend";
 
 const object = (id: string, coordinates: [number, number], locked = false): MapObject => ({
   id,
+  layerId: OBJECT_LAYER,
   kind: "city",
   label: id,
   geometry: { type: "Point", coordinates },
@@ -28,28 +29,37 @@ const terrainShape: MapShape = {
   snapGridVersion: 2,
   geometry: { type: "Polygon", coordinates: [[[-3, -3], [3, -3], [3, 3], [-3, 3], [-3, -3]]] },
 };
+const TERRAIN_LAYER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const REGION_LAYER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const OBJECT_LAYER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const layerTree = { nodes: [
+  { id: TERRAIN_LAYER, parentId: null, kind: "leaf" as const, name: "Terrain", order: 0, visible: true, locked: false },
+  { id: REGION_LAYER, parentId: null, kind: "leaf" as const, name: "Region", order: 1, visible: true, locked: false },
+  { id: OBJECT_LAYER, parentId: null, kind: "leaf" as const, name: "Object", order: 2, visible: true, locked: false },
+] };
+const createAdapter = (host: HTMLDivElement): RealmMapAdapter => { const adapter = new RealmMapAdapter({ target: host }); adapter.setLayerTree(layerTree); return adapter; };
 
 describe("RealmMapAdapter", () => {
   it("allows primary editing only in the selected layer", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     adapter.setObjects([object("city-1", [1, 2])]);
     const selection = adapter.getMap().getInteractions().getArray().find((interaction) => interaction instanceof SelectModule.default) as SelectModule.default;
 
-    adapter.setActiveLayer("terrain");
+    adapter.setActiveLayer(TERRAIN_LAYER); adapter.setActiveKind("terrain");
     adapter.setMode("city");
     expect(adapter.getMap().getInteractions().getArray().some((interaction) => interaction instanceof Draw)).toBe(false);
     adapter.setSelected("city-1");
     expect(selection.getFeatures().getLength()).toBe(0);
 
-    adapter.setActiveLayer("object");
+    adapter.setActiveLayer(OBJECT_LAYER); adapter.setActiveKind("city");
     adapter.setMode("city");
     expect(adapter.getMap().getInteractions().getArray().some((interaction) => interaction instanceof Draw)).toBe(true);
     adapter.setSelected("city-1");
     expect(selection.getFeatures().getLength()).toBe(1);
 
-    adapter.setActiveLayer("region");
+    adapter.setActiveLayer(REGION_LAYER); adapter.setActiveKind("region");
     expect(selection.getFeatures().getLength()).toBe(0);
     adapter.dispose();
     host.remove();
@@ -64,10 +74,10 @@ describe("RealmMapAdapter", () => {
   it("converts a region enclosure into cell ids without creating an object", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const selected = vi.fn();
     const drawn = vi.fn();
-    adapter.setActiveLayer("region");
+    adapter.setActiveLayer(REGION_LAYER); adapter.setActiveKind("region");
     adapter.onCellSelect(selected);
     adapter.onDraw(drawn);
     adapter.setMode("cell-region");
@@ -86,11 +96,11 @@ describe("RealmMapAdapter", () => {
   it("renders canonical terrain and region projections and supports shape grab", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     adapter.setMapShapes([terrainShape]);
     const terrainLayer = adapter.getMap().getLayers().item(8);
     expect(terrainLayer).toBeDefined();
-    adapter.setActiveLayer("terrain");
+    adapter.setActiveLayer(TERRAIN_LAYER); adapter.setActiveKind("terrain");
     adapter.setMode("grab");
     expect(host.classList.contains("map-canvas-grab-target")).toBe(false);
     adapter.setMode("shape");
@@ -102,8 +112,8 @@ describe("RealmMapAdapter", () => {
   it("selects only unlocked visible objects and emits ordered object ids", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
-    adapter.setActiveLayer("object");
+    const adapter = createAdapter(host);
+    adapter.setActiveLayer(OBJECT_LAYER); adapter.setActiveKind("city");
     adapter.setObjects([object("open", [0, 0]), object("locked", [1, 1], true), object("hidden", [2, 2])]);
     adapter.setObjectKindVisibility("city", true);
     const selected = vi.fn();
@@ -121,8 +131,8 @@ describe("RealmMapAdapter", () => {
   it("emits geometry changes and erases object ids through layer-specific callbacks", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
-    adapter.setActiveLayer("object");
+    const adapter = createAdapter(host);
+    adapter.setActiveLayer(OBJECT_LAYER); adapter.setActiveKind("city");
     adapter.setObjects([object("a", [0, 0]), object("b", [1, 1]), object("locked", [2, 2], true)]);
     const modified = vi.fn();
     const erased = vi.fn();
@@ -171,10 +181,10 @@ describe("RealmMapAdapter", () => {
     host.style.width = "640px";
     host.style.height = "480px";
     document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const map = adapter.getMap();
     map.setSize([640, 480]);
-    adapter.setActiveLayer("object");
+    adapter.setActiveLayer(OBJECT_LAYER); adapter.setActiveKind("city");
     adapter.setMode("city");
     const pans = map.getInteractions().getArray().filter((interaction) => interaction instanceof DragPan);
     expect(pans.length).toBeGreaterThanOrEqual(2);
@@ -186,7 +196,7 @@ describe("RealmMapAdapter", () => {
   it("disposes interaction state idempotently", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     adapter.dispose();
     expect(() => adapter.dispose()).not.toThrow();
     host.remove();
@@ -195,7 +205,7 @@ describe("RealmMapAdapter", () => {
   it("translates a pointer event through the OpenLayers map without creating an object", () => {
     const host = document.createElement("div");
     document.body.append(host);
-    const adapter = new RealmMapAdapter({ target: host });
+    const adapter = createAdapter(host);
     const map = adapter.getMap();
     const event = new MapBrowserEvent(MapBrowserEventType.POINTERMOVE, map, new MouseEvent("pointermove") as never, false, undefined, []);
     event.coordinate = cellCenter(10, 10);
