@@ -197,3 +197,11 @@ export function transaction<T>(db: DatabaseSync, operation: () => T): T {
   assertCurrentPath(); db.exec("BEGIN IMMEDIATE");
   try { assertCurrentPath(); const result = operation(); assertCurrentPath(); db.exec("COMMIT"); assertCurrentPath(); return result; } catch (error) { try { db.exec("ROLLBACK"); } catch { /* preserve original */ } throw error; }
 }
+
+/** Read one SQLite snapshot while keeping all project rows consistent. */
+export function readTransaction<T>(db: DatabaseSync, operation: () => T): T {
+  const databaseFile = String((db.prepare("PRAGMA database_list").all()[0] as Record<string, unknown> | undefined)?.file ?? "");
+  const assertCurrentPath = (): void => { if (databaseFile !== "") assertSqlitePathNotMoved(db); };
+  assertCurrentPath(); db.exec("BEGIN");
+  try { assertCurrentPath(); const result = operation(); assertCurrentPath(); db.exec("COMMIT"); assertCurrentPath(); return result; } catch (error) { try { db.exec("ROLLBACK"); } catch { /* preserve original */ } throw error; }
+}

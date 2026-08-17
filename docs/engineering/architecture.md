@@ -92,7 +92,8 @@ rendererはこれらのコマンドを`RealmBackend`経由で使います。
 `MapShape[]`はメモリ上のエディタ投影であり、IPC APIでも保存APIでもありません。
 
 main process内では、`layerCommands.ts`が地形と領域の置き換えを検証し、`objectCommands.ts`がオブジェクトの種類、ジオメトリ、プロパティ、ロック、順序、アセットを検証します。
-`snapshot.ts`は分割されたモデルを読み取り、`operations.ts`はundo/redoのためにすべての永続テーブルを取得または復元します。
+`storage/projectStore.ts`が永続テーブルのrow codec、読み取り、置き換え、undo/redo用のcapture/restoreを一元管理します。`state/session.ts`のmutation境界は、書き込みロック取得後の現在性確認、変更前後のcapture、1回のSQLite transaction、履歴checkpointをまとめて扱います。
+`read-model/snapshot.ts`はProjectStoreの行から公開snapshotを組み立て、複数テーブルの読み取りを1つのread transactionで一貫させます。開いているファイルの同一inode内容が読み取り・書き込み境界で変わった場合は拒否します。
 保存schemaの検証とパスおよびアトミック公開のコードは、コマンド境界より下に残します。
 
 ## 安全な不変条件

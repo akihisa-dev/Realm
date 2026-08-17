@@ -4,10 +4,8 @@ import { RealmError, invalid } from "../domain/errors";
 import { canonicalUuid } from "../domain/identifiers";
 import { MAX_ASSET_BYTES, sha256Hex, validateAsset } from "../domain/assets";
 import { validateName } from "../domain/geometry";
-import { captureState } from "../edit/operations";
 import { projectSnapshot } from "../read-model/snapshot";
 import type { OpenProjectSession } from "../state/session";
-import { transaction } from "../storage/schema";
 
 const MAX_ASSET_BATCH = 256;
 const assetKeys = new Set(["assetId", "assetIds", "asset_id", "asset_ids", "asset"]);
@@ -24,11 +22,7 @@ export function importAsset(getSession: () => OpenProjectSession, input: ImportA
   const session = getSession();
   const existing = session.database.prepare("SELECT id FROM assets WHERE sha256=?").get(prepared.sha256);
   if (existing) return projectSnapshot(session);
-  const before = captureState(session.database);
-  transaction(session.database, () => {
-    session.database.prepare("INSERT INTO assets(id,sha256,mime,bytes,width,height,metadata_json) VALUES (?,?,?,?,?,?,?)").run(randomUUID(), prepared.sha256, prepared.mime, prepared.bytes, prepared.width, prepared.height, JSON.stringify(prepared.metadata));
-  });
-  session.checkpoint(before, "import-asset");
+  session.mutate("import-asset", (store) => store.importAsset(randomUUID(), { sha256: prepared.sha256, mime: prepared.mime, bytes: prepared.bytes, width: prepared.width, height: prepared.height, metadataJson: JSON.stringify(prepared.metadata) }));
   return projectSnapshot(session);
 }
 
@@ -43,20 +37,15 @@ export function importAssetsBatch(getSession: () => OpenProjectSession, input: I
   const known = new Set((session.database.prepare("SELECT sha256 FROM assets").all() as Record<string, unknown>[]).map((row) => String(row.sha256)));
   const additions = prepared.filter(({ asset }) => { if (known.has(asset.sha256)) return false; known.add(asset.sha256); return true; });
   if (!additions.length) return projectSnapshot(session);
-  const before = captureState(session.database);
   const packId = randomUUID();
-  transaction(session.database, () => {
-    const statement = session.database.prepare("INSERT INTO assets(id,sha256,mime,bytes,width,height,metadata_json) VALUES (?,?,?,?,?,?,?)");
-    additions.forEach(({ ordinal, asset }) => statement.run(randomUUID(), asset.sha256, asset.mime, asset.bytes, asset.width, asset.height, JSON.stringify({ ...asset.metadata, packId, packName, packOrdinal: ordinal })));
-  });
-  session.checkpoint(before, "import-assets");
+  session.mutate("import-assets", (store) => store.importAssets(additions.map(({ ordinal, asset }) => ({ id: randomUUID(), sha256: asset.sha256, mime: asset.mime, bytes: asset.bytes, width: asset.width, height: asset.height, metadataJson: JSON.stringify({ ...asset.metadata, packId, packName, packOrdinal: ordinal }) }))));
   return projectSnapshot(session);
 }
 
 export function readAsset(getSession: () => OpenProjectSession, input: { id: string }): AssetRead {
   const id = canonicalAssetId(input.id);
   const session = getSession();
-  const row = session.database.prepare("SELECT id,sha256,mime,length(bytes) AS byteLength,bytes,width,height,metadata_json AS metadata FROM assets WHERE id=?").get(id) as Record<string, unknown> | undefined;
+  const row = session.readConsistent(() => session.store.readAsset(id));
   if (!row) throw new RealmError("not_found", "The asset was not found.");
   const bytes = row.bytes instanceof Uint8Array ? [...row.bytes] : Array.isArray(row.bytes) ? row.bytes : [];
   const sha256 = String(row.sha256).toLowerCase();
@@ -81,11 +70,6 @@ export function deleteAssetsBatch(getSession: () => OpenProjectSession, input: D
     if (error instanceof RealmError) throw error;
     throw new RealmError("corrupt_project", "An object contains invalid properties.");
   }
-  const before = captureState(session.database, { assetBytesFor: ids });
-  transaction(session.database, () => {
-    const statement = session.database.prepare("DELETE FROM assets WHERE id=?");
-    for (const id of ids) statement.run(id);
-  });
-  session.checkpoint(before, "delete-assets");
+  session.mutate("delete-assets", (store) => store.deleteAssets(ids), { assetBytesFor: ids });
   return projectSnapshot(session);
 }

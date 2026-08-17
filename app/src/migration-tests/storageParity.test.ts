@@ -138,6 +138,37 @@ describe("Electron storage parity: path, snapshots, migrations and transfer", ()
     await commands.closeProject();
   });
 
+  it("rejects a same-inode external update between the caller check and the mutation lock", () => {
+    const directory = fixtureDirectory();
+    const path = join(directory, "mutation-race.realmmap");
+    const session = createStoredProject(path, "Mutation race");
+    const writer = new DatabaseSync(path);
+    try {
+      expect(() => session.mutate("mutation-race", (store) => store.updateProjectName("Must not overwrite"), {
+        beforeTransaction: () => { writer.prepare("UPDATE world SET name=?").run("External during race"); },
+      })).toThrow(/changed|invalid/i);
+      const check = new DatabaseSync(path, { readOnly: true });
+      try { expect(check.prepare("SELECT name FROM world").get()).toEqual({ name: "External during race" }); } finally { check.close(); }
+    } finally {
+      writer.close();
+      session.close();
+    }
+  });
+
+  it("reports a missing world row at the ProjectStore boundary", () => {
+    const directory = fixtureDirectory();
+    const path = join(directory, "missing-world.realmmap");
+    const session = createStoredProject(path, "Missing world");
+    try {
+      session.database.exec("DELETE FROM world");
+      let caught: unknown;
+      try { session.store.readState(); } catch (error) { caught = error; }
+      expect(caught).toMatchObject({ code: "corrupt_project" });
+    } finally {
+      session.close();
+    }
+  });
+
   it("rejects an externally replaced open path before normal reads and updates", async () => {
     const directory = fixtureDirectory();
     const commands = new RealmCommands({ libraryDirectory: directory });

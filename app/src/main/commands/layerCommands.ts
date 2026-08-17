@@ -3,10 +3,8 @@ import { validateMapShapes } from "../../shared/mapShapeGeometry";
 import { invalid } from "../domain/errors";
 import { canonicalUuid } from "../domain/identifiers";
 import { validateName } from "../domain/geometry";
-import { captureState } from "../edit/operations";
 import { projectSnapshot } from "../read-model/snapshot";
 import type { OpenProjectSession } from "../state/session";
-import { transaction } from "../storage/schema";
 
 type PreparedTerrainShape = TerrainShape & { layerId: string };
 type PreparedRegion = Region & { layerId: string; shapes: Array<Region["shapes"][number] & { layerId: string }> };
@@ -54,34 +52,18 @@ export function prepareRegions(session: OpenProjectSession, input: ReplaceRegion
   return regions;
 }
 
-function insertTerrain(session: OpenProjectSession, terrain: readonly PreparedTerrainShape[]): void {
-  session.database.exec("DELETE FROM terrain_shapes");
-  const statement = session.database.prepare("INSERT INTO terrain_shapes(id,layer_id,geometry_json) VALUES (?,?,?)");
-  for (const shape of terrain) statement.run(shape.id, shape.layerId, JSON.stringify(shape.geometry));
-}
-
-function insertRegions(session: OpenProjectSession, regions: readonly PreparedRegion[]): void {
-  session.database.exec("DELETE FROM region_shapes; DELETE FROM regions;");
-  const regionStatement = session.database.prepare("INSERT INTO regions(id,layer_id,name,color) VALUES (?,?,?,?)");
-  for (const region of regions) regionStatement.run(region.id, region.layerId, region.name, region.color);
-  const shapeStatement = session.database.prepare("INSERT INTO region_shapes(id,region_id,layer_id,geometry_json) VALUES (?,?,?,?)");
-  for (const region of regions) for (const shape of region.shapes) shapeStatement.run(shape.id, region.id, region.layerId, JSON.stringify(shape.geometry));
-}
-
 export function replaceTerrainLayer(getSession: () => OpenProjectSession, input: ReplaceTerrainLayerInput): RealmSnapshot {
   assertRecord(input); const session = getSession(); const terrain = prepareTerrain(session, input.shapes);
   const current = projectSnapshot(session).layers;
   validateLayers(terrain, current.regions);
-  const before = captureState(session.database);
-  transaction(session.database, () => insertTerrain(session, terrain));
-  session.checkpoint(before, "replace-terrain-layer"); return projectSnapshot(session);
+  session.mutate("replace-terrain-layer", (store) => store.replaceTerrainLayer(terrain));
+  return projectSnapshot(session);
 }
 
 export function replaceRegionLayer(getSession: () => OpenProjectSession, input: ReplaceRegionLayerInput): RealmSnapshot {
   assertRecord(input); const session = getSession(); const regions = prepareRegions(session, input.regions);
   const current = projectSnapshot(session).layers;
   validateLayers(current.terrain, regions);
-  const before = captureState(session.database);
-  transaction(session.database, () => insertRegions(session, regions));
-  session.checkpoint(before, "replace-region-layer"); return projectSnapshot(session);
+  session.mutate("replace-region-layer", (store) => store.replaceRegionLayer(regions));
+  return projectSnapshot(session);
 }

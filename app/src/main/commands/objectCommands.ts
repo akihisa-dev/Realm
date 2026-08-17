@@ -2,10 +2,8 @@ import type { MapObject, ReplaceObjectLayerInput, RealmSnapshot } from "../../sh
 import { RealmError, invalid } from "../domain/errors";
 import { validateObjectGeometry, validateName, validateProperties } from "../domain/geometry";
 import { canonicalUuid } from "../domain/identifiers";
-import { captureState } from "../edit/operations";
 import { projectSnapshot } from "../read-model/snapshot";
 import type { OpenProjectSession } from "../state/session";
-import { transaction } from "../storage/schema";
 
 const MAX_OBJECTS = 4096;
 type PreparedObject = MapObject & { layerId: string };
@@ -38,13 +36,8 @@ export function replaceObjectLayer(getSession: () => OpenProjectSession, input: 
   const prepared = prepareObjects(session, input.objects);
   if (new Set(prepared.map((object) => object.id)).size !== prepared.length) throw invalid("Object identifiers must be unique.");
   assertLockedObjectsUnchanged(projectSnapshot(session).layers.objects, prepared);
-  const before = captureState(session.database);
-  transaction(session.database, () => {
-    session.database.exec("DELETE FROM objects");
-    const statement = session.database.prepare("INSERT INTO objects(id,layer_id,kind,label,geometry_json,properties_json,z_index,locked,asset_id) VALUES (?,?,?,?,?,?,?,?,?)");
-    for (const object of prepared) statement.run(object.id, object.layerId, object.kind, object.label, JSON.stringify(object.geometry), JSON.stringify(object.properties), object.zIndex, object.locked ? 1 : 0, object.assetId ?? null);
-  });
-  session.checkpoint(before, "replace-object-layer"); return projectSnapshot(session);
+  session.mutate("replace-object-layer", (store) => store.replaceObjectLayer(prepared));
+  return projectSnapshot(session);
 }
 
 export function prepareObjects(session: OpenProjectSession, objects: readonly MapObject[]): PreparedObject[] {
