@@ -124,6 +124,19 @@ describe("MapCanvas", () => {
     expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
   });
 
+  it("exposes shaping for the region layer", () => {
+    const renderer = createPaletteRenderer();
+    const onToolChange = vi.fn();
+    const { rerender } = render(<MapCanvas activeLayer="region" onZoomChange={vi.fn()} onToolChange={onToolChange} createRenderer={() => renderer} />);
+
+    const shapeButton = screen.getByRole("button", { name: "シェイピング" });
+    expect(shapeButton).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(shapeButton);
+    expect(onToolChange).toHaveBeenCalledWith("shape");
+    rerender(<MapCanvas activeLayer="region" mode="shape" onZoomChange={vi.fn()} onToolChange={onToolChange} createRenderer={() => renderer} />);
+    expect(screen.getByRole("button", { name: "シェイピング" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("calls the new project handler from the bottom rail action", () => {
     const renderer = createPaletteRenderer();
     const onCreateProject = vi.fn();

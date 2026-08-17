@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type RefObject, type ReactNode } from "react";
 import { Eraser } from "@phosphor-icons/react/dist/csr/Eraser";
 import { HandGrabbing } from "@phosphor-icons/react/dist/csr/HandGrabbing";
+import { Magnet } from "@phosphor-icons/react/dist/csr/Magnet";
 import { PencilSimple } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { PlusCircle } from "@phosphor-icons/react/dist/csr/PlusCircle";
 import { CELL_PAINT_RANGE_MIN, cellPaintRadiusForRange } from "../../map/MapAdapter";
@@ -103,6 +104,11 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
     closeFlyouts();
   };
 
+  const selectShapeTool = (): void => {
+    onToolChange?.("shape");
+    closeFlyouts();
+  };
+
   const drawIsActive = activeLayer === "terrain"
     ? mode === "cell-select"
     : activeLayer === "region"
@@ -110,6 +116,7 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
       : OBJECT_KINDS.includes(mode as ObjectKind);
   const eraseIsActive = mode === "cell-erase" || (activeLayer === "object" && mode === "erase");
   const grabIsActive = activeLayer === "object" ? mode === "pan" : mode === "grab";
+  const shapeIsActive = activeLayer === "region" && mode === "shape";
 
   const toolPalette: ReactNode = (
     <aside ref={paletteRef} className="tool-rail" aria-label="地図ツールレール">
@@ -176,6 +183,14 @@ export function usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange = CE
             <HandGrabbing aria-hidden="true" size={20} weight="bold" />
           </button>
         </div>
+
+        {activeLayer === "region" ? (
+          <div className="tool-rail-item">
+            <button className={`tool-rail-button${shapeIsActive ? " is-active" : ""}`} type="button" aria-label="シェイピング" aria-pressed={shapeIsActive} title="シェイピング" onClick={selectShapeTool}>
+              <Magnet aria-hidden="true" size={20} weight="bold" />
+            </button>
+          </div>
+        ) : null}
       </div>
       <div className="tool-rail-footer">
         <button
