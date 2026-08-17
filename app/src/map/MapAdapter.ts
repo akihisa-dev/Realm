@@ -17,7 +17,7 @@ import { defaults as defaultControls } from "ol/control";
 import { defaults as defaultInteractions } from "ol/interaction";
 import type { CellAttributeSnapshot, GeoJsonGeometry, LayerId, MapObject, MapShape, MapShapeEdit, ObjectKind, Position } from "../backend";
 import type { MapRaster } from "../exportArtifacts";
-import { CELL_PAINT_RADII, WORLD_EXTENT, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
+import { CELL_PAINT_RADII, WORLD_EXTENT, cellCenter as gridCellCenter, cellIdsWithinPaintPath as gridCellIdsWithinPaintPath, cellIdsWithinPaintPosition as gridCellIdsWithinPaintPosition, cellPolygon as gridCellPolygon, parseCellId } from "./gridGeometry";
 import { drawTypeForMode, geometryFromGeoJson as guardedGeometryFromGeoJson, geometryToGeoJson as guardedGeometryToGeoJson } from "./geoJsonGeometry";
 import { MAX_SMOOTHING_PASSES, refineDrawnGeometry } from "./drawingGeometry";
 import { DrawingGeometryError, mapErrorCode, type MapErrorCode } from "./errors";
@@ -51,6 +51,15 @@ class CancelablePointerInteraction extends PointerInteraction {
     this.targetPointers = [];
   }
 }
+
+const paintPathForPositions = (start: [number, number], end: [number, number]): [Position, Position] => {
+  const centerForPosition = (position: [number, number]): Position | null => {
+    const cell = gridCellIdsWithinPaintPosition(position, 0)[0];
+    const parsed = cell ? parseCellId(cell) : null;
+    return parsed ? gridCellCenter(parsed[0], parsed[1]) : null;
+  };
+  return [centerForPosition(start) ?? start, centerForPosition(end) ?? end];
+};
 
 export class RealmMapAdapter implements RealmMapRenderer {
   private readonly map: Map;
@@ -473,8 +482,14 @@ export class RealmMapAdapter implements RealmMapRenderer {
         handleDragEvent: (event) => {
           const nextPoint = event.coordinate as [number, number];
           if (!this.positionWithinWorld(nextPoint)) return;
-          if (!this.paintLastPoint) this.paintLastPoint = nextPoint;
-          for (const id of gridCellIdsWithinPaintPosition(nextPoint, this.paintRadiusForEvent(event.originalEvent))) this.paintStrokeSelection.add(id);
+          const previousPoint = this.paintLastPoint;
+          const radius = this.paintRadiusForEvent(event.originalEvent);
+          if (previousPoint) {
+            // Pointer events can skip several cells during a fast stroke. Fill
+            // the whole segment so the result does not depend on event rate.
+            for (const id of gridCellIdsWithinPaintPath(paintPathForPositions(previousPoint, nextPoint), radius)) this.paintStrokeSelection.add(id);
+          }
+          for (const id of gridCellIdsWithinPaintPosition(nextPoint, radius)) this.paintStrokeSelection.add(id);
           this.paintLastPoint = nextPoint;
           this.setSelectedCells([...this.paintStrokeSelection]);
         },
@@ -484,8 +499,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
             this.finishPaintStroke();
             return false;
           }
-          if (!this.paintLastPoint) this.paintLastPoint = nextPoint;
-          for (const id of gridCellIdsWithinPaintPath([this.paintLastPoint, nextPoint], this.paintRadiusForEvent(event.originalEvent))) this.paintStrokeSelection.add(id);
+          const previousPoint = this.paintLastPoint ?? nextPoint;
+          const radius = this.paintRadiusForEvent(event.originalEvent);
+          for (const id of gridCellIdsWithinPaintPath(paintPathForPositions(previousPoint, nextPoint), radius)) this.paintStrokeSelection.add(id);
+          for (const id of gridCellIdsWithinPaintPosition(nextPoint, radius)) this.paintStrokeSelection.add(id);
           this.finishPaintStroke();
           return false;
         },

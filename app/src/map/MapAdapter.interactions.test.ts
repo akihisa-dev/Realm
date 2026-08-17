@@ -8,7 +8,7 @@ import PointerInteraction from "ol/interaction/Pointer";
 import Select from "ol/interaction/Select";
 import { describe, expect, it, vi } from "vitest";
 import type { MapObject, MapShape } from "../backend";
-import { cellCenter, RealmMapAdapter } from "./MapAdapter";
+import { cellCenter, cellIdsWithinPaintPath, RealmMapAdapter } from "./MapAdapter";
 import { cellPolygon } from "./gridGeometry";
 import { unionMapShapeGeometries } from "../shared/mapShapeGeometry";
 
@@ -83,6 +83,35 @@ describe("RealmMapAdapter interactions", () => {
     paint.handleEvent({ type: "pointerdown", originalEvent: pointerEvent(), coordinate: center, activePointers: [] } as never);
     window.dispatchEvent(new MouseEvent("pointerup", { button: 0 }));
     expect(selected).toHaveBeenCalledWith(expect.arrayContaining(["10:10"]));
+    adapter.dispose();
+    host.remove();
+  });
+
+  it("fills cells skipped by sparse pointer events during a fast stroke", () => {
+    const host = hostFor();
+    const adapter = new RealmMapAdapter({ target: host });
+    const selected = vi.fn();
+    adapter.onCellSelect(selected);
+    adapter.setActiveLayer("terrain");
+    adapter.setCellPaintRadius(0);
+    adapter.setMode("cell-select");
+    const paint = adapter.getMap().getInteractions().getArray().at(-1) as PointerInteraction;
+    const methods = paint as unknown as {
+      handleDownEvent: (event: { originalEvent: MouseEvent; coordinate: [number, number] }) => boolean;
+      handleDragEvent: (event: { originalEvent: MouseEvent; coordinate: [number, number] }) => void;
+      handleUpEvent: (event: { originalEvent: MouseEvent; coordinate: [number, number] }) => boolean;
+    };
+    const startCell = cellCenter(10, 10);
+    const endCell = cellCenter(10, 14);
+    const start: [number, number] = [startCell[0] + 0.4, startCell[1] + 0.2];
+    const end: [number, number] = [endCell[0] + 0.4, endCell[1] + 0.2];
+
+    expect(cellIdsWithinPaintPath([startCell, endCell], 0)).toEqual(expect.arrayContaining(["10:10", "11:10", "12:10", "13:10", "14:10"]));
+    expect(methods.handleDownEvent({ originalEvent: pointerEvent(), coordinate: start })).toBe(true);
+    methods.handleDragEvent({ originalEvent: pointerEvent(), coordinate: end });
+    methods.handleUpEvent({ originalEvent: pointerEvent(), coordinate: end });
+
+    expect(selected).toHaveBeenLastCalledWith(expect.arrayContaining(["10:10", "11:10", "12:10", "13:10", "14:10"]));
     adapter.dispose();
     host.remove();
   });

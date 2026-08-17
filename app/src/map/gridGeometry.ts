@@ -72,6 +72,8 @@ const distanceSquaredToSegment = (point: [number, number], start: [number, numbe
   return ((point[0] - closest[0]) ** 2) + ((point[1] - closest[1]) ** 2);
 };
 
+const GRID_DISTANCE_EPSILON = 1e-9;
+
 /** Returns cells whose centers fall within the paint radius of every tested stroke segment. */
 export const cellIdsWithinPaintPath = (path: readonly [number, number][], radiusCells: number): string[] => {
   if (path.length === 0 || !Number.isFinite(radiusCells) || radiusCells < 0) return [];
@@ -104,7 +106,7 @@ export const cellIdsWithinPaintPath = (path: readonly [number, number][], radius
         distanceSquared = Math.min(distanceSquared, distanceSquaredToSegment(point, gridPath[index - 1]!, gridPath[index]!));
       }
       if (gridPath.length === 1) distanceSquared = distanceSquaredToSegment(point, gridPath[0]!, gridPath[0]!);
-      if (distanceSquared <= radiusSquared) selected.push(cellId(row, column));
+      if (distanceSquared <= radiusSquared + GRID_DISTANCE_EPSILON) selected.push(cellId(row, column));
     }
   }
   return selected;
