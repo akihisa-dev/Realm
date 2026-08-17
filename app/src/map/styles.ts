@@ -295,10 +295,31 @@ export const createObjectStyle = (
       const scale = numericProperty(feature, "scale", 1, 0.25, 8);
       const rotation = numericProperty(feature, "rotation", 0, -Math.PI * 2, Math.PI * 2);
       const flipX = (feature.get("properties") as Record<string, unknown> | undefined)?.flipX === true;
-      const image = assetUrl
-        ? new Icon({ src: assetUrl, scale: [flipX ? -scale : scale, scale], rotation })
-        : new RegularShape({ points: 3, radius: 9 * scale, angle: rotation, fill: new Fill({ color: theme.land }), stroke: new Stroke({ color: theme.landInk, width: 1.6 }) });
-      styles = new Style({ image, text: label, zIndex: 75 });
+      if (assetUrl) {
+        styles = new Style({ image: new Icon({ src: assetUrl, scale: [flipX ? -scale : scale, scale], rotation }), text: label, zIndex: 75 });
+      } else {
+        const peak = (radius: number, displacementX: number, displacementY: number): Style => new Style({
+          image: new RegularShape({
+            points: 3,
+            radius: radius * scale,
+            angle: rotation,
+            displacement: [displacementX * scale, displacementY * scale],
+            fill: new Fill({ color: theme.land }),
+            stroke: new Stroke({ color: theme.landInk, width: 1.6 }),
+          }),
+          zIndex: 75,
+        });
+        const side = flipX ? -1 : 1;
+        styles = [
+          peak(7, -side * 6, 2),
+          peak(7, side * 6, 2),
+          new Style({
+            image: new RegularShape({ points: 3, radius: 10 * scale, angle: rotation, fill: new Fill({ color: theme.land }), stroke: new Stroke({ color: theme.landInk, width: 1.6 }) }),
+            text: label,
+            zIndex: 75,
+          }),
+        ];
+      }
     } else if (type === "city") {
       styles = new Style({ image: new CircleStyle({ radius: 6, fill: new Fill({ color: theme.settlement }), stroke: new Stroke({ color: theme.labelHalo, width: 1.5 }) }), text: label, zIndex: 70 });
     } else if (type === "text") {

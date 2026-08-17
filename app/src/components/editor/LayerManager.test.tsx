@@ -32,7 +32,7 @@ const props = (activeLayer: LayerId, onLayerChange = vi.fn()) => ({
   objects: [object],
   selectedObjectIds: [],
   objectKind: "city" as ObjectKind,
-  objectLabel: "新しい都市",
+  objectLabel: "",
   onObjectKindChange: vi.fn(),
   onObjectLabelChange: vi.fn(),
   onStartObjectDraw: vi.fn(),

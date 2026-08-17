@@ -1,5 +1,8 @@
 import Feature from "ol/Feature";
 import Point from "ol/geom/Point";
+import RegularShape from "ol/style/RegularShape";
+import Style from "ol/style/Style";
+import Icon from "ol/style/Icon";
 import type { ThemeOverrides } from "./themes";
 import { createCellStyle, createObjectStyle } from "./styles";
 
@@ -108,8 +111,14 @@ describe("object style cache", () => {
     const mountainWithAsset = new Feature({ geometry: new Point([0, 0]), kind: "mountain", label: "Peak", properties: { assetId: "local", scale: 8, rotation: Math.PI / 4, opacity: 0.5 } });
     const mountainStyle = style(mountainWithAsset);
     expect(mountainStyle).toBeDefined();
-    const mountainFallback = new Feature({ geometry: new Point([0, 0]), kind: "mountain", label: "Peak", properties: { assetId: "data", lineStyle: "dotted", lineProfile: "rough", roughness: 0 } });
-    expect(style(mountainFallback)).toBeDefined();
+    expect(mountainStyle).toBeInstanceOf(Style);
+    expect((mountainStyle as Style).getImage()).toBeInstanceOf(Icon);
+    const mountainFallback = new Feature({ geometry: new Point([0, 0]), kind: "mountain", label: "Peak", properties: { assetId: "remote", lineStyle: "dotted", lineProfile: "rough", roughness: 0 } });
+    const mountainFallbackStyle = style(mountainFallback);
+    expect(mountainFallbackStyle).toHaveLength(3);
+    const mountainImages = (mountainFallbackStyle as Style[]).map((item) => item.getImage());
+    expect(mountainImages.every((image) => image instanceof RegularShape)).toBe(true);
+    expect(mountainImages.map((image) => (image as RegularShape).getPoints())).toEqual([3, 3, 3]);
     expect(style(new Feature({ geometry: new Point([0, 0]), kind: "forest", label: "Forest", properties: {} }))).toBeDefined();
     expect(style(new Feature({ geometry: new Point([0, 0]), kind: "text", label: "Text", properties: { fontFamily: "handwritten", labelPlacement: "point" } }))).toBeDefined();
 
