@@ -2,7 +2,7 @@
 
 ## 階層treeとrenderer
 
-右パネルの階層レイヤーが`selectedLayerId`を決め、左レールは常に「描く」「消す」「掴む」と新規作成だけを表示します。描く設定でグリッド・範囲を選び、領域を地形へ合わせる操作は選択領域の右パネル操作です。編集状態は`selectedLayerId`、`activeTool(draw|erase|grab)`、`activeKind(terrain|region|city|text|mountain|forest)`、`drawMethod`へ分離します。オブジェクトの「掴む」は、選択と移動に対応する独立した操作です。
+右パネルの階層レイヤーが`selectedLayerId`を決め、左レールは地形・領域では「グリッド」「範囲」「消す」「掴む」、オブジェクトでは種類依存の「描く」「消す」「掴む」と新規作成を表示します。領域色だけをグリッド／範囲選択時の候補flyoutで選び、消去対象の説明flyoutは持ちません。領域を地形へ合わせる操作は選択領域の右パネル操作です。編集状態は`selectedLayerId`、`activeTool(draw|erase|grab)`、`activeKind(terrain|region|city|text|mountain|forest)`、`drawMethod`へ分離します。オブジェクトの「掴む」は、選択と移動に対応する独立した操作です。
 
 rendererはflattenされたtreeを使って表示順・visibility・lock・active leaf filteringを決めます。OpenLayersのsourceやfeatureはこの投影であり、SQLite snapshotが正本です。pointercancel、layer switch、hidden/locked nodeでは進行中のgestureを破棄します。
 
@@ -38,7 +38,7 @@ Electron main境界 ── 検証 ── 現在状態サービス
 他のレイヤーは表示しますが、描画された形状を選択したり編集したりできません。
 leafを切り替えると、次のleafを有効にする前に、進行中のポインター操作、選択、プレビューをキャンセルします。
 
-左ツールレールには、常に「描く」「消す」「掴む」を同じ順序で表示します。`terrain`・`region`のgrid/areaは描く設定から選び、regionのシェイピングは選択regionの右パネル操作で行います。objectの種類は`activeKind`で選びます。
+左ツールレールには、`terrain`・`region`では「グリッド」「範囲」「消す」「掴む」を独立表示し、objectでは種類依存の「描く」「消す」「掴む」を表示します。regionの色候補だけは選択中のgrid/areaボタンに付属するflyoutで扱い、regionのシェイピングは選択regionの右パネル操作で行います。objectの種類は`activeKind`で選びます。
 「グリッド描画」と「範囲描画」はactive layerに応じて同じセル選択結果を地形または領域へ振り分け、「消す」はレイヤー固有の削除へ振り分けます。「掴む」は地形・領域では形状操作、オブジェクトでは選択と移動へ振り分けます。
 領域を地形へ合わせる操作は、選択した論理領域から地形のない部分だけを削ります。描く内容の種類、領域の色と対象、オブジェクトの種類（`city`、`text`、`mountain`、`forest`）とラベルは右パネルで選びます。
 
