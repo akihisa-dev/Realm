@@ -1,30 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
-import { mapTextureDots, paintMapTexture } from "./mapTexture";
+import { paintMapTexture } from "./mapTexture";
 
 describe("map texture", () => {
-  it("returns deterministic bounded dots for each theme and rejects invalid sizes", () => {
-    expect(mapTextureDots(0, 100, "ink")).toEqual([]);
-    expect(mapTextureDots(Number.NaN, 100, "atlas")).toEqual([]);
-    for (const theme of ["ink", "atlas", "midnight"] as const) {
-      const dots = mapTextureDots(200, 100, theme);
-      expect(dots.length).toBeGreaterThan(0);
-      expect(dots).toEqual(mapTextureDots(200, 100, theme));
-      expect(dots.every(({ x, y, radius }) => x >= 0 && x <= 200 && y >= 0 && y <= 100 && radius > 0)).toBe(true);
-    }
+  it("rejects invalid sizes without painting", () => {
+    const context = { createLinearGradient: vi.fn() } as unknown as CanvasRenderingContext2D;
+    paintMapTexture(context, 0, 100, "ink");
+    paintMapTexture(context, Number.NaN, 100, "atlas");
+    expect(context.createLinearGradient).not.toHaveBeenCalled();
   });
 
-  it("paints both light and dark dots with theme-specific colors", () => {
+  it("paints bounded continuous gradients for every theme", () => {
+    const gradient = { addColorStop: vi.fn() } as unknown as CanvasGradient;
     const context = {
-      beginPath: vi.fn(),
-      arc: vi.fn(),
-      fill: vi.fn(),
+      createLinearGradient: vi.fn(() => gradient),
+      createRadialGradient: vi.fn(() => gradient),
+      fillRect: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
       fillStyle: "",
     } as unknown as CanvasRenderingContext2D;
     paintMapTexture(context, 120, 120, "midnight");
-    expect(context.beginPath).toHaveBeenCalled();
-    expect(context.arc).toHaveBeenCalled();
-    expect(context.fill).toHaveBeenCalled();
+    expect(context.createLinearGradient).toHaveBeenCalled();
+    expect(context.createRadialGradient).toHaveBeenCalled();
+    expect(context.fillRect).toHaveBeenCalled();
     paintMapTexture(context, 120, 120, "ink");
-    expect(context.fill).toHaveBeenCalled();
+    expect(context.fillRect).toHaveBeenCalled();
   });
 });

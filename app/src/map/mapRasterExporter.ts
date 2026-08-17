@@ -12,6 +12,8 @@ type Options = {
   themeOverrides: ThemeOverrides;
   selectedObjectIds: readonly string[];
   setSelectedObjects: (objectIds: readonly string[]) => void;
+  presentationActive: boolean;
+  setPresentationRendering: (preview: boolean) => void;
   mimeType: "image/png" | "image/jpeg";
   requestedScale: number;
   extent: "viewport" | "world";
@@ -19,7 +21,7 @@ type Options = {
 };
 
 export async function exportMapRaster(options: Options): Promise<MapRaster> {
-  const { map, target, worldExtent, activeThemeId, themeOverrides, selectedObjectIds, setSelectedObjects, mimeType, requestedScale, extent, size } = options;
+  const { map, target, worldExtent, activeThemeId, themeOverrides, selectedObjectIds, setSelectedObjects, presentationActive, setPresentationRendering, mimeType, requestedScale, extent, size } = options;
   const [sourceWidth = 0, sourceHeight = 0] = map.getSize() ?? [];
   const scale = Math.max(1, Math.min(4, Math.round(requestedScale)));
   const baseWidth = size?.width ?? sourceWidth;
@@ -35,8 +37,9 @@ export async function exportMapRaster(options: Options): Promise<MapRaster> {
   const view = map.getView();
   const originalCenter = view.getCenter()?.slice() as [number, number] | undefined;
   const originalResolution = view.getResolution();
-  setSelectedObjects([]);
   try {
+    if (!presentationActive) setPresentationRendering(true);
+    setSelectedObjects([]);
     map.setSize([width, height]);
     if (extent === "world") view.fit([...worldExtent], { size: [width, height], padding: [24 * scale, 24 * scale, 24 * scale, 24 * scale] });
     else {
@@ -65,7 +68,8 @@ export async function exportMapRaster(options: Options): Promise<MapRaster> {
     map.setSize([sourceWidth, sourceHeight]);
     if (originalResolution !== undefined) view.setResolution(originalResolution);
     if (originalCenter) view.setCenter(originalCenter);
-  setSelectedObjects(selectedObjectIds);
+    setSelectedObjects(selectedObjectIds);
+    if (!presentationActive) setPresentationRendering(false);
     map.renderSync();
   }
 }

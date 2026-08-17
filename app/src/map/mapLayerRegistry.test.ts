@@ -1,5 +1,7 @@
 import Feature from "ol/Feature";
 import Map from "ol/Map";
+import Polygon from "ol/geom/Polygon";
+import Style from "ol/style/Style";
 import View from "ol/View";
 import { describe, expect, it } from "vitest";
 import { MapLayerRegistry } from "./mapLayerRegistry";
@@ -59,5 +61,22 @@ describe("MapLayerRegistry", () => {
     registry.setPresentationMode(true);
     expect(style?.(region, 1)).toBeDefined();
     registry.setPresentationMode(false);
+  });
+
+  it("adds layered terrain presentation styles without changing the edit outline source", () => {
+    const registry = createRegistry();
+    const map = new Map({ layers: registry.mapLayers, view: new View({ projection: "EPSG:4326", center: [0, 0], zoom: 1 }) });
+    registry.terrainPreviewSource.addFeature(new Feature({ geometry: new Polygon([[[0, 0], [4, 0], [4, 4], [0, 0]]]) }));
+    const exactStyle = registry.terrainSmoothLayer.getStyleFunction()?.(new Feature({ geometry: new Polygon([[[0, 0], [4, 0], [4, 4], [0, 0]]]) }), 1);
+    expect(exactStyle).toBeInstanceOf(Object);
+    registry.setPresentationMode(true);
+    const previewStyle = registry.terrainSmoothLayer.getStyleFunction()?.(new Feature({ geometry: new Polygon([[[0, 0], [4, 0], [4, 4], [0, 0]]]) }), 1);
+    expect(previewStyle).toHaveLength(2);
+    expect(registry.terrainPreviewLayer.getVisible()).toBe(true);
+    expect(registry.terrainPreviewLayer.getStyleFunction()?.(registry.terrainPreviewSource.getFeatures()[0]!, 1)).toBeInstanceOf(Style);
+    registry.setPresentationMode(false);
+    expect(registry.terrainPreviewLayer.getVisible()).toBe(false);
+    registry.dispose(map);
+    map.dispose();
   });
 });

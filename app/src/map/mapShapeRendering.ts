@@ -7,7 +7,7 @@ import type { CellAttributeSnapshot, MapShape, Position } from "../backend";
 import { connectedCellComponents } from "./regionGrab";
 import { mapShapeCellIds } from "../shared/mapShapeGeometry";
 import { cellAttributeLayer } from "../shared/realmContract";
-import { exactCellBoundaryPolygons, exactCellBoundaryRings, smoothCellBoundaryPolygons, smoothCellBoundaryRings, splitTerrainGridSegments, terrainCellCenters } from "./terrainOutline";
+import { exactCellBoundaryPolygons, exactCellBoundaryRings, smoothCellBoundaryPolygons, splitTerrainGridSegments, terrainCellCenters } from "./terrainOutline";
 
 export const cloneMapShapes = (shapes: readonly MapShape[]): MapShape[] => shapes.map((shape) => ({
   ...shape,
@@ -71,9 +71,11 @@ export const renderCanonicalMapShapes = (
   terrainSource: VectorSource,
   regionSource: VectorSource,
   renderSmoothShapes = false,
+  terrainPreviewSource?: VectorSource,
 ): { terrainCount: number; regionCount: number } => {
   terrainSource.clear();
   regionSource.clear();
+  terrainPreviewSource?.clear();
   let terrainCount = 0;
   let regionCount = 0;
   for (const shape of shapes) {
@@ -85,8 +87,13 @@ export const renderCanonicalMapShapes = (
       }
       let cellIds: Set<string>;
       try { cellIds = mapShapeCellIds(shape); } catch { cellIds = new Set(); }
-      const rings = cellIds.size > 0 ? smoothCellBoundaryRings(cellIds) : [];
+      const polygons = cellIds.size > 0 ? smoothCellBoundaryPolygons(cellIds) : [];
+      const rings = polygons.flat();
       terrainSource.addFeature(new Feature({ geometry: rings.length > 0 ? new MultiLineString(rings) : new Polygon(shape.geometry.coordinates) }));
+      if (terrainPreviewSource) {
+        if (polygons.length === 0) terrainPreviewSource.addFeature(new Feature({ geometry: new Polygon(shape.geometry.coordinates), terrainIdentity: shape.id }));
+        else for (const polygon of polygons) terrainPreviewSource.addFeature(new Feature({ geometry: new Polygon(polygon), terrainIdentity: shape.id }));
+      }
     } else {
       regionCount += 1;
       if (!renderSmoothShapes) {
@@ -112,6 +119,7 @@ type RenderTransientCellGeometryOptions = {
   cellGridSource: VectorSource;
   terrainCellGridSource: VectorSource;
   terrainSmoothSource: VectorSource;
+  terrainPreviewSource?: VectorSource;
   regionSmoothSource: VectorSource;
   regionFallbackColor: string;
   renderSmoothShapes: boolean;
@@ -125,6 +133,7 @@ export const renderTransientCellGeometry = ({
   cellGridSource,
   terrainCellGridSource,
   terrainSmoothSource,
+  terrainPreviewSource,
   regionSmoothSource,
   regionFallbackColor,
   renderSmoothShapes,
@@ -141,8 +150,13 @@ export const renderTransientCellGeometry = ({
   if (centers.length > 0) terrainCellGridSource.addFeature(new Feature({ geometry: new MultiPoint(centers) }));
   if (renderShapes) {
     terrainSmoothSource.clear();
-    const terrainRings = renderSmoothShapes ? smoothCellBoundaryRings(terrainCellIds) : exactCellBoundaryRings(terrainCellIds);
+    terrainPreviewSource?.clear();
+    const smoothTerrainPolygons = renderSmoothShapes ? smoothCellBoundaryPolygons(terrainCellIds) : [];
+    const terrainRings = renderSmoothShapes ? smoothTerrainPolygons.flat() : exactCellBoundaryRings(terrainCellIds);
     if (terrainRings.length > 0) terrainSmoothSource.addFeature(new Feature({ geometry: new MultiLineString(terrainRings) }));
+    if (terrainPreviewSource && renderSmoothShapes) {
+      for (const polygon of smoothTerrainPolygons) terrainPreviewSource.addFeature(new Feature({ geometry: new Polygon(polygon), terrainIdentity: "transient-terrain" }));
+    }
     regionSmoothSource.clear();
     const regionIdsByIdentity = new globalThis.Map<string, { color: string; ids: string[]; identity: string }>();
     for (const [id, values] of attributes) {

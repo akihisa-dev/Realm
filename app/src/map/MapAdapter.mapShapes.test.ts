@@ -12,6 +12,7 @@ describe("RealmMapAdapter canonical map shapes", () => {
     const adapter = new RealmMapAdapter({ target: host });
     const terrainLayer = adapter.getMap().getLayers().item(8) as VectorLayer;
     const regionLayer = adapter.getMap().getLayers().item(7) as VectorLayer;
+    const terrainPreviewLayer = adapter.getMap().getLayers().item(9) as VectorLayer;
     const terrainGeometry = cellIdsToPolygonGeometries(["10:10", "11:10"])[0]!;
     const regionGeometry = cellIdsToPolygonGeometries(["20:20"])[0]!;
 
@@ -26,11 +27,15 @@ describe("RealmMapAdapter canonical map shapes", () => {
     expect(regionLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(Polygon);
     expect((regionLayer.getSource()?.getFeatures()[0]?.getGeometry() as Polygon).getCoordinates()).toEqual(regionGeometry.coordinates);
     expect((adapter.getMap().getLayers().item(2) as VectorLayer).getSource()?.getFeatures()).toHaveLength(0);
+    expect(terrainPreviewLayer.getVisible()).toBe(false);
+    expect(terrainPreviewLayer.getSource()?.getFeatures()).toHaveLength(0);
 
     adapter.setPresentationMode(true);
     expect(terrainLayer.getSource()?.getFeatures()[0]?.getGeometry()).toBeInstanceOf(MultiLineString);
     expect((regionLayer.getSource()?.getFeatures()[0]?.getGeometry() as Polygon).getCoordinates()[0]!.length).toBeGreaterThan(regionGeometry.coordinates[0]!.length);
     expect(terrainLayer.getVisible()).toBe(true);
+    expect(terrainPreviewLayer.getVisible()).toBe(true);
+    expect(terrainPreviewLayer.getSource()?.getFeatures().length).toBeGreaterThan(0);
     expect((adapter.getMap().getLayers().item(2) as VectorLayer).getVisible()).toBe(false);
 
     adapter.dispose();

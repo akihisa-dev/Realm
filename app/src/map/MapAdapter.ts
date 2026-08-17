@@ -920,7 +920,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     this.renderMapShapes(this.mapShapes, this.presentationPreview);
     this.refreshGrabHover();
   }
-
+  private setExportPresentationRendering(preview: boolean): void { const current = this.presentationPreview; this.presentationPreview = preview; try { this.layers.setPresentationMode(preview); if (this.mapShapesControlled) this.renderMapShapes(this.mapShapes, preview); else this.setCellAttributes([...this.cellAttributesById.values()].flat()); } finally { this.presentationPreview = current; } }
   /** Switches between exact editing geometry and renderer-only smooth preview. */
   setPresentationMode(preview: boolean): void {
     this.presentationPreview = preview;
@@ -989,9 +989,10 @@ export class RealmMapAdapter implements RealmMapRenderer {
   private renderMapShapes(shapes: readonly MapShape[], renderSmoothShapes: boolean): void {
     this.mapShapePreviewShapes = null;
     const visibleShapes = shapes.filter((shape) => this.layerState.get(shape.layerId ?? "")?.visible !== false);
-    const { terrainCount, regionCount } = renderCanonicalMapShapes(visibleShapes, this.terrainSmoothSource, this.regionSmoothSource, renderSmoothShapes);
+    const { terrainCount, regionCount } = renderCanonicalMapShapes(visibleShapes, this.terrainSmoothSource, this.regionSmoothSource, renderSmoothShapes, this.layers.terrainPreviewSource);
     this.terrainOutlineLayer.setVisible(false);
     this.terrainSmoothLayer.setVisible(terrainCount > 0);
+    this.layers.terrainPreviewLayer.setVisible(renderSmoothShapes && terrainCount > 0 && this.layers.terrainPreviewSource.getFeatures().length > 0);
     this.regionSmoothLayer.setVisible(regionCount > 0);
     this.terrainSmoothSource.changed();
     this.regionSmoothSource.changed();
@@ -1026,6 +1027,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
       cellGridSource: this.cellGridSource,
       terrainCellGridSource: this.terrainCellGridSource,
       terrainSmoothSource: this.terrainSmoothSource,
+      terrainPreviewSource: this.layers.terrainPreviewSource,
       regionSmoothSource: this.regionSmoothSource,
       regionFallbackColor: mapTheme(this.activeThemeId, this.themeOverrides).region,
       renderSmoothShapes: !this.mapShapesControlled && this.presentationPreview,
@@ -1107,7 +1109,7 @@ export class RealmMapAdapter implements RealmMapRenderer {
     };
   }
   updateSize(): void { this.map.updateSize(); this.rebaseZoom(); }
-  async exportRaster(mimeType: "image/png" | "image/jpeg", requestedScale = 1, extent: "viewport" | "world" = "viewport", size?: ExportCanvasSize): Promise<MapRaster> { return exportMapRaster({ map: this.map, target: this.target, worldExtent: this.worldExtent, activeThemeId: this.activeThemeId, themeOverrides: this.themeOverrides, selectedObjectIds: this.selectedObjectIds(), setSelectedObjects: (objectIds) => this.setSelectedObjects(objectIds), mimeType, requestedScale, extent, size }); }
+  async exportRaster(mimeType: "image/png" | "image/jpeg", requestedScale = 1, extent: "viewport" | "world" = "viewport", size?: ExportCanvasSize): Promise<MapRaster> { return exportMapRaster({ map: this.map, target: this.target, worldExtent: this.worldExtent, activeThemeId: this.activeThemeId, themeOverrides: this.themeOverrides, selectedObjectIds: this.selectedObjectIds(), setSelectedObjects: (objectIds) => this.setSelectedObjects(objectIds), presentationActive: this.presentationPreview, setPresentationRendering: (preview) => this.setExportPresentationRendering(preview), mimeType, requestedScale, extent, size }); }
 
   private rebaseZoom(): void {
     const view = this.map.getView();
