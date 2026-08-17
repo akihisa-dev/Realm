@@ -33,7 +33,9 @@ The header contains icon controls for renderer preview, `戻す`, `進む`, and 
 | Region draw / 領域を描く | A region-layer operation that uses freehand enclosure selection to create or update region polygon parts and region identity. It does not paint terrain. |
 | Object layer / オブジェクト | Objects placed above terrain and regions. Initial kinds are city, text, mountain, and forest. Forests and mountains are object kinds, not terrain kinds. |
 | Object / オブジェクト | A persisted object-layer record with a kind, label, geometry, properties, order, and lock state. |
-| Draw / 描く | A shared visual entry in the editor, not a shared meaning: the active layer determines whether the operation is terrain cell painting or region enclosure drawing. |
+| Object placement / オブジェクトを配置 | A kind-specific point or polygon placement operation above terrain and regions. It changes neither terrain nor regions. |
+| Object eraser / オブジェクト消しゴム | An operation that removes only objects. It changes neither terrain nor regions. |
+| Draw / 描く | A shared visual entry in the editor, not a shared meaning: the active layer determines whether the operation is terrain cell painting or region enclosure drawing; the object layer uses object placement. |
 | Cell ID | A temporary `x:y` identifier used only during grid interaction; it is never saved. |
 | Transfer data | A `.realmmap` copy used only to move or back up editable data outside the app library. |
 
