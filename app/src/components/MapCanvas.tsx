@@ -86,7 +86,6 @@ export function MapCanvas({
   onCellSelect,
   onMapShapeEdit,
   onToolChange,
-  onObjectKindChange,
   onRegionColorChange,
   regionColor,
   onModify,
@@ -108,8 +107,7 @@ export function MapCanvas({
     eraseRadius,
     toolPalette,
     regionColor: paletteRegionColor,
-    sidebarOpen,
-  } = usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange, regionColor, onToolChange, onObjectKindChange, onRegionColorChange });
+  } = usePaletteFlyouts({ hostRef, mode, activeLayer, strokeRange, regionColor, onToolChange, onRegionColorChange });
   const effectivePaintRadius = mode === "cell-select" ? strokeRadius : 0;
   const effectiveRegionColor = regionColor ?? paletteRegionColor;
   const mapHelp = isPreview
@@ -119,7 +117,7 @@ export function MapCanvas({
       : mode === "cell-erase"
       ? `${activeLayer === "terrain" ? "地形" : "領域"}だけを六角セル単位で消去します。ホイールを押したままドラッグすると地図を移動できます。Escapeで消去を取り消せます。`
       : mode === "cell-region"
-        ? "自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときはグラブに切り替えます。"
+        ? "自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときは掴むに切り替えます。"
       : mode === "shape"
         ? "領域をクリックすると、地形の外にはみ出した部分だけを削り、地形の形に合わせます。ホイールを押したままドラッグすると地図を移動できます。"
       : mode === "grab"
@@ -197,7 +195,7 @@ export function MapCanvas({
       ? "map-canvas-mode-cell-erase"
       : mode === "cell-region" ? "map-canvas-mode-cell-region" : mode === "grab" ? "map-canvas-mode-grab" : mode === "shape" ? "map-canvas-mode-shape" : mode === "erase" ? "map-canvas-mode-erase" : mode === "city" || mode === "text" || mode === "mountain" || mode === "forest" ? `map-canvas-mode-object-${mode}` : "map-canvas-mode-cell-select";
   return (
-    <div className={`map-canvas-shell${isPreview ? " map-canvas-preview" : sidebarOpen ? "" : " map-canvas-sidebar-collapsed"}`}>
+    <div className={`map-canvas-shell${isPreview ? " map-canvas-preview" : ""}`}>
       <p id="map-help" className="sr-only">{mapHelp}</p>
       {isPreview ? null : toolPalette}
       <div className="map-canvas-frame">

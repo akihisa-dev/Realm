@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
+import packageJson from "../../package.json";
 import { MemoryRealmBackend, type GeoJsonGeometry, type LayerId, type MapShape, type ObjectKind, type RealmSnapshot } from "../backend";
 import { cellIdsToPolygonGeometries, mapShapeCellIds } from "../shared/mapShapeGeometry";
 import { mapShapesFromLayers } from "../shared/layerProjection";
@@ -29,9 +30,9 @@ vi.mock("./MapCanvas", () => ({
       <output aria-label="表示中の地形セル">{props.mapShapes?.flatMap((shape) => [...mapShapeCellIds(shape)]).sort().join(",")}</output>
       <output aria-label="選択中の地形セル">{props.selectedCellIds?.join(",")}</output>
       <output aria-label="共有太さ">{props.strokeRange ?? 0}</output>
-      {props.activeLayer === "terrain" ? <><button type="button">地形を描く</button><button type="button">地形消しゴム</button></> : null}
-      {props.activeLayer === "region" ? <><button type="button">領域を描く</button><button type="button">領域消しゴム</button></> : null}
-      {props.activeLayer === "object" ? <><button type="button">オブジェクトを配置</button><button type="button">オブジェクト消しゴム</button></> : null}
+      <button type="button" onClick={() => props.onToolChange?.(props.activeLayer === "terrain" ? "terrain" : props.activeLayer === "region" ? "region" : "object")}>描く</button>
+      <button type="button" onClick={() => props.onToolChange?.("erase")}>消す</button>
+      <button type="button" onClick={() => props.onToolChange?.(props.activeLayer === "object" ? "select" : "grab")}>掴む</button>
       <button type="button" onClick={() => props.onCellSelect?.(["1:1", "1:2"])}>テストセル描画</button>
       <button type="button" onClick={() => props.onCellSelect?.(["1:1"])}>テスト遅延セル操作</button>
       <button type="button" onClick={() => props.onToolChange?.("erase")}>テスト消しゴム</button>
@@ -72,22 +73,30 @@ it("keeps the editor shell and layer manager while rendering the three layers", 
   expect(screen.getByRole("region", { name: "世界地図" })).toBeInTheDocument();
 });
 
+it("shows the app version beside Realm in the top header", async () => {
+  const backend = new MemoryRealmBackend();
+  const snapshot = await backend.createProject({ path: "browser://header.realmmap", name: "Header" });
+  renderEditor(backend, snapshot);
+
+  const version = screen.getByLabelText(`バージョン ${packageJson.version}`);
+  expect(version).toHaveTextContent(packageJson.version);
+  expect(version.parentElement).toHaveClass("editor-app-identity");
+  expect(screen.getByText("Realm")).toBeInTheDocument();
+});
+
 it("switches the active layer and keeps object operations on the object layer", async () => {
   const backend = new MemoryRealmBackend();
   const snapshot = await backend.createProject({ path: "browser://layer-operations.realmmap", name: "Layer operations" });
   renderEditor(backend, snapshot);
 
-  expect(screen.getByRole("button", { name: "地形を描く" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "地形消しゴム" })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "領域を描く" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "描く" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "消す" })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("tab", { name: "領域" }));
-  expect(screen.getByRole("button", { name: "領域を描く" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "領域消しゴム" })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "オブジェクトを配置" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "描く" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "消す" })).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("tab", { name: "オブジェクト" }));
-  expect(screen.getByRole("button", { name: "オブジェクトを配置" })).toBeInTheDocument();
   expect(screen.getByRole("radio", { name: "都市" })).toBeChecked();
   fireEvent.change(screen.getByLabelText("ラベル"), { target: { value: "" } });
   fireEvent.click(screen.getByRole("button", { name: "キャンバスに配置" }));
