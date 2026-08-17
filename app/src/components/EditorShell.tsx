@@ -7,7 +7,7 @@ import { Stack } from "@phosphor-icons/react/dist/csr/Stack";
 import { errorMessage, type CellAttributeSnapshot, type LayerId, type MapObject, type MapShape, type MapShapeEdit, type ObjectKind, type RealmBackend, type RealmSnapshot } from "../backend";
 import { MapCanvas } from "./MapCanvas";
 import { LayerManager } from "./editor/LayerManager";
-import { mergeRegionShapes, splitRegionComponentShapes } from "./editor/editorMapOperations";
+import { splitRegionComponentShapes } from "./editor/editorMapOperations";
 import { deriveRegionEntries, type RegionComponent, type RegionEntry } from "./editor/regionObjects";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { mapErrorMessage } from "../locales/ja";
@@ -108,14 +108,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     setSelectedCellIds(region.cellIds);
   };
 
-  const selectRegions = (regionIds: readonly string[]): void => {
-    const ids = [...new Set(regionIds)];
-    const cells = [...new Set(regionEntries.filter((region) => ids.includes(region.id)).flatMap((region) => region.cellIds))];
-    setSelectedRegionIds(ids);
-    setSelectedComponentId(null);
-    setSelectedCellIds(cells);
-  };
-
   const selectRegionComponent = (region: RegionEntry, component: RegionComponent): void => {
     setSelectedRegionIds([region.id]);
     setSelectedComponentId(component.id);
@@ -185,19 +177,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const commitShapeEdit = (edit: MapShapeEdit): void => {
     const untouched = mapShapes.filter((shape) => shape.layer !== activeLayer);
     commitMapShapes([...untouched, ...edit.shapes], activeToolRef.current === "shape" ? "領域を地形に合わせられませんでした。" : "図形を更新できませんでした。", { normalize: false, layer: activeLayer === "region" ? "region" : "terrain" });
-  };
-
-  const mergeRegions = (): void => {
-    const regions = selectedRegionIds.map((id) => regionEntries.find((region) => region.id === id)).filter((region): region is RegionEntry => region !== undefined);
-    const result = mergeRegionShapes(mapShapes, regions);
-    if (!result) return;
-    const { target, shapes } = result;
-    setSelectedRegionIds([target.id]);
-    setSelectedComponentId(null);
-    setRegionPaintTargetId(target.id);
-    setRegionColor(target.color);
-    setSelectedCellIds([]);
-    commitMapShapes(shapes, "領域を統合できませんでした。", { normalize: false, layer: "region" });
   };
 
   const splitRegionComponent = (region: RegionEntry, component: RegionComponent): void => {
@@ -346,11 +325,9 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             selectedComponentId={selectedComponentId}
             regionPaintTargetId={regionPaintTargetId}
             onSelectRegion={selectRegion}
-            onSelectionChange={selectRegions}
             onSelectComponent={selectRegionComponent}
             onStartNewRegion={startNewRegion}
             onAddToRegion={addToRegion}
-            onMergeRegions={mergeRegions}
             onSplitComponent={splitRegionComponent}
             objects={currentObjects}
             selectedObjectIds={selectedObjectIds}

@@ -179,7 +179,6 @@ it("disables editing controls while the map preview is open", async () => {
   expect(screen.getByRole("button", { name: "戻す" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "新しい領域" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "新規作成" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "選択した領域を統合" })).toBeDisabled();
 
   fireEvent.click(screen.getByRole("button", { name: "編集画面に戻る" }));
   expect(screen.getByRole("button", { name: "レンダリングプレビューを表示" })).toHaveAttribute("aria-pressed", "false");
@@ -250,7 +249,7 @@ it("uses the active layer for region drawing and terrain erasing", async () => {
   expect(screen.getByRole("complementary", { name: "レイヤー管理" })).toBeInTheDocument();
 });
 
-it("merges and splits logical regions through map_shape updates", async () => {
+it("keeps logical regions separate and selects them from the panel", async () => {
   const backend = new MemoryRealmBackend();
   await backend.createProject({ path: "browser://regions.realmmap", name: "Regions" });
   const firstId = "11111111-1111-4111-8111-111111111111";
@@ -263,11 +262,12 @@ it("merges and splits logical regions through map_shape updates", async () => {
   ] });
   renderEditor(backend, snapshot);
   fireEvent.click(screen.getByRole("tab", { name: "領域" }));
-  await waitFor(() => expect(screen.getAllByRole("checkbox")).toHaveLength(2));
-  fireEvent.click(screen.getByRole("checkbox", { name: "領域 1を統合対象にする" }));
-  fireEvent.click(screen.getByRole("checkbox", { name: "領域 2を統合対象にする" }));
-  fireEvent.click(screen.getByRole("button", { name: "選択した領域を統合" }));
-  await waitFor(async () => expect((await backend.getOpenProject())?.layers.regions.every((region) => region.id === firstId)).toBe(true));
+  await waitFor(() => expect(screen.getByRole("button", { name: /領域 1 1個の塊・1セル/ })).toBeInTheDocument());
+  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "選択した領域を統合" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /領域 1 1個の塊・1セル/ }));
+  expect(screen.getByRole("status", { name: "選択中の地形セル" })).toHaveTextContent("1:1");
+  expect((await backend.getOpenProject())?.layers.regions.map((region) => region.id)).toEqual([firstId, secondId]);
 });
 
 it("shows optimistic Polygon state while an update is pending and restores it on failure", async () => {
