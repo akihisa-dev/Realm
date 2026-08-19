@@ -13,7 +13,6 @@ import type { ExportCanvasSize } from "../map/contracts";
 import type { MapErrorCode } from "../map/errors";
 import { DEFAULT_MAP_THEME_ID, type MapThemeId, type ThemeOverrides } from "../map/themes";
 import { useMapAdapterLifecycle } from "./editor/useMapAdapterLifecycle";
-import { usePaletteFlyouts } from "./editor/usePaletteFlyouts";
 import { useRendererSync } from "./editor/useRendererSync";
 
 export type TerrainMapMode = "pan" | "cell-select" | "cell-region" | "grab" | "shape" | "cell-erase" | "erase" | "city" | "text" | "mountain" | "forest";
@@ -26,7 +25,8 @@ type MapCanvasProps = {
   activeKind?: ActiveKind;
   layerTree?: LayerTree;
   mode?: TerrainMapMode;
-  strokeRange?: number;
+  paintRadius?: number;
+  eraseRadius?: number;
   /** Prevents the mode cursor from suggesting an available editing action. */
   disabled?: boolean;
   selectedObjectId?: string | null;
@@ -47,11 +47,6 @@ type MapCanvasProps = {
   onSelectObjects?: (objectIds: readonly string[]) => void;
   onCellSelect?: (cellIds: readonly string[]) => void;
   onMapShapeEdit?: (edit: MapShapeEdit) => void;
-  onToolChange?: (tool: "grid" | "area" | "terrain" | "region" | "object" | "select" | "erase" | "grab" | "shape") => void;
-  onObjectKindChange?: (kind: "city" | "text" | "mountain" | "forest") => void;
-  onRegionColorChange?: (color: string) => void;
-  onCreateProject?: () => void;
-  createProjectDisabled?: boolean;
   regionColor?: string;
   onModify?: (objectId: string, geometry: GeoJsonGeometry) => void;
   onModifyObjects?: (changes: readonly { id: string; geometry: GeoJsonGeometry }[]) => void;
@@ -71,7 +66,8 @@ export function MapCanvas({
   activeKind = activeLayer === "terrain" || activeLayer === "region" ? activeLayer : "terrain",
   layerTree,
   mode = "pan",
-  strokeRange,
+  paintRadius = 0,
+  eraseRadius = 0,
   disabled = false,
   selectedObjectId = null,
   selectedObjectIds,
@@ -91,10 +87,6 @@ export function MapCanvas({
   onSelectObjects,
   onCellSelect,
   onMapShapeEdit,
-  onToolChange,
-  onRegionColorChange,
-  onCreateProject,
-  createProjectDisabled = false,
   regionColor,
   onModify,
   onModifyObjects,
@@ -110,14 +102,8 @@ export function MapCanvas({
   const isPreview = preview ?? false;
   const rendererMode = isPreview ? "pan" : mode;
 
-  const {
-    strokeRadius,
-    eraseRadius,
-    toolPalette,
-    regionColor: paletteRegionColor,
-  } = usePaletteFlyouts({ hostRef, mode, activeLayer, activeKind, strokeRange, regionColor, onToolChange, onRegionColorChange, onCreateProject, createProjectDisabled });
-  const effectivePaintRadius = mode === "cell-select" ? strokeRadius : 0;
-  const effectiveRegionColor = regionColor ?? paletteRegionColor;
+  const effectivePaintRadius = mode === "cell-select" ? paintRadius : 0;
+  const effectiveRegionColor = regionColor ?? "#7A6FA8";
   const mapHelp = isPreview
     ? "レンダリングプレビューを表示しています。編集はできません。ドラッグまたはホイールを押したままドラッグで地図を移動し、ホイールで拡大縮小します。"
     : mode === "pan"
@@ -211,7 +197,6 @@ export function MapCanvas({
   return (
     <div className={`map-canvas-shell${isPreview ? " map-canvas-preview" : ""}`}>
       <p id="map-help" className="sr-only">{mapHelp}</p>
-      {isPreview ? null : toolPalette}
       <div className="map-canvas-frame">
         <div
           ref={hostRef}

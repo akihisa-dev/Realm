@@ -85,19 +85,13 @@ describe("LayerManager", () => {
     expect(screen.getByRole("textbox", { name: "地形グループの名前" })).toHaveValue("地形グループ");
   });
 
-  it("shows object kind operations in the selected leaf panel", () => {
-    const onKindChange = vi.fn();
-    const onStartObjectDraw = vi.fn();
-    const objectProps = { ...props(LEAF_LAYER, vi.fn(), "city"), onObjectKindChange: onKindChange, onStartObjectDraw };
-    render(<LayerManager {...objectProps} />);
-
-    const cityRadio = screen.getAllByRole("radio", { name: "都市" }).at(-1)!;
-    fireEvent.click(cityRadio);
-    expect(cityRadio).toBeChecked();
-    fireEvent.click(screen.getAllByRole("radio", { name: "森" }).at(-1)!);
-    expect(onKindChange).toHaveBeenCalledWith("forest");
-    fireEvent.click(screen.getByRole("button", { name: "キャンバスに配置" }));
-    expect(onStartObjectDraw).toHaveBeenCalledTimes(1);
+  it("shows all selected-leaf content without classification controls", () => {
+    render(<LayerManager {...props(LEAF_LAYER)} />);
+    expect(screen.getByRole("heading", { name: "地形" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "領域" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "オブジェクト" })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "都市" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "キャンバスに配置" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "都市を削除" })).toBeInTheDocument();
   });
 });

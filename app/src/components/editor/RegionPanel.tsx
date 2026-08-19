@@ -80,7 +80,7 @@ export function RegionPanel({
       </div>
 
       <div className="object-manager-actions">
-        <button type="button" aria-label="新しい領域" title="新しい領域" onClick={onStartNewRegion} disabled={disabled}><PlusCircle aria-hidden="true" size={18} weight="bold" /></button>
+        {!embedded ? <button type="button" aria-label="新しい領域" title="新しい領域" onClick={onStartNewRegion} disabled={disabled}><PlusCircle aria-hidden="true" size={18} weight="bold" /></button> : null}
         <button type="button" aria-label="選択した領域を統合" title="選択した領域を統合" onClick={onMergeRegions} disabled={disabled || selectedRegionIds.length < 2}><ArrowsMerge aria-hidden="true" size={18} weight="bold" /></button>
         <button type="button" aria-label="選択した領域を地形に合わせる" title="選択した領域を地形に合わせる" onClick={onShapeSelectedRegion} disabled={disabled || selectedRegionIds.length === 0}><Magnet aria-hidden="true" size={18} weight="bold" /></button>
       </div>

@@ -11,7 +11,7 @@ import { Stack } from "@phosphor-icons/react/dist/csr/Stack";
 import { Trash } from "@phosphor-icons/react/dist/csr/Trash";
 import { X } from "@phosphor-icons/react/dist/csr/X";
 import type { CSSProperties, ReactNode } from "react";
-import type { ActiveKind, LayerId, LayerNode, LayerTree, MapObject, ObjectKind } from "../../backend";
+import type { LayerId, LayerNode, LayerTree, MapObject } from "../../backend";
 import type { RegionComponent, RegionEntry } from "./regionObjects";
 import { RegionPanel } from "./RegionPanel";
 import { ObjectLayerPanel } from "./ObjectLayerPanel";
@@ -36,33 +36,17 @@ type LayerManagerProps = {
   onSplitComponent: (region: RegionEntry, component: RegionComponent) => void;
   objects: readonly MapObject[];
   selectedObjectIds: readonly string[];
-  objectKind: ObjectKind;
-  objectLabel: string;
-  onObjectKindChange: (kind: ObjectKind) => void;
-  onObjectLabelChange: (label: string) => void;
-  onStartObjectDraw: () => void;
   onSelectObject: (id: string) => void;
   onDeleteObject: (id: string) => void;
   layerTree?: LayerTree;
   selectedLeafId?: LayerId;
-  activeKind?: ActiveKind;
-  onActiveKindChange?: (kind: ActiveKind) => void;
   onLayerTreeChange?: (tree: LayerTree) => void;
   onAddLayerNode?: (kind: "group" | "leaf", parentId: LayerId | null) => void;
   onDeleteLayerNode?: (id: LayerId) => void;
   onShapeSelectedRegion?: () => void;
 };
 
-const kindOptions: readonly { id: ActiveKind; label: string }[] = [
-  { id: "terrain", label: "地形" },
-  { id: "region", label: "領域" },
-  { id: "city", label: "都市" },
-  { id: "text", label: "テキスト" },
-  { id: "forest", label: "森" },
-  { id: "mountain", label: "山" },
-];
-
-export function LayerManager({ activeLayer, onLayerChange, onClose, disabled = false, contentDisabled = disabled, terrainCount, regions, selectedRegionIds, selectedComponentId, regionPaintTargetId, onSelectRegion, onSelectionChange, onSelectComponent, onStartNewRegion, onAddToRegion, onMergeRegions, onSplitComponent, objects, selectedObjectIds, objectKind, objectLabel, onObjectKindChange, onObjectLabelChange, onStartObjectDraw, onSelectObject, onDeleteObject, layerTree, selectedLeafId, activeKind = "terrain", onActiveKindChange, onLayerTreeChange, onAddLayerNode, onDeleteLayerNode, onShapeSelectedRegion }: LayerManagerProps) {
+export function LayerManager({ activeLayer, onLayerChange, onClose, disabled = false, contentDisabled = disabled, terrainCount, regions, selectedRegionIds, selectedComponentId, regionPaintTargetId, onSelectRegion, onSelectionChange, onSelectComponent, onStartNewRegion, onAddToRegion, onMergeRegions, onSplitComponent, objects, selectedObjectIds, onSelectObject, onDeleteObject, layerTree, selectedLeafId, onLayerTreeChange, onAddLayerNode, onDeleteLayerNode, onShapeSelectedRegion }: LayerManagerProps) {
   const treeNodes = layerTree?.nodes ?? [];
   const children = (parentId: LayerId | null): LayerNode[] => treeNodes.filter((node) => node.parentId === parentId).sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
   const updateNode = (id: LayerId, changes: Partial<LayerNode>): void => {
@@ -98,17 +82,17 @@ export function LayerManager({ activeLayer, onLayerChange, onClose, disabled = f
     </div>;
   };
   return (
-    <aside className="layer-manager" aria-label="レイヤー管理">
+    <aside className="layer-manager" data-panel="layer-management" aria-label="レイヤー管理">
       <header className="layer-manager-header"><div><p className="layer-manager-kicker">編集対象</p><h2>レイヤー</h2></div><button type="button" aria-label="右パネルを閉じる" title="右パネルを閉じる" onClick={onClose}><X aria-hidden="true" size={17} weight="bold" /></button></header>
       {layerTree ? <>
         <div className="layer-tree-actions"><button type="button" onClick={() => onAddLayerNode?.("group", selectedLeafId ?? null)} disabled={disabled}><FolderSimple aria-hidden="true" size={15} />グループ追加</button><button type="button" onClick={() => onAddLayerNode?.("leaf", selectedLeafId ?? null)} disabled={disabled}><Stack aria-hidden="true" size={15} />レイヤー追加</button></div>
         <div className="layer-tree" role="tree" aria-label="レイヤー階層">{children(null).map((node) => renderNode(node, 0))}</div>
       </> : <p className="layer-panel-empty">レイヤー階層を読み込めません。</p>}
       <div id={`layer-panel-${activeLayer}`} className="layer-manager-content" aria-label="選択レイヤーの内容">
-        {layerTree ? <section className="layer-panel" aria-labelledby="selected-layer-heading"><div className="layer-panel-section-heading"><h3 id="selected-layer-heading">{layerTree.nodes.find((node) => node.id === selectedLeafId)?.name ?? "レイヤー"}</h3></div><p className="layer-panel-help">選択した末端レイヤーだけが新しい地物の保存先です。表示中の他のレイヤーは編集対象になりません。</p><div className="object-kind-options" role="radiogroup" aria-label="描く地物の種類">{kindOptions.map((option) => <button key={option.id} type="button" role="radio" aria-checked={activeKind === option.id} className={activeKind === option.id ? "is-active" : ""} onClick={() => onActiveKindChange?.(option.id)} disabled={contentDisabled}>{option.label}</button>)}</div></section> : null}
-        {activeKind === "terrain" ? <section className="layer-panel" aria-labelledby="terrain-layer-heading"><div className="layer-panel-section-heading"><h3 id="terrain-layer-heading">地形</h3><span>{terrainCount}個</span></div><p className="layer-panel-help">選択した末端レイヤー内の地形を管理します。</p><p className="layer-panel-empty">「描く」の設定でグリッドまたは範囲を選べます。</p></section> : null}
-        {activeKind === "region" ? <RegionPanel regions={regions} selectedRegionIds={selectedRegionIds} selectedComponentId={selectedComponentId} regionPaintTargetId={regionPaintTargetId} disabled={contentDisabled} onSelectRegion={onSelectRegion} onSelectionChange={onSelectionChange} onSelectComponent={onSelectComponent} onStartNewRegion={onStartNewRegion} onAddToRegion={onAddToRegion} onMergeRegions={onMergeRegions} onSplitComponent={onSplitComponent} onShapeSelectedRegion={onShapeSelectedRegion ?? (() => undefined)} onClose={() => undefined} embedded /> : null}
-        {activeKind !== "terrain" && activeKind !== "region" ? <ObjectLayerPanel objects={objects} selectedObjectIds={selectedObjectIds} objectKind={objectKind} objectLabel={objectLabel} disabled={contentDisabled} onKindChange={onObjectKindChange} onLabelChange={onObjectLabelChange} onStartDraw={onStartObjectDraw} onSelect={onSelectObject} onDelete={onDeleteObject} /> : null}
+        {layerTree ? <section className="layer-panel" aria-labelledby="selected-layer-heading"><div className="layer-panel-section-heading"><h3 id="selected-layer-heading">{layerTree.nodes.find((node) => node.id === selectedLeafId)?.name ?? "レイヤー"}</h3></div><p className="layer-panel-help">選択した末端レイヤーの全内容を表示します。新しい描画分類と設定は左の描画ツールで選びます。</p></section> : null}
+        <section className="layer-panel" aria-labelledby="terrain-layer-heading"><div className="layer-panel-section-heading"><h3 id="terrain-layer-heading">地形</h3><span>{terrainCount}個</span></div>{terrainCount === 0 ? <p className="layer-panel-empty">このレイヤーに地形はありません。</p> : null}</section>
+        <RegionPanel regions={regions} selectedRegionIds={selectedRegionIds} selectedComponentId={selectedComponentId} regionPaintTargetId={regionPaintTargetId} disabled={contentDisabled} onSelectRegion={onSelectRegion} onSelectionChange={onSelectionChange} onSelectComponent={onSelectComponent} onStartNewRegion={onStartNewRegion} onAddToRegion={onAddToRegion} onMergeRegions={onMergeRegions} onSplitComponent={onSplitComponent} onShapeSelectedRegion={onShapeSelectedRegion ?? (() => undefined)} onClose={() => undefined} embedded />
+        <ObjectLayerPanel objects={objects} selectedObjectIds={selectedObjectIds} disabled={contentDisabled} onSelect={onSelectObject} onDelete={onDeleteObject} />
       </div>
     </aside>
   );

@@ -26,19 +26,12 @@ const object = (overrides: Partial<MapObject> = {}): MapObject => ({
 });
 
 describe("ObjectLayerPanel", () => {
-  it("shows the empty state and routes kind, label, and placement controls", () => {
-    const onKindChange = vi.fn();
-    const onLabelChange = vi.fn();
-    const onStartDraw = vi.fn();
-    render(<ObjectLayerPanel {...baseProps} objects={[]} onKindChange={onKindChange} onLabelChange={onLabelChange} onStartDraw={onStartDraw} />);
-
+  it("shows only management for already placed objects", () => {
+    render(<ObjectLayerPanel {...baseProps} objects={[]} />);
     expect(screen.getByText("キャンバスに配置すると、ここに表示されます。")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("radio", { name: "森" }));
-    fireEvent.change(screen.getByLabelText("ラベル"), { target: { value: "森の名前" } });
-    fireEvent.click(screen.getByRole("button", { name: "キャンバスに配置" }));
-    expect(onKindChange).toHaveBeenCalledWith("forest");
-    expect(onLabelChange).toHaveBeenCalledWith("森の名前");
-    expect(onStartDraw).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("ラベル")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "キャンバスに配置" })).not.toBeInTheDocument();
   });
 
   it("marks selected and locked objects, including an unknown kind label fallback", () => {

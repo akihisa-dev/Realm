@@ -1,172 +1,21 @@
 import { StrictMode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import type { LayerTree, MapObject } from "../backend";
+import { describe, expect, it, vi } from "vitest";
+import type { MapObject } from "../backend";
 import { cellPaintRadiusForRange, type RealmMapRenderer } from "../map/MapAdapter";
 import { MapCanvas } from "./MapCanvas";
 import "../styles.css";
 
 const createPaletteRenderer = (): RealmMapRenderer => ({
-  getZoom: vi.fn(() => 1),
-  setZoom: vi.fn(),
-  resetView: vi.fn(),
-  setObjects: vi.fn(),
-  setActiveLayer: vi.fn(),
-  setTheme: vi.fn(),
-  setThemeOverrides: vi.fn(),
-  setGridVisible: vi.fn(),
-  setGridOptions: vi.fn(),
-  setCellGridVisible: vi.fn(),
-  setCellGridOptions: vi.fn(),
-  setPresentationMode: vi.fn(),
-  setAssets: vi.fn(),
-  setObjectKindVisibility: vi.fn(),
-  setMode: vi.fn(),
-  setDrawingOptions: vi.fn(),
-  setCellPaintRadius: vi.fn(),
-  setSelected: vi.fn(),
-  setSelectedObjects: vi.fn(),
-  setSelectedCells: vi.fn(),
-  setCellAttributes: vi.fn(),
-  setCellEraseRadius: vi.fn(),
-  onDraw: vi.fn(() => vi.fn()),
-  onSelectObjects: vi.fn(() => vi.fn()),
-  onSelect: vi.fn(() => vi.fn()),
-  onCellSelect: vi.fn(() => vi.fn()),
-  onModifyObjects: vi.fn(() => vi.fn()),
-  onModify: vi.fn(() => vi.fn()),
-  onEraseObjects: vi.fn(() => vi.fn()),
-  onErase: vi.fn(() => vi.fn()),
-  onLayerShift: vi.fn(() => vi.fn()),
-  onError: vi.fn(() => vi.fn()),
-  onZoomChange: vi.fn(() => vi.fn()),
-  updateSize: vi.fn(),
-  exportRaster: vi.fn(async () => ({ bytes: [], width: 1, height: 1 })),
-  dispose: vi.fn(),
+  getZoom: vi.fn(() => 1), setZoom: vi.fn(), resetView: vi.fn(), setObjects: vi.fn(), setActiveLayer: vi.fn(), setTheme: vi.fn(), setThemeOverrides: vi.fn(), setGridVisible: vi.fn(), setGridOptions: vi.fn(), setCellGridVisible: vi.fn(), setCellGridOptions: vi.fn(), setPresentationMode: vi.fn(), setAssets: vi.fn(), setObjectKindVisibility: vi.fn(), setMode: vi.fn(), setDrawingOptions: vi.fn(), setCellPaintRadius: vi.fn(), setSelected: vi.fn(), setSelectedObjects: vi.fn(), setSelectedCells: vi.fn(), setCellAttributes: vi.fn(), setCellEraseRadius: vi.fn(), onDraw: vi.fn(() => vi.fn()), onSelectObjects: vi.fn(() => vi.fn()), onSelect: vi.fn(() => vi.fn()), onCellSelect: vi.fn(() => vi.fn()), onModifyObjects: vi.fn(() => vi.fn()), onModify: vi.fn(() => vi.fn()), onEraseObjects: vi.fn(() => vi.fn()), onErase: vi.fn(() => vi.fn()), onLayerShift: vi.fn(() => vi.fn()), onError: vi.fn(() => vi.fn()), onZoomChange: vi.fn(() => vi.fn()), updateSize: vi.fn(), exportRaster: vi.fn(async () => ({ bytes: [], width: 1, height: 1 })), dispose: vi.fn(),
 });
-const TERRAIN_LAYER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const REGION_LAYER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const OBJECT_LAYER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const layerTree: LayerTree = { nodes: [
-  { id: TERRAIN_LAYER, parentId: null, kind: "leaf", name: "Terrain", order: 0, visible: true, locked: false },
-  { id: REGION_LAYER, parentId: null, kind: "leaf", name: "Region", order: 1, visible: true, locked: false },
-  { id: OBJECT_LAYER, parentId: null, kind: "leaf", name: "Object", order: 2, visible: true, locked: false },
-] };
-
 describe("MapCanvas", () => {
-  it("keeps the app version out of the tool rail", () => {
-    const renderer = createPaletteRenderer();
-    render(<MapCanvas layerTree={layerTree} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
-
-    expect(screen.queryByLabelText(/バージョン/u)).not.toBeInTheDocument();
+  it("provides only the map surface and no tool sidebar", () => {
+    render(<MapCanvas onZoomChange={vi.fn()} />);
+    expect(screen.getByRole("region", { name: "世界地図" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
   });
-
-  it("selects grid or area directly and exposes region colors only after selection", () => {
-    const renderer = createPaletteRenderer();
-    const onToolChange = vi.fn();
-    const onRegionColorChange = vi.fn();
-    const { rerender } = render(<MapCanvas activeLayer={REGION_LAYER} activeKind="region" layerTree={layerTree} mode="cell-region" onZoomChange={vi.fn()} onToolChange={onToolChange} onRegionColorChange={onRegionColorChange} createRenderer={() => renderer} />);
-
-    const map = screen.getByRole("region", { name: "世界地図" });
-    expect(map).toHaveClass("map-canvas-mode-cell-region", "map-canvas-draw");
-    expect(map.parentElement).toHaveClass("map-canvas-frame");
-    expect(screen.getByText("自由線で囲んだ内側の六角セルを領域として塗ります。色を選んで描き、Escapeで取り消せます。端の大きさを変えるときは掴むに切り替えます。")).toBeInTheDocument();
-    const gridButton = screen.getByRole("button", { name: "グリッド" });
-    expect(gridButton).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(gridButton);
-    expect(onToolChange).toHaveBeenCalledWith("grid");
-    rerender(<MapCanvas activeLayer={REGION_LAYER} activeKind="region" layerTree={layerTree} mode="cell-select" onZoomChange={vi.fn()} onToolChange={onToolChange} onRegionColorChange={onRegionColorChange} createRenderer={() => renderer} />);
-    expect(screen.getByRole("button", { name: "グリッド" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("group", { name: "領域色の候補" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "範囲" }));
-    expect(onToolChange).toHaveBeenLastCalledWith("area");
-    const colors = screen.getAllByRole("radio");
-    expect(colors).toHaveLength(10);
-    expect(screen.getByRole("radio", { name: "領域色 8 #7A6FA8" })).toBeChecked();
-    const color = screen.getByRole("radio", { name: "領域色 6 #2468AC" });
-    expect(color.nextElementSibling).toHaveClass("region-color-swatch");
-    fireEvent.click(color);
-    expect(onRegionColorChange).toHaveBeenCalledWith("#2468AC");
-  });
-
-  it("keeps the tool rail available before the first map gesture after selecting grab", () => {
-    const renderer = createPaletteRenderer();
-    const onToolChange = vi.fn();
-    const onMapPointerDown = vi.fn();
-    render(<MapCanvas onZoomChange={vi.fn()} onToolChange={onToolChange} createRenderer={() => renderer} />);
-
-    const map = screen.getByRole("region", { name: "世界地図" });
-    map.addEventListener("pointerdown", onMapPointerDown);
-    fireEvent.click(screen.getByRole("button", { name: "掴む" }));
-
-    expect(onToolChange).toHaveBeenCalledWith("grab");
-    expect(screen.getByRole("complementary", { name: "地図ツールレール" })).toBeInTheDocument();
-    fireEvent.pointerDown(map, { button: 0 });
-    expect(onMapPointerDown).toHaveBeenCalledOnce();
-  });
-
-  it("renders independent grid, area, erase, and grab rail buttons", () => {
-    const renderer = createPaletteRenderer();
-    render(<MapCanvas onZoomChange={vi.fn()} createRenderer={() => renderer} />);
-
-    const palette = screen.getByRole("complementary", { name: "地図ツールレール" });
-    expect(palette).toHaveClass("tool-rail");
-    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-rail-button"))).toHaveLength(5);
-    expect(palette.querySelectorAll(".tool-rail-tools .tool-rail-button > svg")).toHaveLength(4);
-    expect(screen.getByRole("button", { name: "グリッド" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "範囲" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "消す" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "掴む" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "新規作成" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "新規作成" }).parentElement).toHaveClass("tool-rail-footer");
-    expect(screen.queryByText("地形を描く")).not.toBeInTheDocument();
-    expect(screen.queryByText("地形消しゴム")).not.toBeInTheDocument();
-    expect(screen.queryByText("グラブ")).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "消す対象" })).not.toBeInTheDocument();
-  });
-
-  it("keeps region color settings available from the selected paint button", () => {
-    const renderer = createPaletteRenderer();
-    render(<MapCanvas activeLayer={REGION_LAYER} activeKind="region" layerTree={layerTree} mode="cell-region" onZoomChange={vi.fn()} createRenderer={() => renderer} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "グリッド" }));
-    expect(screen.getAllByRole("radio")).toHaveLength(10);
-
-    fireEvent.click(screen.getByRole("button", { name: "消す" }));
-    expect(screen.queryByRole("group", { name: "消す対象" })).not.toBeInTheDocument();
-    expect(screen.queryByText("領域だけ")).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "領域の色" })).not.toBeInTheDocument();
-  });
-
-  it("exposes shaping for the region layer", () => {
-    const renderer = createPaletteRenderer();
-    render(<MapCanvas activeLayer={REGION_LAYER} activeKind="region" layerTree={layerTree} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
-
-    expect(screen.queryByRole("button", { name: "シェイピング" })).not.toBeInTheDocument();
-  });
-
-  it("calls the new project handler from the bottom rail action", () => {
-    const renderer = createPaletteRenderer();
-    const onCreateProject = vi.fn();
-    render(<MapCanvas onZoomChange={vi.fn()} onCreateProject={onCreateProject} createRenderer={() => renderer} />);
-
-    const button = screen.getByRole("button", { name: "新規作成" });
-    expect(button).toBeEnabled();
-    fireEvent.click(button);
-    expect(onCreateProject).toHaveBeenCalledOnce();
-  });
-
-  it("maps the grab icon to object selection on the object layer", () => {
-    const renderer = createPaletteRenderer();
-    const onToolChange = vi.fn();
-    render(<MapCanvas activeLayer={OBJECT_LAYER} activeKind="city" layerTree={layerTree} mode="city" onZoomChange={vi.fn()} onToolChange={onToolChange} createRenderer={() => renderer} />);
-
-    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-rail-button"))).toHaveLength(4);
-    fireEvent.click(screen.getByRole("button", { name: "掴む" }));
-    expect(onToolChange).toHaveBeenCalledWith("grab");
-    expect(screen.getByRole("button", { name: "描く" })).toBeInTheDocument();
-  });
-
   it("renders the controlled renderer preview without map-frame controls", () => {
     const renderer = createPaletteRenderer();
     render(<MapCanvas mode="cell-select" preview showCellGrid onZoomChange={vi.fn()} createRenderer={() => renderer} />);
@@ -324,44 +173,20 @@ describe("MapCanvas", () => {
     expect(renderer.setGridVisible).toHaveBeenCalledWith(true);
     expect(renderer.setCellGridVisible).toHaveBeenCalledWith(false);
     expect(renderer.setCellGridOptions).toHaveBeenCalledWith({ color: "#d1d7dc", width: 0.65 });
-    expect(renderer.setThemeOverrides).toHaveBeenCalledWith({});
     expect(renderer.setGridOptions).toHaveBeenCalledWith({ kind: "graticule", color: "#687784", width: 1, spacingDegrees: 10 });
     expect(renderer.setDrawingOptions).toHaveBeenCalledWith({ gesture: "freehand", smoothingPasses: 1, snapAngleDegrees: null });
     expect(renderer.setCellPaintRadius).toHaveBeenCalledWith(0);
     expect(renderer.setCellAttributes).toHaveBeenCalledWith([]);
     expect(renderer.setSelectedCells).toHaveBeenCalledWith([]);
-    expect(screen.queryByRole("group", { name: "現在の地図操作" })).not.toBeInTheDocument();
     const map = screen.getByRole("region", { name: "世界地図" });
     expect(map).toHaveClass("map-canvas-mode-pan");
     expect(map).not.toHaveClass("map-canvas-disabled");
-    const palette = screen.getByRole("complementary", { name: "地図ツールレール" });
-    expect(palette).toHaveClass("tool-rail");
-    expect(screen.getAllByRole("button").filter((button) => button.classList.contains("tool-rail-button"))).toHaveLength(5);
-    fireEvent.contextMenu(map, { clientX: 120, clientY: 80 });
-    expect(document.querySelector(".radial-palette")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "消す" }).querySelector("svg")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "グリッド" }).querySelector("svg")).toBeInTheDocument();
-    expect(screen.getByRole("toolbar", { name: "地図ツール" })).toBeInTheDocument();
-    const onMapPointerDown = vi.fn();
-    map.addEventListener("pointerdown", onMapPointerDown);
-    const terrainButton = screen.getByRole("button", { name: "グリッド" });
-    fireEvent.pointerEnter(terrainButton);
-    expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
-    fireEvent.click(terrainButton);
-    expect(screen.queryByRole("group", { name: "描画範囲の調整" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("slider", { name: "描画と削除の太さ" })).not.toBeInTheDocument();
-    const eraserButton = screen.getByRole("button", { name: "消す" });
-    fireEvent.click(eraserButton);
-    expect(screen.queryByRole("group", { name: "消す対象" })).not.toBeInTheDocument();
-    expect(screen.queryByText("地形だけ")).not.toBeInTheDocument();
     fireEvent.pointerDown(map, { button: 0 });
-    expect(onMapPointerDown).toHaveBeenCalledOnce();
-    rerender(<MapCanvas mode="cell-select" strokeRange={3} zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
+    rerender(<MapCanvas mode="cell-select" paintRadius={cellPaintRadiusForRange(3)} zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
     expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(cellPaintRadiusForRange(3));
-    rerender(<MapCanvas mode="cell-erase" strokeRange={3} zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
+    rerender(<MapCanvas mode="cell-erase" eraseRadius={cellPaintRadiusForRange(3)} zoom={3} onZoomChange={onZoomChange} onCellSelect={onCellSelect} onError={onError} createRenderer={createRenderer} />);
     expect(renderer.setCellPaintRadius).toHaveBeenLastCalledWith(0);
     expect(renderer.setCellEraseRadius).toHaveBeenLastCalledWith(cellPaintRadiusForRange(3));
-    expect(screen.getByRole("complementary", { name: "地図ツールレール" })).toBeInTheDocument();
     (drawListener as ((geometry: never) => void) | null)?.({} as never);
     (selectFeaturesListener as ((ids: readonly string[]) => void) | null)?.([]);
     (cellSelectListener as ((ids: readonly string[]) => void) | null)?.(["2:3"]);
@@ -420,25 +245,4 @@ describe("MapCanvas", () => {
     vi.useRealTimers();
   });
 
-  it("switches directly to erasing without a target flyout", () => {
-    const renderer: RealmMapRenderer = {
-      getZoom: vi.fn(() => 1), setZoom: vi.fn(), resetView: vi.fn(), setObjects: vi.fn(), setTheme: vi.fn(), setThemeOverrides: vi.fn(),
-      setGridVisible: vi.fn(), setGridOptions: vi.fn(), setCellGridVisible: vi.fn(), setCellGridOptions: vi.fn(), setAssets: vi.fn(), setActiveLayer: vi.fn(), setObjectKindVisibility: vi.fn(),
-      setMode: vi.fn(), setDrawingOptions: vi.fn(), setCellPaintRadius: vi.fn(), setCellEraseRadius: vi.fn(), setSelected: vi.fn(), setSelectedObjects: vi.fn(), setSelectedCells: vi.fn(), setCellAttributes: vi.fn(),
-      onDraw: vi.fn(() => vi.fn()), onSelectObjects: vi.fn(() => vi.fn()), onSelect: vi.fn(() => vi.fn()), onCellSelect: vi.fn(() => vi.fn()), onModifyObjects: vi.fn(() => vi.fn()), onModify: vi.fn(() => vi.fn()), onEraseObjects: vi.fn(() => vi.fn()), onErase: vi.fn(() => vi.fn()), onLayerShift: vi.fn(() => vi.fn()), onError: vi.fn(() => vi.fn()), onZoomChange: vi.fn(() => vi.fn()), updateSize: vi.fn(), exportRaster: vi.fn(async () => ({ bytes: [], width: 1, height: 1 })), dispose: vi.fn(),
-    };
-    const onToolChange = vi.fn();
-    render(<MapCanvas activeLayer={REGION_LAYER} activeKind="region" layerTree={layerTree} onToolChange={onToolChange} onZoomChange={vi.fn()} createRenderer={() => renderer} />);
-    fireEvent.contextMenu(screen.getByRole("region", { name: "世界地図" }), { clientX: 100, clientY: 100 });
-    const eraserButton = screen.getByRole("button", { name: "消す" });
-    expect(eraserButton).toHaveAttribute("aria-pressed", "false");
-    fireEvent.click(eraserButton);
-    expect(onToolChange).toHaveBeenCalledWith("erase");
-    expect(eraserButton).toHaveAttribute("aria-pressed", "false");
-    expect(eraserButton).not.toHaveAttribute("aria-expanded");
-    expect(screen.queryByRole("group", { name: "消す対象" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("status", { name: "削除対象" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "グリッド" })).toHaveAttribute("aria-label", "グリッド");
-    expect(screen.queryAllByRole("radio")).toHaveLength(0);
-  });
 });

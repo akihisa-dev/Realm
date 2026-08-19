@@ -11,8 +11,9 @@ import { mergeRegionShapes, shapeRegionsToTerrain, splitRegionComponentShapes } 
 import { deriveRegionEntries, type RegionComponent, type RegionEntry } from "./editor/regionObjects";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { mapErrorMessage } from "../locales/ja";
-import { CELL_PAINT_RANGE_MAX, CELL_PAINT_RANGE_MIN } from "../map/MapAdapter";
+import { CELL_PAINT_RANGE_MIN } from "../map/MapAdapter";
 import { applyGridSelectionToMapShapes, deriveMapGridCells } from "../shared/mapShapeGeometry";
+import { usePaletteFlyouts } from "./editor/usePaletteFlyouts";
 
 type Tool = "draw" | "erase" | "grab";
 type LegacyTool = Tool | "grid" | "area" | "terrain" | "region" | "object" | "select" | "shape";
@@ -42,6 +43,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   const [regionPaintTargetId, setRegionPaintTargetId] = useState<string | null>(null);
   const [layerManagerOpen, setLayerManagerOpen] = useState(true);
   const [strokeRange, setStrokeRange] = useState(CELL_PAINT_RANGE_MIN);
+  const toolHostRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [previewMode, setPreviewMode] = useState(false);
   const activeToolRef = useRef<Tool>("draw");
@@ -290,6 +292,8 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
     return { visible, locked };
   })();
   const activeLayerEditable = ancestorState.visible && !ancestorState.locked;
+  const editorMode = editingLocked || previewMode || !activeLayerEditable ? "pan" : contentKindOf(activeKind) === "object" ? activeTool === "erase" ? "erase" : activeTool === "grab" ? "grab" : objectKind : activeTool === "erase" ? "cell-erase" : activeTool === "grab" ? "grab" : drawMethod === "area" ? "cell-region" : "cell-select";
+  const { strokeRadius, eraseRadius, regionColor: paletteRegionColor, toolPalette } = usePaletteFlyouts({ hostRef: toolHostRef, mode: editorMode, activeLayer, activeKind, strokeRange, showDrawingSetup: true, disabled: locked || busy || editingLocked || previewMode, onStrokeRangeChange: setStrokeRange, regionColor, onRegionColorChange: changeRegionColor, onToolChange: selectTool, onKindChange: changeActiveKind, objectLabel, onObjectLabelChange: setObjectLabel, onStartObjectDraw: startObjectDraw, onStartNewRegion: startNewRegion, onCreateProject: createNewProject, createProjectDisabled: locked || previewMode });
   const updateLayerTree = (tree: LayerTree): void => { void run(() => backend.replaceLayerTree({ tree }), "レイヤー階層を保存できませんでした。"); };
   const addLayerNode = (kind: "group" | "leaf", requestedParentId: LayerId | null): void => {
     const parent = currentLayerTree.nodes.find((node) => node.id === requestedParentId);
@@ -336,21 +340,7 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
   return (
     <main className="editor-shell" aria-label="Realm地形編集画面">
       <header className="editor-history" data-electron-drag-region="deep">
-        <div className="editor-thickness-control" role="group" aria-label="描画と削除の太さ">
-          <label htmlFor="editor-stroke-range">太さ</label>
-          <input
-            id="editor-stroke-range"
-            type="range"
-            min={CELL_PAINT_RANGE_MIN}
-            max={CELL_PAINT_RANGE_MAX}
-            step={1}
-            value={strokeRange}
-            aria-label="描画と削除の太さ"
-            aria-valuetext={`太さ${strokeRange}セル`}
-            onChange={(event) => setStrokeRange(Number(event.target.value))}
-          />
-          <output htmlFor="editor-stroke-range">{strokeRange}セル</output>
-        </div>
+        <div className="editor-title" aria-hidden="true" />
         <nav aria-label="編集履歴">
           <button className="editor-preview-toggle" type="button" aria-label={previewMode ? "編集画面に戻る" : "レンダリングプレビューを表示"} title={previewMode ? "編集画面に戻る" : "レンダリングプレビューを表示"} aria-pressed={previewMode} onClick={() => setPreviewMode((current) => !current)}>
             {previewMode ? <PencilSimple aria-hidden="true" size={17} weight="bold" /> : <Eye aria-hidden="true" size={17} weight="bold" />}
@@ -361,14 +351,15 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
         </nav>
       </header>
       <div className={`editor-body${layerManagerOpen ? "" : " layer-manager-is-closed"}`}>
-        <section className="map-region" aria-label="地形編集領域">
+        <section className={`map-region${previewMode ? " map-region-preview" : ""}`} aria-label="地形編集領域">
+          {previewMode ? null : <div ref={toolHostRef} className="editor-tool-slot">{toolPalette}</div>}
           <MapCanvas
             objects={allObjects}
             activeLayer={activeLayer}
             activeKind={activeKind}
             layerTree={currentLayerTree}
             mapShapes={mapShapes}
-            mode={editingLocked || previewMode || !activeLayerEditable ? "pan" : contentKindOf(activeKind) === "object" ? activeTool === "erase" ? "erase" : activeTool === "grab" ? "grab" : objectKind : activeTool === "erase" ? "cell-erase" : activeTool === "grab" ? "grab" : drawMethod === "area" ? "cell-region" : "cell-select"}
+            mode={editorMode}
             disabled={busy}
             cellAttributes={cellAttributes}
             selectedCellIds={selectedCellIds}
@@ -385,16 +376,12 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             onSelectObjects={selectObjects}
             onModifyObjects={modifyObjects}
             onEraseObjects={eraseObjects}
-            regionColor={regionColor}
-            onToolChange={selectTool}
-            onObjectKindChange={changeActiveKind}
-            onRegionColorChange={changeRegionColor}
-            onCreateProject={createNewProject}
-            createProjectDisabled={locked || previewMode}
             preview={previewMode}
             onError={(code) => setError(mapErrorMessage(code, contentKindOf(activeKind) === "region" ? "region" : "terrain"))}
             onZoomChange={setZoom}
-            strokeRange={strokeRange}
+            paintRadius={strokeRadius}
+            eraseRadius={eraseRadius}
+            regionColor={paletteRegionColor}
             zoom={zoom}
           />
           {error ? <p className="save-error" role="alert">{error}</p> : null}
@@ -405,8 +392,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             onLayerChange={selectLayer}
             layerTree={currentLayerTree}
             selectedLeafId={activeLayer}
-            activeKind={activeKind}
-            onActiveKindChange={changeActiveKind}
             onLayerTreeChange={updateLayerTree}
             onAddLayerNode={addLayerNode}
             onDeleteLayerNode={deleteLayerNode}
@@ -428,11 +413,6 @@ export function EditorShell({ snapshot, backend, busy, onSaved }: EditorShellPro
             onSplitComponent={splitRegionComponent}
             objects={currentObjects}
             selectedObjectIds={selectedObjectIds}
-            objectKind={objectKind}
-            objectLabel={objectLabel}
-            onObjectKindChange={changeActiveKind}
-            onObjectLabelChange={setObjectLabel}
-            onStartObjectDraw={startObjectDraw}
             onSelectObject={selectObjectFromPanel}
             onDeleteObject={deleteObjectFromPanel}
           />
